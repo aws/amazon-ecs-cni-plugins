@@ -11,23 +11,18 @@
 // express or implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-package main
+package cnispec
 
 import (
-	"runtime"
+	"testing"
 
-	"github.com/aws/amazon-ecs-cni-plugins/plugins/eni/commands"
-	"github.com/aws/amazon-ecs-cni-plugins/plugins/eni/version/cnispec"
-	log "github.com/cihub/seelog"
-	"github.com/containernetworking/cni/pkg/skel"
+	"github.com/stretchr/testify/assert"
 )
 
-func init() {
-	runtime.LockOSThread()
-}
-
-func main() {
-	defer log.Flush()
-
-	skel.PluginMain(commands.Add, commands.Del, cnispec.GetSpecVersionSupported())
+func TestGetSpecVersionsSupported(t *testing.T) {
+	pluginInfo := GetSpecVersionSupported()
+	supportedVersions := pluginInfo.SupportedVersions()
+	assert.NotEmpty(t, supportedVersions)
+	assert.Len(t, supportedVersions, 1)
+	assert.Contains(t, supportedVersions, "0.2.0")
 }
