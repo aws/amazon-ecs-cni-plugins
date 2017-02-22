@@ -9,10 +9,22 @@ get-deps:
 	go get golang.org/x/tools/cmd/goimports
 	go get github.com/tools/godep
 
+.PHONY: plugins
+plugins: eni
+
+.PHONY: eni
+eni: $(SOURCES)
+	GOOS=linux CGO_ENABLED=0 go build -installsuffix cgo -a -ldflags '-s' -o ${ROOT}/bin/eni github.com/aws/amazon-ecs-cni-plugins/plugins/eni
+	@echo "Built eni plugin"
+
 .PHONY: generate
 generate: $(SOURCES)
 	go generate -x ./pkg/... ./plugins/...
 
 .PHONY: unit-tests
 unit-tests: $(SOURCES)
-	go test -v -cover -timeout 10s ./pkg/... ./plugins/...
+	go test -cover -timeout 10s ./pkg/... ./plugins/...
+
+.PHONY: clean
+clean:
+	rm -rf ${ROOT}/bin ||:
