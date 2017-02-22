@@ -30,6 +30,20 @@ import (
 	"github.com/vishvananda/netlink"
 )
 
+const (
+	deviceName                = "eth1"
+	firstENIID                = "eni1"
+	secondENIID               = "eni2"
+	firstMACAddress           = "mac1/"
+	firstMACAddressSanitized  = "mac1"
+	secondMACAddress          = "mac2/"
+	secondMACAddressSanitized = "mac2"
+	eniIPV4Address            = "10.11.12.13"
+	eniIPV4Gateway            = "10.10.10.10"
+	eniSubnetMask             = "20"
+	eniIPV4CIDRBlock          = "10.10.10.10/20"
+)
+
 func setup(t *testing.T) (*gomock.Controller, *mock_ec2metadata.MockEC2Metadata, *mock_ioutilwrapper.MockIOUtil, *mock_cninswrapper.MockNS, *mock_netlinkwrapper.MockNetLink) {
 	ctrl := gomock.NewController(t)
 	return ctrl, mock_ec2metadata.NewMockEC2Metadata(ctrl), mock_ioutilwrapper.NewMockIOUtil(ctrl), mock_cninswrapper.NewMockNS(ctrl), mock_netlinkwrapper.NewMockNetLink(ctrl)
@@ -63,10 +77,10 @@ func TestGetMACAddressOfENIReturnsErrorOnGetMetadataError(t *testing.T) {
 	ctrl, mockMetadata, _, _, _ := setup(t)
 	defer ctrl.Finish()
 
-	mockMetadata.EXPECT().GetMetadata(metadataNetworkInterfacesPath+"mac1/"+metadataNetworkInterfaceIDPathSuffix).Return("", errors.New("error"))
+	mockMetadata.EXPECT().GetMetadata(metadataNetworkInterfacesPath+firstMACAddress+metadataNetworkInterfaceIDPathSuffix).Return("", errors.New("error"))
 	engine := &engine{metadata: mockMetadata}
 
-	_, err := engine.GetMACAddressOfENI([]string{"mac1/"}, "eni1")
+	_, err := engine.GetMACAddressOfENI([]string{firstMACAddress}, firstENIID)
 	assert.Error(t, err)
 }
 
@@ -74,10 +88,10 @@ func TestGetMACAddressOfENIReturnsErrorWhenNotFound(t *testing.T) {
 	ctrl, mockMetadata, _, _, _ := setup(t)
 	defer ctrl.Finish()
 
-	mockMetadata.EXPECT().GetMetadata(metadataNetworkInterfacesPath+"mac1/"+metadataNetworkInterfaceIDPathSuffix).Return("eni1", nil)
+	mockMetadata.EXPECT().GetMetadata(metadataNetworkInterfacesPath+firstMACAddress+metadataNetworkInterfaceIDPathSuffix).Return(firstENIID, nil)
 	engine := &engine{metadata: mockMetadata}
 
-	_, err := engine.GetMACAddressOfENI([]string{"mac1/"}, "eni2")
+	_, err := engine.GetMACAddressOfENI([]string{firstMACAddress}, secondENIID)
 	assert.Error(t, err)
 }
 
@@ -86,14 +100,14 @@ func TestGetMACAddressOfENI(t *testing.T) {
 	defer ctrl.Finish()
 
 	gomock.InOrder(
-		mockMetadata.EXPECT().GetMetadata(metadataNetworkInterfacesPath+"mac1/"+metadataNetworkInterfaceIDPathSuffix).Return("eni1", nil),
-		mockMetadata.EXPECT().GetMetadata(metadataNetworkInterfacesPath+"mac2/"+metadataNetworkInterfaceIDPathSuffix).Return("eni2", nil),
+		mockMetadata.EXPECT().GetMetadata(metadataNetworkInterfacesPath+firstMACAddress+metadataNetworkInterfaceIDPathSuffix).Return(firstENIID, nil),
+		mockMetadata.EXPECT().GetMetadata(metadataNetworkInterfacesPath+secondMACAddress+metadataNetworkInterfaceIDPathSuffix).Return(secondENIID, nil),
 	)
 	engine := &engine{metadata: mockMetadata}
 
-	addr, err := engine.GetMACAddressOfENI([]string{"mac1/", "mac2/"}, "eni2")
+	addr, err := engine.GetMACAddressOfENI([]string{firstMACAddress, secondMACAddress}, secondENIID)
 	assert.NoError(t, err)
-	assert.Equal(t, addr, "mac2")
+	assert.Equal(t, addr, secondMACAddressSanitized)
 }
 
 func TestGetInterfaceDeviceNameReturnsErrorOnReadDirError(t *testing.T) {
@@ -103,7 +117,7 @@ func TestGetInterfaceDeviceNameReturnsErrorOnReadDirError(t *testing.T) {
 	mockIOUtil.EXPECT().ReadDir(sysfsPathForNetworkDevices).Return(nil, errors.New("error"))
 	engine := &engine{ioutil: mockIOUtil}
 
-	_, err := engine.GetInterfaceDeviceName("mac1")
+	_, err := engine.GetInterfaceDeviceName(firstMACAddressSanitized)
 	assert.Error(t, err)
 }
 
@@ -114,13 +128,13 @@ func TestGetInterfaceDeviceNameReturnsErrorOnReadFileError(t *testing.T) {
 	mockFileInfo := mock_os.NewMockFileInfo(ctrl)
 	gomock.InOrder(
 		mockIOUtil.EXPECT().ReadDir(sysfsPathForNetworkDevices).Return([]os.FileInfo{mockFileInfo}, nil),
-		mockFileInfo.EXPECT().Name().Return("eth1"),
-		mockIOUtil.EXPECT().ReadFile(sysfsPathForNetworkDevices+"eth1"+sysfsPathForNetworkDeviceAddressSuffix).Return(nil, errors.New("error")),
-		mockFileInfo.EXPECT().Name().Return("eth1"),
+		mockFileInfo.EXPECT().Name().Return(deviceName),
+		mockIOUtil.EXPECT().ReadFile(sysfsPathForNetworkDevices+deviceName+sysfsPathForNetworkDeviceAddressSuffix).Return(nil, errors.New("error")),
+		mockFileInfo.EXPECT().Name().Return(deviceName),
 	)
 	engine := &engine{ioutil: mockIOUtil}
 
-	_, err := engine.GetInterfaceDeviceName("mac1")
+	_, err := engine.GetInterfaceDeviceName(firstMACAddressSanitized)
 	assert.Error(t, err)
 }
 
@@ -131,13 +145,13 @@ func TestGetInterfaceDeviceNameReturnsErrorWhenDeviceNotFound(t *testing.T) {
 	mockFileInfo := mock_os.NewMockFileInfo(ctrl)
 	gomock.InOrder(
 		mockIOUtil.EXPECT().ReadDir(sysfsPathForNetworkDevices).Return([]os.FileInfo{mockFileInfo}, nil),
-		mockFileInfo.EXPECT().Name().Return("eth1"),
+		mockFileInfo.EXPECT().Name().Return(deviceName),
 		mockIOUtil.EXPECT().ReadFile(
-			sysfsPathForNetworkDevices+"eth1"+sysfsPathForNetworkDeviceAddressSuffix).Return([]byte("mac2"), nil),
+			sysfsPathForNetworkDevices+deviceName+sysfsPathForNetworkDeviceAddressSuffix).Return([]byte(secondMACAddressSanitized), nil),
 	)
 	engine := &engine{ioutil: mockIOUtil}
 
-	_, err := engine.GetInterfaceDeviceName("mac1")
+	_, err := engine.GetInterfaceDeviceName(firstMACAddressSanitized)
 	assert.Error(t, err)
 }
 
@@ -149,19 +163,51 @@ func TestGetInterfaceDeviceNameReturnsDeviceWhenFound(t *testing.T) {
 	mockFileInfoEth2 := mock_os.NewMockFileInfo(ctrl)
 	gomock.InOrder(
 		mockIOUtil.EXPECT().ReadDir(sysfsPathForNetworkDevices).Return([]os.FileInfo{mockFileInfoEth1, mockFileInfoEth2}, nil),
-		mockFileInfoEth1.EXPECT().Name().Return("eth1"),
+		mockFileInfoEth1.EXPECT().Name().Return(deviceName),
 		mockIOUtil.EXPECT().ReadFile(
-			sysfsPathForNetworkDevices+"eth1"+sysfsPathForNetworkDeviceAddressSuffix).Return([]byte("mac1"), nil),
+			sysfsPathForNetworkDevices+deviceName+sysfsPathForNetworkDeviceAddressSuffix).Return([]byte(firstMACAddressSanitized), nil),
 		mockFileInfoEth2.EXPECT().Name().Return("eth2"),
 		mockIOUtil.EXPECT().ReadFile(
-			sysfsPathForNetworkDevices+"eth2"+sysfsPathForNetworkDeviceAddressSuffix).Return([]byte("mac2"), nil),
+			sysfsPathForNetworkDevices+"eth2"+sysfsPathForNetworkDeviceAddressSuffix).Return([]byte(secondMACAddressSanitized), nil),
 		mockFileInfoEth2.EXPECT().Name().Return("eth2"),
 	)
 	engine := &engine{ioutil: mockIOUtil}
 
-	deviceName, err := engine.GetInterfaceDeviceName("mac2")
+	deviceName, err := engine.GetInterfaceDeviceName(secondMACAddressSanitized)
 	assert.NoError(t, err)
 	assert.Equal(t, deviceName, "eth2")
+}
+
+func TestGetIPV4GatewayNetMaskLocalReturnsErrorOnMalformedCIDR(t *testing.T) {
+	_, _, err := getIPV4GatewayNetmask("1.1.1.1")
+	assert.Error(t, err)
+}
+
+func TestGetIPV4GatewayNetMaskLocalReturnsErrorOnMalformedNetmaskInCIDR(t *testing.T) {
+	_, _, err := getIPV4GatewayNetmask("1.1.1.1/")
+	assert.Error(t, err)
+}
+
+func TestGetIPV4GatewayNetMaskLocalReturnsErrorOnMalformedCIDRBlockInCIDR(t *testing.T) {
+	_, _, err := getIPV4GatewayNetmask("1.1.1/1")
+	assert.Error(t, err)
+}
+
+func TestGetIPV4GatewayNetMaskLocalReturnsErrorOnEmptyRouterInCIDR(t *testing.T) {
+	_, _, err := getIPV4GatewayNetmask("1.1.1./1")
+	assert.Error(t, err)
+}
+
+func TestGetIPV4GatewayNetMaskLocalReturnsErrorOnInvalidRouterInCIDR(t *testing.T) {
+	_, _, err := getIPV4GatewayNetmask("1.1.1.foo/1")
+	assert.Error(t, err)
+}
+
+func TestGetIPV4GatewayNetMaskLocal(t *testing.T) {
+	gateway, netmask, err := getIPV4GatewayNetmask("10.0.1.64/26")
+	assert.NoError(t, err)
+	assert.Equal(t, gateway, "10.0.1.65")
+	assert.Equal(t, netmask, "26")
 }
 
 func TestGetIPV4GatewayNetMaskReturnsErrorOnGetMetadataError(t *testing.T) {
@@ -169,10 +215,10 @@ func TestGetIPV4GatewayNetMaskReturnsErrorOnGetMetadataError(t *testing.T) {
 	defer ctrl.Finish()
 
 	mockMetadata.EXPECT().GetMetadata(
-		metadataNetworkInterfacesPath+"mac1"+metadataNetworkInterfaceIPV4SubnetCIDRPathSuffix).Return("", errors.New("error"))
+		metadataNetworkInterfacesPath+firstMACAddressSanitized+metadataNetworkInterfaceIPV4CIDRPathSuffix).Return("", errors.New("error"))
 	engine := &engine{metadata: mockMetadata}
 
-	_, _, err := engine.GetIPV4GatewayNetmask("mac1")
+	_, _, err := engine.GetIPV4GatewayNetmask(firstMACAddressSanitized)
 	assert.Error(t, err)
 }
 
@@ -182,28 +228,8 @@ func TestGetIPV4GatewayNetMaskReturnsErrorWhenUnableToParseCIDRNetmaskResponse(t
 
 	engine := &engine{metadata: mockMetadata}
 	mockMetadata.EXPECT().GetMetadata(
-		metadataNetworkInterfacesPath+"mac1"+metadataNetworkInterfaceIPV4SubnetCIDRPathSuffix).Return("1.1.1.1", nil)
-	_, _, err := engine.GetIPV4GatewayNetmask("mac1")
-	assert.Error(t, err)
-	mockMetadata.EXPECT().GetMetadata(
-		metadataNetworkInterfacesPath+"mac1"+metadataNetworkInterfaceIPV4SubnetCIDRPathSuffix).Return("1.1.1.1/", nil)
-	_, _, err = engine.GetIPV4GatewayNetmask("mac1")
-	assert.Error(t, err)
-}
-
-func TestGetIPV4GatewayNetMaskReturnsErrorWhenUnableToParseCIDRBlockInResponse(t *testing.T) {
-	ctrl, mockMetadata, _, _, _ := setup(t)
-	defer ctrl.Finish()
-
-	engine := &engine{metadata: mockMetadata}
-	mockMetadata.EXPECT().GetMetadata(
-		metadataNetworkInterfacesPath+"mac1"+metadataNetworkInterfaceIPV4SubnetCIDRPathSuffix).Return("1.1.1./1", nil)
-	_, _, err := engine.GetIPV4GatewayNetmask("mac1")
-	assert.Error(t, err)
-
-	mockMetadata.EXPECT().GetMetadata(
-		metadataNetworkInterfacesPath+"mac1"+metadataNetworkInterfaceIPV4SubnetCIDRPathSuffix).Return("1.1.1/1", nil)
-	_, _, err = engine.GetIPV4GatewayNetmask("mac1")
+		metadataNetworkInterfacesPath+firstMACAddressSanitized+metadataNetworkInterfaceIPV4CIDRPathSuffix).Return("1.1.1.1", nil)
+	_, _, err := engine.GetIPV4GatewayNetmask(firstMACAddressSanitized)
 	assert.Error(t, err)
 }
 
@@ -212,10 +238,10 @@ func TestGetIPV4GatewayNetMask(t *testing.T) {
 	defer ctrl.Finish()
 
 	mockMetadata.EXPECT().GetMetadata(
-		metadataNetworkInterfacesPath+"mac1"+metadataNetworkInterfaceIPV4SubnetCIDRPathSuffix).Return("172.31.32.0/20", nil)
+		metadataNetworkInterfacesPath+firstMACAddressSanitized+metadataNetworkInterfaceIPV4CIDRPathSuffix).Return("172.31.32.0/20", nil)
 	engine := &engine{metadata: mockMetadata}
 
-	gateway, netmask, err := engine.GetIPV4GatewayNetmask("mac1")
+	gateway, netmask, err := engine.GetIPV4GatewayNetmask(firstMACAddressSanitized)
 	assert.NoError(t, err)
 	assert.Equal(t, "172.31.32.1", gateway)
 	assert.Equal(t, "20", netmask)
@@ -225,10 +251,10 @@ func TestIsValidGetIPV4AddressReturnsErrorOnGetMetadataError(t *testing.T) {
 	ctrl, mockMetadata, _, _, _ := setup(t)
 	defer ctrl.Finish()
 
-	mockMetadata.EXPECT().GetMetadata(metadataNetworkInterfacesPath+"mac1"+metadataNetworkInterfaceIPV4AddressesSuffix).Return("", errors.New("error"))
+	mockMetadata.EXPECT().GetMetadata(metadataNetworkInterfacesPath+firstMACAddressSanitized+metadataNetworkInterfaceIPV4AddressesSuffix).Return("", errors.New("error"))
 	engine := &engine{metadata: mockMetadata}
 
-	_, err := engine.DoesMACAddressMapToIPV4Address("mac1", "10.11.12.13")
+	_, err := engine.DoesMACAddressMapToIPV4Address(firstMACAddressSanitized, eniIPV4Address)
 	assert.Error(t, err)
 }
 
@@ -236,10 +262,10 @@ func TestDoesMACAddressMapToIPV4AddressReturnsFalseWhenNotFound(t *testing.T) {
 	ctrl, mockMetadata, _, _, _ := setup(t)
 	defer ctrl.Finish()
 
-	mockMetadata.EXPECT().GetMetadata(metadataNetworkInterfacesPath+"mac1"+metadataNetworkInterfaceIPV4AddressesSuffix).Return("172.31.32.3", nil)
+	mockMetadata.EXPECT().GetMetadata(metadataNetworkInterfacesPath+firstMACAddressSanitized+metadataNetworkInterfaceIPV4AddressesSuffix).Return("172.31.32.3", nil)
 	engine := &engine{metadata: mockMetadata}
 
-	ok, err := engine.DoesMACAddressMapToIPV4Address("mac1", "10.11.12.13")
+	ok, err := engine.DoesMACAddressMapToIPV4Address(firstMACAddressSanitized, eniIPV4Address)
 	assert.NoError(t, err)
 	assert.False(t, ok)
 }
@@ -248,10 +274,10 @@ func TestDoesMACAddressMapToIPV4AddressReturnsTrueWhenFound(t *testing.T) {
 	ctrl, mockMetadata, _, _, _ := setup(t)
 	defer ctrl.Finish()
 
-	mockMetadata.EXPECT().GetMetadata(metadataNetworkInterfacesPath+"mac1"+metadataNetworkInterfaceIPV4AddressesSuffix).Return("10.11.12.13", nil)
+	mockMetadata.EXPECT().GetMetadata(metadataNetworkInterfacesPath+firstMACAddressSanitized+metadataNetworkInterfaceIPV4AddressesSuffix).Return(eniIPV4Address, nil)
 	engine := &engine{metadata: mockMetadata}
 
-	ok, err := engine.DoesMACAddressMapToIPV4Address("mac1", "10.11.12.13")
+	ok, err := engine.DoesMACAddressMapToIPV4Address(firstMACAddressSanitized, eniIPV4Address)
 	assert.NoError(t, err)
 	assert.True(t, ok)
 }
@@ -260,9 +286,9 @@ func TestSetupContainerNamespaceFailsOnLinkByNameError(t *testing.T) {
 	ctrl, _, _, _, mockNetLink := setup(t)
 	defer ctrl.Finish()
 
-	mockNetLink.EXPECT().LinkByName("eth1").Return(nil, errors.New("error"))
+	mockNetLink.EXPECT().LinkByName(deviceName).Return(nil, errors.New("error"))
 	engine := &engine{netLink: mockNetLink}
-	err := engine.SetupContainerNamespace("ns1", "eth1", "10.10.10.10", "20")
+	err := engine.SetupContainerNamespace("ns1", deviceName, eniIPV4Gateway, "20")
 	assert.Error(t, err)
 }
 
@@ -272,11 +298,11 @@ func TestSetupContainerNamespaceFailsOnGetNSError(t *testing.T) {
 
 	mockLink := mock_netlink.NewMockLink(ctrl)
 	gomock.InOrder(
-		mockNetLink.EXPECT().LinkByName("eth1").Return(mockLink, nil),
+		mockNetLink.EXPECT().LinkByName(deviceName).Return(mockLink, nil),
 		mockNS.EXPECT().GetNS("ns1").Return(nil, errors.New("error")),
 	)
 	engine := &engine{ns: mockNS, netLink: mockNetLink}
-	err := engine.SetupContainerNamespace("ns1", "eth1", "10.10.10.10", "20")
+	err := engine.SetupContainerNamespace("ns1", deviceName, eniIPV4Gateway, "20")
 	assert.Error(t, err)
 }
 
@@ -288,13 +314,32 @@ func TestSetupContainerNamespaceFailsOnLinksetNsFdError(t *testing.T) {
 	mockNetNS := mock_ns.NewMockNetNS(ctrl)
 	var fd uintptr
 	gomock.InOrder(
-		mockNetLink.EXPECT().LinkByName("eth1").Return(mockENILink, nil),
+		mockNetLink.EXPECT().LinkByName(deviceName).Return(mockENILink, nil),
 		mockNS.EXPECT().GetNS("ns1").Return(mockNetNS, nil),
 		mockNetNS.EXPECT().Fd().Return(fd),
 		mockNetLink.EXPECT().LinkSetNsFd(mockENILink, int(fd)).Return(errors.New("error")),
 	)
 	engine := &engine{ns: mockNS, netLink: mockNetLink}
-	err := engine.SetupContainerNamespace("ns1", "eth1", "10.10.10.10", "20")
+	err := engine.SetupContainerNamespace("ns1", deviceName, eniIPV4Gateway, "20")
+	assert.Error(t, err)
+}
+
+func TestSetupContainerNamespaceFailsOnParseAddrError(t *testing.T) {
+	ctrl, _, _, mockNS, mockNetLink := setup(t)
+	defer ctrl.Finish()
+
+	mockENILink := mock_netlink.NewMockLink(ctrl)
+	mockNetNS := mock_ns.NewMockNetNS(ctrl)
+	var fd uintptr
+	gomock.InOrder(
+		mockNetLink.EXPECT().LinkByName(deviceName).Return(mockENILink, nil),
+		mockNS.EXPECT().GetNS("ns1").Return(mockNetNS, nil),
+		mockNetNS.EXPECT().Fd().Return(fd),
+		mockNetLink.EXPECT().LinkSetNsFd(mockENILink, int(fd)).Return(nil),
+		mockNetLink.EXPECT().ParseAddr(eniIPV4CIDRBlock).Return(nil, errors.New("error")),
+	)
+	engine := &engine{ns: mockNS, netLink: mockNetLink}
+	err := engine.SetupContainerNamespace("ns1", deviceName, eniIPV4Gateway, "20")
 	assert.Error(t, err)
 }
 
@@ -305,15 +350,17 @@ func TestSetupContainerNamespaceFailsOnWithNetNSPathError(t *testing.T) {
 	mockENILink := mock_netlink.NewMockLink(ctrl)
 	mockNetNS := mock_ns.NewMockNetNS(ctrl)
 	var fd uintptr
+	ipv4Addr := &netlink.Addr{}
 	gomock.InOrder(
-		mockNetLink.EXPECT().LinkByName("eth1").Return(mockENILink, nil),
+		mockNetLink.EXPECT().LinkByName(deviceName).Return(mockENILink, nil),
 		mockNS.EXPECT().GetNS("ns1").Return(mockNetNS, nil),
 		mockNetNS.EXPECT().Fd().Return(fd),
 		mockNetLink.EXPECT().LinkSetNsFd(mockENILink, int(fd)).Return(nil),
+		mockNetLink.EXPECT().ParseAddr(eniIPV4CIDRBlock).Return(ipv4Addr, nil),
 		mockNS.EXPECT().WithNetNSPath("ns1", gomock.Any()).Return(errors.New("error")),
 	)
 	engine := &engine{ns: mockNS, netLink: mockNetLink}
-	err := engine.SetupContainerNamespace("ns1", "eth1", "10.10.10.10", "20")
+	err := engine.SetupContainerNamespace("ns1", deviceName, eniIPV4Gateway, "20")
 	assert.Error(t, err)
 }
 
@@ -324,16 +371,27 @@ func TestSetupContainerNamespace(t *testing.T) {
 	mockENILink := mock_netlink.NewMockLink(ctrl)
 	mockNetNS := mock_ns.NewMockNetNS(ctrl)
 	var fd uintptr
+	ipv4Addr := &netlink.Addr{}
 	gomock.InOrder(
-		mockNetLink.EXPECT().LinkByName("eth1").Return(mockENILink, nil),
+		mockNetLink.EXPECT().LinkByName(deviceName).Return(mockENILink, nil),
 		mockNS.EXPECT().GetNS("ns1").Return(mockNetNS, nil),
 		mockNetNS.EXPECT().Fd().Return(fd),
 		mockNetLink.EXPECT().LinkSetNsFd(mockENILink, int(fd)).Return(nil),
+		mockNetLink.EXPECT().ParseAddr(eniIPV4CIDRBlock).Return(ipv4Addr, nil),
 		mockNS.EXPECT().WithNetNSPath("ns1", gomock.Any()).Return(nil),
 	)
 	engine := &engine{ns: mockNS, netLink: mockNetLink}
-	err := engine.SetupContainerNamespace("ns1", "eth1", "10.10.10.10", "20")
+	err := engine.SetupContainerNamespace("ns1", deviceName, eniIPV4Gateway, "20")
 	assert.NoError(t, err)
+}
+
+func TestNSClosureCreationFailsOnParseAddrError(t *testing.T) {
+	ctrl, _, _, _, mockNetLink := setup(t)
+	defer ctrl.Finish()
+
+	mockNetLink.EXPECT().ParseAddr(eniIPV4CIDRBlock).Return(nil, errors.New("error"))
+	_, err := newNSClosure(mockNetLink, deviceName, eniIPV4Gateway, "20")
+	assert.Error(t, err)
 }
 
 func TestNSClosureRunFailsOnLinkByNameError(t *testing.T) {
@@ -341,32 +399,15 @@ func TestNSClosureRunFailsOnLinkByNameError(t *testing.T) {
 	defer ctrl.Finish()
 
 	mockNetNS := mock_ns.NewMockNetNS(ctrl)
-	mockNetLink.EXPECT().LinkByName("eth1").Return(nil, errors.New("error"))
-	closure := &nsClosure{
-		netLink:    mockNetLink,
-		deviceName: "eth1",
-	}
-	err := closure.run(mockNetNS)
-	assert.Error(t, err)
-}
-
-func TestNSClosureRunFailsOnParseAddrError(t *testing.T) {
-	ctrl, _, _, _, mockNetLink := setup(t)
-	defer ctrl.Finish()
-
-	mockNetNS := mock_ns.NewMockNetNS(ctrl)
-	mockENILink := mock_netlink.NewMockLink(ctrl)
+	ipv4Addr := &netlink.Addr{}
 	gomock.InOrder(
-		mockNetLink.EXPECT().LinkByName("eth1").Return(mockENILink, nil),
-		mockNetLink.EXPECT().ParseAddr("10.10.10.10/20").Return(nil, errors.New("error")),
+		mockNetLink.EXPECT().ParseAddr(eniIPV4CIDRBlock).Return(ipv4Addr, nil),
+		mockNetLink.EXPECT().LinkByName(deviceName).Return(nil, errors.New("error")),
 	)
-	closure := &nsClosure{
-		netLink:     mockNetLink,
-		deviceName:  "eth1",
-		ipv4Address: "10.10.10.10",
-		netmask:     "20",
-	}
-	err := closure.run(mockNetNS)
+	closure, err := newNSClosure(mockNetLink, deviceName, eniIPV4Gateway, "20")
+	assert.NoError(t, err)
+	assert.NotNil(t, closure)
+	err = closure.run(mockNetNS)
 	assert.Error(t, err)
 }
 
@@ -376,19 +417,16 @@ func TestNSClosureRunFailsOnAddrAddError(t *testing.T) {
 
 	mockNetNS := mock_ns.NewMockNetNS(ctrl)
 	mockENILink := mock_netlink.NewMockLink(ctrl)
-	netlinkAddress := &netlink.Addr{}
+	ipv4Address := &netlink.Addr{}
 	gomock.InOrder(
-		mockNetLink.EXPECT().LinkByName("eth1").Return(mockENILink, nil),
-		mockNetLink.EXPECT().ParseAddr("10.10.10.10/20").Return(netlinkAddress, nil),
-		mockNetLink.EXPECT().AddrAdd(mockENILink, netlinkAddress).Return(errors.New("error")),
+		mockNetLink.EXPECT().ParseAddr(eniIPV4CIDRBlock).Return(ipv4Address, nil),
+		mockNetLink.EXPECT().LinkByName(deviceName).Return(mockENILink, nil),
+		mockNetLink.EXPECT().AddrAdd(mockENILink, ipv4Address).Return(errors.New("error")),
 	)
-	closure := &nsClosure{
-		netLink:     mockNetLink,
-		deviceName:  "eth1",
-		ipv4Address: "10.10.10.10",
-		netmask:     "20",
-	}
-	err := closure.run(mockNetNS)
+	closure, err := newNSClosure(mockNetLink, deviceName, eniIPV4Gateway, "20")
+	assert.NoError(t, err)
+	assert.NotNil(t, closure)
+	err = closure.run(mockNetNS)
 	assert.Error(t, err)
 }
 
@@ -398,20 +436,17 @@ func TestNSClosureRunFailsOnLinkSetupError(t *testing.T) {
 
 	mockNetNS := mock_ns.NewMockNetNS(ctrl)
 	mockENILink := mock_netlink.NewMockLink(ctrl)
-	netlinkAddress := &netlink.Addr{}
+	ipv4Address := &netlink.Addr{}
 	gomock.InOrder(
-		mockNetLink.EXPECT().LinkByName("eth1").Return(mockENILink, nil),
-		mockNetLink.EXPECT().ParseAddr("10.10.10.10/20").Return(netlinkAddress, nil),
-		mockNetLink.EXPECT().AddrAdd(mockENILink, netlinkAddress).Return(nil),
+		mockNetLink.EXPECT().ParseAddr(eniIPV4CIDRBlock).Return(ipv4Address, nil),
+		mockNetLink.EXPECT().LinkByName(deviceName).Return(mockENILink, nil),
+		mockNetLink.EXPECT().AddrAdd(mockENILink, ipv4Address).Return(nil),
 		mockNetLink.EXPECT().LinkSetUp(mockENILink).Return(errors.New("error")),
 	)
-	closure := &nsClosure{
-		netLink:     mockNetLink,
-		deviceName:  "eth1",
-		ipv4Address: "10.10.10.10",
-		netmask:     "20",
-	}
-	err := closure.run(mockNetNS)
+	closure, err := newNSClosure(mockNetLink, deviceName, eniIPV4Gateway, "20")
+	assert.NoError(t, err)
+	assert.NotNil(t, closure)
+	err = closure.run(mockNetNS)
 	assert.Error(t, err)
 }
 
@@ -421,19 +456,16 @@ func TestNSClosureRun(t *testing.T) {
 
 	mockNetNS := mock_ns.NewMockNetNS(ctrl)
 	mockENILink := mock_netlink.NewMockLink(ctrl)
-	netlinkAddress := &netlink.Addr{}
+	ipv4Address := &netlink.Addr{}
 	gomock.InOrder(
-		mockNetLink.EXPECT().LinkByName("eth1").Return(mockENILink, nil),
-		mockNetLink.EXPECT().ParseAddr("10.10.10.10/20").Return(netlinkAddress, nil),
-		mockNetLink.EXPECT().AddrAdd(mockENILink, netlinkAddress).Return(nil),
+		mockNetLink.EXPECT().ParseAddr(eniIPV4CIDRBlock).Return(ipv4Address, nil),
+		mockNetLink.EXPECT().LinkByName(deviceName).Return(mockENILink, nil),
+		mockNetLink.EXPECT().AddrAdd(mockENILink, ipv4Address).Return(nil),
 		mockNetLink.EXPECT().LinkSetUp(mockENILink).Return(nil),
 	)
-	closure := &nsClosure{
-		netLink:     mockNetLink,
-		deviceName:  "eth1",
-		ipv4Address: "10.10.10.10",
-		netmask:     "20",
-	}
-	err := closure.run(mockNetNS)
+	closure, err := newNSClosure(mockNetLink, deviceName, eniIPV4Gateway, "20")
+	assert.NoError(t, err)
+	assert.NotNil(t, closure)
+	err = closure.run(mockNetNS)
 	assert.NoError(t, err)
 }

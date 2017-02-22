@@ -45,30 +45,28 @@ func add(args *skel.CmdArgs, engine engine.Engine) error {
 		return err
 	}
 
+	// TODO: If we can get this from the backend, we can optimize the
+	// workflow by getting rid of this, or by making this optional (only in
+	// cases where mac address hasn't been specified)
 	allMACAddresses, err := engine.GetAllMACAddresses()
 	if err != nil {
-		log.Errorf("Error getting mac addresses: %v", err)
+		log.Errorf("Error getting the list of mac addresses on the host: %v", err)
 		return err
 	}
 	log.Debugf("Found mac addresses: %v", allMACAddresses)
+
+	// Get the mac address of the ENI based on the ENIID by matching it
+	// against the list of all mac addresses obtained in the previous step.
 	macAddressOfENI, err := engine.GetMACAddressOfENI(allMACAddresses, conf.ENIID)
 	if err != nil {
 		log.Errorf("Error finding the mac address for the ENI: %v", err)
 		return err
 	}
 	log.Debugf("Found mac address for the ENI: %v", macAddressOfENI)
-	networkDeviceName, err := engine.GetInterfaceDeviceName(macAddressOfENI)
-	if err != nil {
-		log.Errorf("Error finding network device for the ENI: %v", err)
-		return err
-	}
-	log.Debugf("Found network device for the ENI: %v", networkDeviceName)
-	ipv4Gateway, netmask, err := engine.GetIPV4GatewayNetmask(macAddressOfENI)
-	if err != nil {
-		log.Errorf("Error getting ipv4 gateway and netmask for ENI: %v", err)
-		return err
-	}
-	log.Debugf("Found ipv4 gateway and netmask for ENI: %s %s", ipv4Gateway, netmask)
+
+	// Validation to ensure that we've been given the correct parameters.
+	// Check if the ipv4 address of the ENI maps to the mac address of the
+	// ENI.
 	ok, err := engine.DoesMACAddressMapToIPV4Address(macAddressOfENI, conf.IPV4Address)
 	if err != nil {
 		log.Errorf("Error validating ipv4 addresses for ENI: %v", err)
@@ -81,6 +79,27 @@ func add(args *skel.CmdArgs, engine engine.Engine) error {
 	}
 
 	log.Debugf("Found ipv4Addresses: %v", ok)
+
+	// Get the interface name of the device by scanning sysfs
+	networkDeviceName, err := engine.GetInterfaceDeviceName(macAddressOfENI)
+	if err != nil {
+		log.Errorf("Error finding network device for the ENI: %v", err)
+		return err
+	}
+	log.Debugf("Found network device for the ENI: %v", networkDeviceName)
+
+	// Get the ipv4 gateway and subnet mask for the ENI. This will be
+	// required for adding routes in the container's namespace
+	ipv4Gateway, netmask, err := engine.GetIPV4GatewayNetmask(macAddressOfENI)
+	if err != nil {
+		log.Errorf("Error getting ipv4 gateway and netmask for ENI: %v", err)
+		return err
+	}
+	log.Debugf("Found ipv4 gateway and netmask for ENI: %s %s", ipv4Gateway, netmask)
+
+	// Everything's setup. We have all the parameters needed to configure
+	// the network namespace of the ENI. Invoke SetupContainerNamespace to
+	// do the same
 	err = engine.SetupContainerNamespace(args.Netns, networkDeviceName, conf.IPV4Address, netmask)
 	if err != nil {
 		return errors.Wrapf(err, "Error setting up container's network namespace")

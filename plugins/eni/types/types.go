@@ -31,6 +31,7 @@ type NetConf struct {
 	IPV4Address string `json:"ipv4-address"`
 }
 
+// NewConf creates a new NetConf object by parsing the arguments supplied
 func NewConf(args *skel.CmdArgs) (*NetConf, error) {
 	var conf NetConf
 	if err := json.Unmarshal(args.StdinData, &conf); err != nil {
@@ -43,6 +44,6 @@ func NewConf(args *skel.CmdArgs) (*NetConf, error) {
 		return nil, fmt.Errorf("Missing required parameter in config: '%s'", "ipv4-address")
 	}
 
-	log.Infof("Loaded config: %v", conf)
+	log.Debugf("Loaded config: %v", conf)
 	return &conf, nil
 }

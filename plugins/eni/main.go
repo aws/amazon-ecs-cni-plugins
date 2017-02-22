@@ -27,6 +27,7 @@ func init() {
 }
 
 func main() {
+	// TODO logging config
 	defer log.Flush()
 
 	skel.PluginMain(commands.Add, commands.Del, cnispec.GetSpecVersionSupported())
