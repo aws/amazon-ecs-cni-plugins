@@ -14,17 +14,19 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"strings"
 	"time"
 )
 
 const (
-	projectVendor         = `github.com/aws/amazon-ecs-networking-plugins/vendor`
+	projectVendor         = `github.com/aws/amazon-ecs-cni-plugins/vendor`
 	copyrightHeaderFormat = "// Copyright %v Amazon.com, Inc. or its affiliates. All Rights Reserved."
 	licenseBlock          = `
 //
@@ -59,21 +61,20 @@ func main() {
 	path, _ := filepath.Split(outputPath)
 	err := os.MkdirAll(path, os.ModeDir|0755)
 	if err != nil {
-		fmt.Println(err)
-		os.Exit(1)
+		printErrorAndExitWithErrorCode(err)
 	}
 
 	outputFile, err := os.Create(outputPath)
 	if err != nil {
-		fmt.Println(err)
-		os.Exit(1)
+		printErrorAndExitWithErrorCode(err)
 	}
+	defer outputFile.Close()
 
 	mockgen := exec.Command("mockgen", packageName, interfaces)
 	mockgenOut, err := mockgen.Output()
 	if err != nil {
-		fmt.Printf("Error running mockgen for package '%s' and interfaces '%s': %v\n", packageName, interfaces, err)
-		os.Exit(1)
+		printErrorAndExitWithErrorCode(
+			fmt.Errorf("Error running mockgen for package '%s' and interfaces '%s': %v\n", packageName, interfaces, err))
 	}
 
 	sanitized := re.ReplaceAllString(string(mockgenOut), "")
@@ -84,13 +85,26 @@ func main() {
 	goimports.Stdin = bytes.NewBufferString(withHeader)
 	goimports.Stdout = outputFile
 	err = goimports.Run()
-	outputFile.Close()
 	if err != nil {
-		fmt.Println(err)
-		os.Exit(1)
+		printErrorAndExitWithErrorCode(err)
+	}
+
+	scanner := bufio.NewScanner(outputFile)
+	mockFileContents := scanner.Bytes()
+	sanitizedMockFileContents := strings.Replace(string(mockFileContents), projectVendor, "", 1)
+
+	writer := bufio.NewWriter(outputFile)
+	_, err = writer.WriteString(sanitizedMockFileContents)
+	if err != nil {
+		printErrorAndExitWithErrorCode(err)
 	}
 }
 
 func usage() {
 	fmt.Println(os.Args[0], " PACKAGE INTERFACE_NAMES OUTPUT_FILE")
+}
+
+func printErrorAndExitWithErrorCode(err error) {
+	fmt.Println(err)
+	os.Exit(1)
 }
