@@ -14,8 +14,6 @@
 package commands
 
 import (
-	"fmt"
-
 	"github.com/aws/amazon-ecs-cni-plugins/pkg/cninswrapper"
 	"github.com/aws/amazon-ecs-cni-plugins/pkg/ec2metadata"
 	"github.com/aws/amazon-ecs-cni-plugins/pkg/ioutilwrapper"
@@ -75,7 +73,7 @@ func add(args *skel.CmdArgs, engine engine.Engine) error {
 	if !ok {
 		errorMessage := "Unable to map ipv4 address of ENI to a mac address"
 		log.Error(errorMessage)
-		return fmt.Errorf(errorMessage)
+		return errors.Errorf(errorMessage)
 	}
 
 	log.Debugf("Found ipv4Addresses: %v", ok)
@@ -102,7 +100,7 @@ func add(args *skel.CmdArgs, engine engine.Engine) error {
 	// do the same
 	err = engine.SetupContainerNamespace(args.Netns, networkDeviceName, conf.IPV4Address, netmask)
 	if err != nil {
-		return errors.Wrapf(err, "Error setting up container's network namespace")
+		return errors.Wrap(err, "Error setting up container's network namespace")
 	}
 	return nil
 }

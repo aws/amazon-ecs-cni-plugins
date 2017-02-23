@@ -15,7 +15,7 @@ package engine
 
 import (
 	"fmt"
-	"strconv"
+	"net"
 	"strings"
 
 	"github.com/aws/amazon-ecs-cni-plugins/pkg/cninswrapper"
@@ -68,10 +68,9 @@ func NewEngine(metadata ec2metadata.EC2Metadata, ioutil ioutilwrapper.IOUtil, ne
 // GetAllMACAddresses gets a list of mac addresses for all interfaces from the instance
 // metadata service
 func (engine *engine) GetAllMACAddresses() ([]string, error) {
-	var macAddresses []string
 	macs, err := engine.metadata.GetMetadata(metadataNetworkInterfacesPath)
 	if err != nil {
-		return macAddresses, errors.Wrapf(err, "Error getting all mac addresses on the instance from instance metadata")
+		return nil, errors.Wrap(err, "Error getting all mac addresses on the instance from instance metadata")
 	}
 	return strings.Split(macs, "\n"), nil
 }
@@ -91,18 +90,18 @@ func (engine *engine) GetMACAddressOfENI(macAddresses []string, eniID string) (s
 		}
 	}
 
-	return "", fmt.Errorf("MAC address of interface '%s' not found", eniID)
+	return "", errors.Errorf("MAC address of interface '%s' not found", eniID)
 }
 
 // GetInterfaceDeviceName gets the device name on the host, given a mac address
 func (engine *engine) GetInterfaceDeviceName(macAddress string) (string, error) {
 	files, err := engine.ioutil.ReadDir(sysfsPathForNetworkDevices)
 	if err != nil {
-		return "", errors.Wrapf(err, "Error listing network devices from sys fs")
+		return "", errors.Wrap(err, "Error listing network devices from sys fs")
 	}
 	for _, file := range files {
 		// Read the 'address' file in sys for the device. An example here is: if reading for device
-		// 'eth1', read the '/sys/class/net/eth0/address' file to get the address of the device
+		// 'eth1', read the '/sys/class/net/eth1/address' file to get the address of the device
 		// TODO Use fmt.Sprintf and wrap that in a method
 		addressFile := sysfsPathForNetworkDevices + file.Name() + sysfsPathForNetworkDeviceAddressSuffix
 		contents, err := engine.ioutil.ReadFile(addressFile)
@@ -115,7 +114,7 @@ func (engine *engine) GetInterfaceDeviceName(macAddress string) (string, error) 
 		}
 	}
 
-	return "", fmt.Errorf("Network device name not found for '%s'", macAddress)
+	return "", errors.Errorf("Network device name not found for '%s'", macAddress)
 }
 
 // GetIPV4GatewayNetmask gets the ipv4 gateway and the netmask from the instance
@@ -132,36 +131,19 @@ func (engine *engine) GetIPV4GatewayNetmask(macAddress string) (string, string, 
 
 func getIPV4GatewayNetmask(cidrBlock string) (string, string, error) {
 	// The IPV4 CIDR block is of the format ip-addr/netmask
-	parts := strings.Split(cidrBlock, "/")
-	if len(parts) != 2 {
-		return "", "", fmt.Errorf("Unable to parse response from instance metadata for ipv4 cidr: '%s'", cidrBlock)
-	}
-
-	cidr := parts[0]
-	netmask := parts[1]
-
-	// Validate the cidr and the netmask parsed from cidr block
-	if netmask == "" {
-		return "", "", fmt.Errorf("Unable to parse response from instance metadata for ipv4 cidr: '%s'", cidrBlock)
-	}
-
-	parts = strings.Split(cidr, ".")
-	if len(parts) != 4 {
-		return "", "", fmt.Errorf("Unable to parse the CIDR block from instance metadata: '%s'", cidrBlock)
-	}
-	for _, ipPart := range parts {
-		if ipPart == "" {
-			return "", "", fmt.Errorf("Unable to parse the CIDR block from instance metadata: '%s'", cidrBlock)
-		}
-	}
-
-	// Construct the gateway based on the cidr block, this is the same logic as per ec2-net-utils
-	router, err := strconv.Atoi(parts[3])
+	ip, ipNet, err := net.ParseCIDR(cidrBlock)
 	if err != nil {
-		return "", "", errors.Wrapf(err, "Unable to parse the CIDR block from instance metadata: '%s'", cidrBlock)
+		return "", "", errors.Wrapf(err, "Unable to parse response from instance metadata for ipv4 cidr: '%s'", cidrBlock)
 	}
-	router = router + 1
-	return fmt.Sprintf("%s.%s.%s.%d", parts[0], parts[1], parts[2], router), netmask, nil
+
+	ip4 := ip.To4()
+	if ip4 == nil {
+		return "", "", errors.Errorf("Unable to parse ipv4 gateway from cidr block '%s'", cidrBlock)
+	}
+
+	ip4[3] = ip4[3] + 1
+	maskOnes, _ := ipNet.Mask.Size()
+	return ip4.String(), fmt.Sprintf("%d", maskOnes), nil
 }
 
 // DoesMACAddressMapToIPV4Address validates in the MAC Address for the ENI maps to the
@@ -170,7 +152,7 @@ func (engine *engine) DoesMACAddressMapToIPV4Address(macAddress string, ipv4Addr
 	// TODO Use fmt.Sprintf and wrap that in a method
 	addressesResponse, err := engine.metadata.GetMetadata(metadataNetworkInterfacesPath + macAddress + metadataNetworkInterfaceIPV4AddressesSuffix)
 	if err != nil {
-		return false, errors.Wrapf(err, "Error getting ipv4 addresses from instance metadata")
+		return false, errors.Wrap(err, "Error getting ipv4 addresses from instance metadata")
 	}
 	for _, address := range strings.Split(addressesResponse, "\n") {
 		if address == ipv4Address {
@@ -204,7 +186,7 @@ func (engine *engine) SetupContainerNamespace(netns string, deviceName string, i
 	// Generate the closure to execute within the container's namespace
 	toRun, err := newNSClosure(engine.netLink, deviceName, ipv4Address, netmask)
 	if err != nil {
-		return errors.Wrapf(err, "Error creating closure to execute in container namespace")
+		return errors.Wrap(err, "Error creating closure to execute in container namespace")
 	}
 
 	// Execute the closure within the container's namespace
@@ -226,7 +208,7 @@ type nsClosure struct {
 func newNSClosure(netLink netlinkwrapper.NetLink, deviceName string, ipv4Address string, netmask string) (*nsClosure, error) {
 	addr, err := netLink.ParseAddr(fmt.Sprintf("%s/%s", ipv4Address, netmask))
 	if err != nil {
-		return nil, errors.Wrapf(err, "Error parsing ipv4 address for the interface")
+		return nil, errors.Wrap(err, "Error parsing ipv4 address for the interface")
 	}
 
 	return &nsClosure{
@@ -248,13 +230,13 @@ func (closure *nsClosure) run(_ ns.NetNS) error {
 	// Add the IPV4 Address to the link
 	err = closure.netLink.AddrAdd(eniLink, closure.ipv4Addr)
 	if err != nil {
-		return errors.Wrapf(err, "Error adding ipv4 address to the interface")
+		return errors.Wrap(err, "Error adding ipv4 address to the interface")
 	}
 
 	// Bring it up
 	err = closure.netLink.LinkSetUp(eniLink)
 	if err != nil {
-		return errors.Wrapf(err, "Error bringing up the device")
+		return errors.Wrap(err, "Error bringing up the device")
 	}
 
 	return nil

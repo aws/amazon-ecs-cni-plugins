@@ -15,7 +15,7 @@ package types
 
 import (
 	"encoding/json"
-	"fmt"
+	"net"
 
 	log "github.com/cihub/seelog"
 	"github.com/containernetworking/cni/pkg/skel"
@@ -35,15 +35,21 @@ type NetConf struct {
 func NewConf(args *skel.CmdArgs) (*NetConf, error) {
 	var conf NetConf
 	if err := json.Unmarshal(args.StdinData, &conf); err != nil {
-		return nil, errors.Wrapf(err, "Failed to parse config")
+		return nil, errors.Wrap(err, "Failed to parse config")
 	}
 	if conf.ENIID == "" {
-		return nil, fmt.Errorf("Missing required parameter in config: '%s'", "eni")
+		return nil, errors.Errorf("Missing required parameter in config: '%s'", "eni")
 	}
 	if conf.IPV4Address == "" {
-		return nil, fmt.Errorf("Missing required parameter in config: '%s'", "ipv4-address")
+		return nil, errors.Errorf("Missing required parameter in config: '%s'", "ipv4-address")
 	}
-
+	ip := net.ParseIP(conf.IPV4Address)
+	if ip == nil {
+		return nil, errors.Errorf("Malformed IPv4 address specified")
+	}
+	if ip.To4() == nil {
+		return nil, errors.Errorf("Invalid IPv4 address specified")
+	}
 	log.Debugf("Loaded config: %v", conf)
 	return &conf, nil
 }
