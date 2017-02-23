@@ -16,10 +16,12 @@ package cnispec
 import (
 	"testing"
 
+	"github.com/containernetworking/cni/pkg/version"
 	"github.com/stretchr/testify/assert"
 )
 
 func TestGetSpecVersionsSupported(t *testing.T) {
+	specVersionSupported = version.PluginSupports("0.2.0")
 	pluginInfo := GetSpecVersionSupported()
 	supportedVersions := pluginInfo.SupportedVersions()
 	assert.NotEmpty(t, supportedVersions)
