@@ -17,7 +17,7 @@
 package mock_cninswrapper
 
 import (
-	ns "github.com/containernetworking/cni/pkg/ns"
+	"github.com/containernetworking/cni/pkg/ns"
 	gomock "github.com/golang/mock/gomock"
 )
 

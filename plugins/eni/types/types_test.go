@@ -66,6 +66,5 @@ func TestNewConfWithInvalidIPV4AddressIPV6Config(t *testing.T) {
 		StdinData: []byte(configInvalidIPV4AddressIPv6),
 	}
 	_, err := NewConf(args)
-	t.Log(err)
 	assert.Error(t, err)
 }
