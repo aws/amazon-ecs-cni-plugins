@@ -14,10 +14,6 @@
 package commands
 
 import (
-	"github.com/aws/amazon-ecs-cni-plugins/pkg/cninswrapper"
-	"github.com/aws/amazon-ecs-cni-plugins/pkg/ec2metadata"
-	"github.com/aws/amazon-ecs-cni-plugins/pkg/ioutilwrapper"
-	"github.com/aws/amazon-ecs-cni-plugins/pkg/netlinkwrapper"
 	"github.com/aws/amazon-ecs-cni-plugins/plugins/eni/engine"
 	"github.com/aws/amazon-ecs-cni-plugins/plugins/eni/types"
 	log "github.com/cihub/seelog"
@@ -27,11 +23,10 @@ import (
 
 // Add invokes the command to add ENI to a container's namespace
 func Add(args *skel.CmdArgs) error {
-	return add(args, engine.NewEngine(
-		ec2metadata.NewEC2Metadata(), ioutilwrapper.NewIOUtil(), netlinkwrapper.NewNetLink(), cninswrapper.NewNS()))
+	return add(args, engine.New())
 }
 
-// Del invokes the command to remove ENI to a container's namespace
+// Del invokes the command to remove ENI from a container's namespace
 func Del(args *skel.CmdArgs) error {
 	return nil
 }
@@ -43,9 +38,9 @@ func add(args *skel.CmdArgs, engine engine.Engine) error {
 		return err
 	}
 
-	// TODO: If we can get this from the backend, we can optimize the
-	// workflow by getting rid of this, or by making this optional (only in
-	// cases where mac address hasn't been specified)
+	// TODO: If we can get this information from the config, we can optimize
+	// the workflow by getting rid of this, or by making this optional (only
+	// in cases where mac address hasn't been specified)
 	allMACAddresses, err := engine.GetAllMACAddresses()
 	if err != nil {
 		log.Errorf("Error getting the list of mac addresses on the host: %v", err)

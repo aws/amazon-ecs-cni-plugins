@@ -1,7 +1,7 @@
 SOURCEDIR=./pkg ./plugins
 SOURCES := $(shell find $(SOURCEDIR) -name '*.go')
 ROOT := $(shell pwd)
-
+LOCAL_ENI_PLUGIN_BINARY=bin/plugins/eni
 .PHONY: get-deps
 get-deps:
 	go get github.com/golang/mock/gomock
@@ -10,11 +10,10 @@ get-deps:
 	go get github.com/tools/godep
 
 .PHONY: plugins
-plugins: eni
+plugins: $(LOCAL_ENI_PLUGIN_BINARY)
 
-.PHONY: eni
-eni: $(SOURCES)
-	GOOS=linux CGO_ENABLED=0 go build -installsuffix cgo -a -ldflags '-s' -o ${ROOT}/bin/eni github.com/aws/amazon-ecs-cni-plugins/plugins/eni
+$(LOCAL_ENI_PLUGIN_BINARY): $(SOURCES)
+	GOOS=linux CGO_ENABLED=0 go build -installsuffix cgo -a -ldflags '-s' -o ${ROOT}/bin/plugins/eni github.com/aws/amazon-ecs-cni-plugins/plugins/eni
 	@echo "Built eni plugin"
 
 .PHONY: generate

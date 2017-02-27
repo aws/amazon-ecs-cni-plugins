@@ -49,6 +49,14 @@ func setup(t *testing.T) (*gomock.Controller, *mock_ec2metadata.MockEC2Metadata,
 	return ctrl, mock_ec2metadata.NewMockEC2Metadata(ctrl), mock_ioutilwrapper.NewMockIOUtil(ctrl), mock_cninswrapper.NewMockNS(ctrl), mock_netlinkwrapper.NewMockNetLink(ctrl)
 }
 
+func TestCreate(t *testing.T) {
+	ctrl, mockMetadata, mockIOUtil, mockNS, mockNetLink := setup(t)
+	defer ctrl.Finish()
+
+	engine := create(mockMetadata, mockIOUtil, mockNetLink, mockNS)
+	assert.NotNil(t, engine)
+}
+
 func TestGetAllMACAddressesReturnsErrorOnGetMetadataError(t *testing.T) {
 	ctrl, mockMetadata, _, _, _ := setup(t)
 	defer ctrl.Finish()
