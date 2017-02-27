@@ -56,7 +56,12 @@ type engine struct {
 }
 
 // NewEngine creates a new Engine object
-func NewEngine(metadata ec2metadata.EC2Metadata, ioutil ioutilwrapper.IOUtil, netLink netlinkwrapper.NetLink, ns cninswrapper.NS) Engine {
+func New() Engine {
+	return create(
+		ec2metadata.NewEC2Metadata(), ioutilwrapper.NewIOUtil(), netlinkwrapper.NewNetLink(), cninswrapper.NewNS())
+}
+
+func create(metadata ec2metadata.EC2Metadata, ioutil ioutilwrapper.IOUtil, netLink netlinkwrapper.NetLink, ns cninswrapper.NS) Engine {
 	return &engine{
 		metadata: metadata,
 		ioutil:   ioutil,

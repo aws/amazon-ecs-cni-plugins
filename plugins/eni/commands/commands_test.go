@@ -38,6 +38,8 @@ var eniArgs = &skel.CmdArgs{
 	Netns:     nsName,
 }
 
+// TODO: Add integration tests for command.Add commands.Del
+
 func TestAddWithInvalidConfig(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
