@@ -37,6 +37,14 @@ const (
 	metadataNetworkInterfaceIPV4CIDRPathSuffix  = "/subnet-ipv4-cidr-block"
 	metadataNetworkInterfaceIPV4AddressesSuffix = "/local-ipv4s"
 	dhclientExecutableName                      = "dhclient"
+	// TODO: These paths should probably not be /var/lib/dhclient or
+	// /var/run/. Instead these should go into their own subdirs.
+	// Example: /var/lib/dhclient/ns/ and /var/run/ns/
+	// It's more helpful when debugging to have it set that way. We
+	// expect the Agent to create those directories. We can also let
+	// these be conigured via the plugin config.
+	dhclientV4LeaseFilePathPrefix    = "/var/lib/dhclient/ns-dhclient"
+	dhclientV4LeasePIDFilePathPrefix = "/var/run/ns-dhclient"
 )
 
 // Engine represents the execution engine for the ENI plugin. It defines all the
@@ -75,6 +83,8 @@ func create(metadata ec2metadata.EC2Metadata, ioutil ioutilwrapper.IOUtil, netLi
 	}
 }
 
+// IsDHClientInPath returns true if the 'dhclient' executable is found in PATH. It
+// returns false otherwise
 func (engine *engine) IsDHClientInPath() bool {
 	dhclientPath, err := engine.exec.LookPath(dhclientExecutableName)
 	if err != nil {
@@ -216,7 +226,7 @@ func (engine *engine) SetupContainerNamespace(netns string, deviceName string, i
 	}
 
 	// Generate the closure to execute within the container's namespace
-	toRun, err := newNSClosure(engine.netLink, deviceName, ipv4Address, netmask)
+	toRun, err := newNSClosure(engine.netLink, engine.exec, deviceName, ipv4Address, netmask)
 	if err != nil {
 		return errors.Wrap(err,
 			"setupContainerNamespace engine: unable to create closure to execute in container namespace")
@@ -234,12 +244,13 @@ func (engine *engine) SetupContainerNamespace(netns string, deviceName string, i
 // nsClosure wraps the parameters and the method to configure the container's namespace
 type nsClosure struct {
 	netLink    netlinkwrapper.NetLink
+	exec       execwrapper.Exec
 	deviceName string
 	ipv4Addr   *netlink.Addr
 }
 
 // newNSClosure creates a new nsClosure object
-func newNSClosure(netLink netlinkwrapper.NetLink, deviceName string, ipv4Address string, netmask string) (*nsClosure, error) {
+func newNSClosure(netLink netlinkwrapper.NetLink, exec execwrapper.Exec, deviceName string, ipv4Address string, netmask string) (*nsClosure, error) {
 	addr, err := netLink.ParseAddr(fmt.Sprintf("%s/%s", ipv4Address, netmask))
 	if err != nil {
 		return nil, errors.Wrap(err, "nsClosure engine: unable to ipv4 address for the interface")
@@ -247,6 +258,7 @@ func newNSClosure(netLink netlinkwrapper.NetLink, deviceName string, ipv4Address
 
 	return &nsClosure{
 		netLink:    netLink,
+		exec:       exec,
 		deviceName: deviceName,
 		ipv4Addr:   addr,
 	}, nil
@@ -274,5 +286,30 @@ func (closure *nsClosure) run(_ ns.NetNS) error {
 		return errors.Wrap(err, "nsClosure engine: unable to bring up the device")
 	}
 
+	return closure.startDHClientV4()
+}
+
+// startDHClientV4 starts the dhclient with arguments to renew the lease on IPV4 address
+// of the ENI
+func (closure *nsClosure) startDHClientV4() error {
+	args := getDHClientV4Args(closure.deviceName)
+	cmd := closure.exec.Command(dhclientExecutableName, args...)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		log.Errorf("Error executing '%s' with args '%v': raw output: %s",
+			dhclientExecutableName, args, string(out))
+		return errors.Wrapf(err, "unable to start dhclient for ipv4 address; command: %s %v; output: %s",
+			dhclientExecutableName, args, string(out))
+	}
+
 	return nil
+}
+
+func getDHClientV4Args(deviceName string) []string {
+	return []string{
+		"-q",
+		"-lf", dhclientV4LeaseFilePathPrefix + "-" + deviceName + ".leases",
+		"-pf", dhclientV4LeasePIDFilePathPrefix + "-" + deviceName + ".pid",
+		deviceName,
+	}
 }
