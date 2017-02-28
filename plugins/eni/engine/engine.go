@@ -75,7 +75,8 @@ func create(metadata ec2metadata.EC2Metadata, ioutil ioutilwrapper.IOUtil, netLi
 func (engine *engine) GetAllMACAddresses() ([]string, error) {
 	macs, err := engine.metadata.GetMetadata(metadataNetworkInterfacesPath)
 	if err != nil {
-		return nil, errors.Wrap(err, "Error getting all mac addresses on the instance from instance metadata")
+		return nil, errors.Wrap(err,
+			"getAllMACAddresses engine: unable to get all mac addresses on the instance from instance metadata")
 	}
 	return strings.Split(macs, "\n"), nil
 }
@@ -95,14 +96,16 @@ func (engine *engine) GetMACAddressOfENI(macAddresses []string, eniID string) (s
 		}
 	}
 
-	return "", errors.Errorf("MAC address of interface '%s' not found", eniID)
+	return "", newUnmappedMACAddressError("getMACAddressOfENI", "engine",
+		fmt.Sprintf("mac address of ENI '%s' not found", eniID))
 }
 
 // GetInterfaceDeviceName gets the device name on the host, given a mac address
 func (engine *engine) GetInterfaceDeviceName(macAddress string) (string, error) {
 	files, err := engine.ioutil.ReadDir(sysfsPathForNetworkDevices)
 	if err != nil {
-		return "", errors.Wrap(err, "Error listing network devices from sys fs")
+		return "", errors.Wrap(err,
+			"getInterfaceDeviceName engine: error listing network devices from sys fs")
 	}
 	for _, file := range files {
 		// Read the 'address' file in sys for the device. An example here is: if reading for device
@@ -119,7 +122,8 @@ func (engine *engine) GetInterfaceDeviceName(macAddress string) (string, error) 
 		}
 	}
 
-	return "", errors.Errorf("Network device name not found for '%s'", macAddress)
+	return "", newUnmappedDeviceNameError("getInterfaceDeviceName", "engine",
+		fmt.Sprintf("network device name not found for mac address '%s'", macAddress))
 }
 
 // GetIPV4GatewayNetmask gets the ipv4 gateway and the netmask from the instance
@@ -128,7 +132,8 @@ func (engine *engine) GetIPV4GatewayNetmask(macAddress string) (string, string, 
 	// TODO Use fmt.Sprintf and wrap that in a method
 	cidrBlock, err := engine.metadata.GetMetadata(metadataNetworkInterfacesPath + macAddress + metadataNetworkInterfaceIPV4CIDRPathSuffix)
 	if err != nil {
-		return "", "", errors.Wrapf(err, "Error getting ipv4 subnet and cidr block for '%s'", macAddress)
+		return "", "", errors.Wrapf(err,
+			"getIPV4GatewayNetmask engine: unable to get ipv4 subnet and cidr block for '%s' from instance metadata", macAddress)
 	}
 
 	return getIPV4GatewayNetmask(cidrBlock)
@@ -138,12 +143,14 @@ func getIPV4GatewayNetmask(cidrBlock string) (string, string, error) {
 	// The IPV4 CIDR block is of the format ip-addr/netmask
 	ip, ipNet, err := net.ParseCIDR(cidrBlock)
 	if err != nil {
-		return "", "", errors.Wrapf(err, "Unable to parse response from instance metadata for ipv4 cidr: '%s'", cidrBlock)
+		return "", "", errors.Wrapf(err,
+			"getIPV4GatewayNetmask engine: unable to parse response for ipv4 cidr: '%s' from instance metadata", cidrBlock)
 	}
 
 	ip4 := ip.To4()
 	if ip4 == nil {
-		return "", "", errors.Errorf("Unable to parse ipv4 gateway from cidr block '%s'", cidrBlock)
+		return "", "", newParseIPV4GatewayNetmaskError("getIPV4GatewayNetmask", "engine",
+			fmt.Sprintf("unable to parse ipv4 gateway from cidr block '%s'", cidrBlock))
 	}
 
 	ip4[3] = ip4[3] + 1
@@ -157,7 +164,8 @@ func (engine *engine) DoesMACAddressMapToIPV4Address(macAddress string, ipv4Addr
 	// TODO Use fmt.Sprintf and wrap that in a method
 	addressesResponse, err := engine.metadata.GetMetadata(metadataNetworkInterfacesPath + macAddress + metadataNetworkInterfaceIPV4AddressesSuffix)
 	if err != nil {
-		return false, errors.Wrap(err, "Error getting ipv4 addresses from instance metadata")
+		return false, errors.Wrap(err,
+			"doesMACAddressMapToIPV4Address engine: unable to get ipv4 addresses from instance metadata")
 	}
 	for _, address := range strings.Split(addressesResponse, "\n") {
 		if address == ipv4Address {
@@ -173,31 +181,36 @@ func (engine *engine) SetupContainerNamespace(netns string, deviceName string, i
 	// Get the device link for the ENI
 	eniLink, err := engine.netLink.LinkByName(deviceName)
 	if err != nil {
-		return errors.Wrapf(err, "Error getting link for device '%s'", deviceName)
+		return errors.Wrapf(err,
+			"setupContainerNamespace engine: unable to get link for device '%s'", deviceName)
 	}
 
 	// Get the handle for the container's network namespace
 	containerNS, err := engine.ns.GetNS(netns)
 	if err != nil {
-		return errors.Wrapf(err, "Error getting network namespace for '%s'", netns)
+		return errors.Wrapf(err,
+			"setupContainerNamespace engine: unable to get network namespace for '%s'", netns)
 	}
 
 	// Assign the ENI device to container's network namespace
 	err = engine.netLink.LinkSetNsFd(eniLink, int(containerNS.Fd()))
 	if err != nil {
-		return errors.Wrapf(err, "Error moving device '%s' to container namespace '%s'", deviceName, netns)
+		return errors.Wrapf(err,
+			"setupContainerNamespace engine: unable to move device '%s' to container namespace '%s'", deviceName, netns)
 	}
 
 	// Generate the closure to execute within the container's namespace
 	toRun, err := newNSClosure(engine.netLink, deviceName, ipv4Address, netmask)
 	if err != nil {
-		return errors.Wrap(err, "Error creating closure to execute in container namespace")
+		return errors.Wrap(err,
+			"setupContainerNamespace engine: unable to create closure to execute in container namespace")
 	}
 
 	// Execute the closure within the container's namespace
 	err = engine.ns.WithNetNSPath(netns, toRun.run)
 	if err != nil {
-		return errors.Wrapf(err, "Error setting up device '%s' in namespace '%s'", deviceName, netns)
+		return errors.Wrapf(err,
+			"setupContainerNamespace engine: unable to setup device '%s' in namespace '%s'", deviceName, netns)
 	}
 	return nil
 }
@@ -213,7 +226,7 @@ type nsClosure struct {
 func newNSClosure(netLink netlinkwrapper.NetLink, deviceName string, ipv4Address string, netmask string) (*nsClosure, error) {
 	addr, err := netLink.ParseAddr(fmt.Sprintf("%s/%s", ipv4Address, netmask))
 	if err != nil {
-		return nil, errors.Wrap(err, "Error parsing ipv4 address for the interface")
+		return nil, errors.Wrap(err, "nsClosure engine: unable to ipv4 address for the interface")
 	}
 
 	return &nsClosure{
@@ -229,19 +242,20 @@ func (closure *nsClosure) run(_ ns.NetNS) error {
 	// Get the link for the ENI device
 	eniLink, err := closure.netLink.LinkByName(closure.deviceName)
 	if err != nil {
-		return errors.Wrapf(err, "Error getting link for device '%s'", closure.deviceName)
+		return errors.Wrapf(err,
+			"nsClosure engine: unable to get link for device '%s'", closure.deviceName)
 	}
 
 	// Add the IPV4 Address to the link
 	err = closure.netLink.AddrAdd(eniLink, closure.ipv4Addr)
 	if err != nil {
-		return errors.Wrap(err, "Error adding ipv4 address to the interface")
+		return errors.Wrap(err, "nsClosure engine: unable to add ipv4 address to the interface")
 	}
 
 	// Bring it up
 	err = closure.netLink.LinkSetUp(eniLink)
 	if err != nil {
-		return errors.Wrap(err, "Error bringing up the device")
+		return errors.Wrap(err, "nsClosure engine: unable to bring up the device")
 	}
 
 	return nil
