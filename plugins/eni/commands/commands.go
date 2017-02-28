@@ -35,18 +35,21 @@ func Add(args *skel.CmdArgs) error {
 
 // Del invokes the command to remove ENI from a container's namespace
 func Del(args *skel.CmdArgs) error {
+	// TODO take down the device and stop the dhclient process
 	return nil
 }
 
 func add(args *skel.CmdArgs, engine engine.Engine) error {
 	conf, err := types.NewConf(args)
 	if err != nil {
+		// TODO: We log and return errors throughout this function.
+		// Either should be sufficient.
 		log.Errorf("Error loading config from args: %v", err)
 		return err
 	}
 
 	if ok := engine.IsDHClientInPath(); !ok {
-		log.Errorf("Unable to fing the dhclient executable")
+		log.Errorf("Unable to find the dhclient executable")
 		return dhclientNotFoundError
 	}
 
@@ -55,7 +58,7 @@ func add(args *skel.CmdArgs, engine engine.Engine) error {
 	// in cases where mac address hasn't been specified)
 	allMACAddresses, err := engine.GetAllMACAddresses()
 	if err != nil {
-		log.Errorf("Error getting the list of mac addresses on the host: %v", err)
+		log.Errorf("Unable to get the list of mac addresses on the host: %v", err)
 		return err
 	}
 	log.Debugf("Found mac addresses: %v", allMACAddresses)
@@ -64,7 +67,7 @@ func add(args *skel.CmdArgs, engine engine.Engine) error {
 	// against the list of all mac addresses obtained in the previous step.
 	macAddressOfENI, err := engine.GetMACAddressOfENI(allMACAddresses, conf.ENIID)
 	if err != nil {
-		log.Errorf("Error finding the mac address for the ENI: %v", err)
+		log.Errorf("Unable to find the mac address for the ENI: %v", err)
 		return err
 	}
 	log.Debugf("Found mac address for the ENI: %v", macAddressOfENI)
@@ -87,7 +90,7 @@ func add(args *skel.CmdArgs, engine engine.Engine) error {
 	// Get the interface name of the device by scanning sysfs
 	networkDeviceName, err := engine.GetInterfaceDeviceName(macAddressOfENI)
 	if err != nil {
-		log.Errorf("Error finding network device for the ENI: %v", err)
+		log.Errorf("Unable to find network device for the ENI: %v", err)
 		return err
 	}
 	log.Debugf("Found network device for the ENI: %v", networkDeviceName)
@@ -96,7 +99,7 @@ func add(args *skel.CmdArgs, engine engine.Engine) error {
 	// required for adding routes in the container's namespace
 	ipv4Gateway, netmask, err := engine.GetIPV4GatewayNetmask(macAddressOfENI)
 	if err != nil {
-		log.Errorf("Error getting ipv4 gateway and netmask for ENI: %v", err)
+		log.Errorf("Unable to get ipv4 gateway and netmask for ENI: %v", err)
 		return err
 	}
 	log.Debugf("Found ipv4 gateway and netmask for ENI: %s %s", ipv4Gateway, netmask)
@@ -106,7 +109,10 @@ func add(args *skel.CmdArgs, engine engine.Engine) error {
 	// do the same
 	err = engine.SetupContainerNamespace(args.Netns, networkDeviceName, conf.IPV4Address, netmask)
 	if err != nil {
-		return errors.Wrap(err, "add commands: unable to setup container's namespace")
+		log.Errorf("Unable to setup container's namespace: %v", err)
+		return err
 	}
+	log.Debug("ENI has been assigned to the container's namespace")
+
 	return nil
 }
