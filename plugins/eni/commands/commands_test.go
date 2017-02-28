@@ -90,6 +90,8 @@ func TestAddDoesMACAddressMapToIPV4AddressFails(t *testing.T) {
 
 	err := add(eniArgs, mockEngine)
 	assert.Error(t, err)
+	_, ok := err.(*unmappedIPV4AddressError)
+	assert.False(t, ok)
 }
 
 func TestAddDoesMACAddressMapToIPV4AddressReturnsFalse(t *testing.T) {
@@ -107,6 +109,8 @@ func TestAddDoesMACAddressMapToIPV4AddressReturnsFalse(t *testing.T) {
 
 	err := add(eniArgs, mockEngine)
 	assert.Error(t, err)
+	_, ok := err.(*unmappedIPV4AddressError)
+	assert.True(t, ok)
 }
 
 func TestAddGetInterfaceDeviceNameFails(t *testing.T) {

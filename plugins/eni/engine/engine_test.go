@@ -90,6 +90,8 @@ func TestGetMACAddressOfENIReturnsErrorOnGetMetadataError(t *testing.T) {
 
 	_, err := engine.GetMACAddressOfENI([]string{firstMACAddress}, firstENIID)
 	assert.Error(t, err)
+	_, ok := err.(*unmappedMACAddressError)
+	assert.True(t, ok)
 }
 
 func TestGetMACAddressOfENIReturnsErrorWhenNotFound(t *testing.T) {
@@ -101,6 +103,8 @@ func TestGetMACAddressOfENIReturnsErrorWhenNotFound(t *testing.T) {
 
 	_, err := engine.GetMACAddressOfENI([]string{firstMACAddress}, secondENIID)
 	assert.Error(t, err)
+	_, ok := err.(*unmappedMACAddressError)
+	assert.True(t, ok)
 }
 
 func TestGetMACAddressOfENI(t *testing.T) {
@@ -127,6 +131,8 @@ func TestGetInterfaceDeviceNameReturnsErrorOnReadDirError(t *testing.T) {
 
 	_, err := engine.GetInterfaceDeviceName(firstMACAddressSanitized)
 	assert.Error(t, err)
+	_, ok := err.(*unmappedDeviceNameError)
+	assert.False(t, ok)
 }
 
 func TestGetInterfaceDeviceNameReturnsErrorOnReadFileError(t *testing.T) {
@@ -144,6 +150,8 @@ func TestGetInterfaceDeviceNameReturnsErrorOnReadFileError(t *testing.T) {
 
 	_, err := engine.GetInterfaceDeviceName(firstMACAddressSanitized)
 	assert.Error(t, err)
+	_, ok := err.(*unmappedDeviceNameError)
+	assert.True(t, ok)
 }
 
 func TestGetInterfaceDeviceNameReturnsErrorWhenDeviceNotFound(t *testing.T) {
@@ -161,6 +169,8 @@ func TestGetInterfaceDeviceNameReturnsErrorWhenDeviceNotFound(t *testing.T) {
 
 	_, err := engine.GetInterfaceDeviceName(firstMACAddressSanitized)
 	assert.Error(t, err)
+	_, ok := err.(*unmappedDeviceNameError)
+	assert.True(t, ok)
 }
 
 func TestGetInterfaceDeviceNameReturnsDeviceWhenFound(t *testing.T) {
@@ -228,6 +238,8 @@ func TestGetIPV4GatewayNetMaskReturnsErrorOnGetMetadataError(t *testing.T) {
 
 	_, _, err := engine.GetIPV4GatewayNetmask(firstMACAddressSanitized)
 	assert.Error(t, err)
+	_, ok := err.(*parseIPV4GatewayNetmaskError)
+	assert.False(t, ok)
 }
 
 func TestGetIPV4GatewayNetMaskReturnsErrorWhenUnableToParseCIDRNetmaskResponse(t *testing.T) {
@@ -239,6 +251,22 @@ func TestGetIPV4GatewayNetMaskReturnsErrorWhenUnableToParseCIDRNetmaskResponse(t
 		metadataNetworkInterfacesPath+firstMACAddressSanitized+metadataNetworkInterfaceIPV4CIDRPathSuffix).Return("1.1.1.1", nil)
 	_, _, err := engine.GetIPV4GatewayNetmask(firstMACAddressSanitized)
 	assert.Error(t, err)
+	_, ok := err.(*parseIPV4GatewayNetmaskError)
+	assert.False(t, ok)
+}
+
+func TestGetIPV4GatewayNetMaskWhenUnableToParseIPV6CIDRNetmaskResponse(t *testing.T) {
+	ctrl, mockMetadata, _, _, _ := setup(t)
+	defer ctrl.Finish()
+
+	mockMetadata.EXPECT().GetMetadata(
+		metadataNetworkInterfacesPath+firstMACAddressSanitized+metadataNetworkInterfaceIPV4CIDRPathSuffix).Return("2001:db8::/32", nil)
+	engine := &engine{metadata: mockMetadata}
+
+	_, _, err := engine.GetIPV4GatewayNetmask(firstMACAddressSanitized)
+	assert.Error(t, err)
+	_, ok := err.(*parseIPV4GatewayNetmaskError)
+	assert.True(t, ok)
 }
 
 func TestGetIPV4GatewayNetMask(t *testing.T) {

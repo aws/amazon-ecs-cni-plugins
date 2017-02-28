@@ -66,9 +66,9 @@ func add(args *skel.CmdArgs, engine engine.Engine) error {
 		return err
 	}
 	if !ok {
-		errorMessage := "Unable to map ipv4 address of ENI to a mac address"
-		log.Error(errorMessage)
-		return errors.Errorf(errorMessage)
+		err = newUnmappedIPV4AddressError("add", "commands", "unable to map ipv4 address of ENI to a mac address")
+		log.Error("Unable to validate ipv4 address for ENI: %v", err)
+		return err
 	}
 
 	log.Debugf("Found ipv4Addresses: %v", ok)
@@ -95,7 +95,7 @@ func add(args *skel.CmdArgs, engine engine.Engine) error {
 	// do the same
 	err = engine.SetupContainerNamespace(args.Netns, networkDeviceName, conf.IPV4Address, netmask)
 	if err != nil {
-		return errors.Wrap(err, "Error setting up container's network namespace")
+		return errors.Wrap(err, "add commands: unable to setup container's namespace")
 	}
 	return nil
 }
