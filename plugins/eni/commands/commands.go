@@ -21,6 +21,13 @@ import (
 	"github.com/pkg/errors"
 )
 
+var (
+	unmappedIPV4AddressError = errors.Errorf(
+		"add commands: unable to map ipv4 address of ENI to a mac address")
+	dhclientNotFoundError = errors.Errorf(
+		"add commands: unable to find the dhclient executable in PATH")
+)
+
 // Add invokes the command to add ENI to a container's namespace
 func Add(args *skel.CmdArgs) error {
 	return add(args, engine.New())
@@ -36,6 +43,11 @@ func add(args *skel.CmdArgs, engine engine.Engine) error {
 	if err != nil {
 		log.Errorf("Error loading config from args: %v", err)
 		return err
+	}
+
+	if ok := engine.IsDHClientInPath(); !ok {
+		log.Errorf("Unable to fing the dhclient executable")
+		return dhclientNotFoundError
 	}
 
 	// TODO: If we can get this information from the config, we can optimize
@@ -66,9 +78,8 @@ func add(args *skel.CmdArgs, engine engine.Engine) error {
 		return err
 	}
 	if !ok {
-		err = newUnmappedIPV4AddressError("add", "commands", "unable to map ipv4 address of ENI to a mac address")
-		log.Error("Unable to validate ipv4 address for ENI: %v", err)
-		return err
+		log.Error("Unable to validate ipv4 address for ENI: %v", unmappedIPV4AddressError)
+		return unmappedIPV4AddressError
 	}
 
 	log.Debugf("Found ipv4Addresses: %v", ok)

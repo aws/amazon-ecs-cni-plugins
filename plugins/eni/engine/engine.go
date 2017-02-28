@@ -20,6 +20,7 @@ import (
 
 	"github.com/aws/amazon-ecs-cni-plugins/pkg/cninswrapper"
 	"github.com/aws/amazon-ecs-cni-plugins/pkg/ec2metadata"
+	"github.com/aws/amazon-ecs-cni-plugins/pkg/execwrapper"
 	"github.com/aws/amazon-ecs-cni-plugins/pkg/ioutilwrapper"
 	"github.com/aws/amazon-ecs-cni-plugins/pkg/netlinkwrapper"
 	log "github.com/cihub/seelog"
@@ -35,6 +36,7 @@ const (
 	sysfsPathForNetworkDeviceAddressSuffix      = "/address"
 	metadataNetworkInterfaceIPV4CIDRPathSuffix  = "/subnet-ipv4-cidr-block"
 	metadataNetworkInterfaceIPV4AddressesSuffix = "/local-ipv4s"
+	dhclientExecutableName                      = "dhclient"
 )
 
 // Engine represents the execution engine for the ENI plugin. It defines all the
@@ -46,6 +48,7 @@ type Engine interface {
 	GetIPV4GatewayNetmask(macAddress string) (string, string, error)
 	DoesMACAddressMapToIPV4Address(macAddress string, ipv4Address string) (bool, error)
 	SetupContainerNamespace(netns string, deviceName string, ipv4Address string, netmask string) error
+	IsDHClientInPath() bool
 }
 
 type engine struct {
@@ -53,21 +56,34 @@ type engine struct {
 	ioutil   ioutilwrapper.IOUtil
 	netLink  netlinkwrapper.NetLink
 	ns       cninswrapper.NS
+	exec     execwrapper.Exec
 }
 
 // NewEngine creates a new Engine object
 func New() Engine {
 	return create(
-		ec2metadata.NewEC2Metadata(), ioutilwrapper.NewIOUtil(), netlinkwrapper.NewNetLink(), cninswrapper.NewNS())
+		ec2metadata.NewEC2Metadata(), ioutilwrapper.NewIOUtil(), netlinkwrapper.NewNetLink(), cninswrapper.NewNS(), execwrapper.NewExec())
 }
 
-func create(metadata ec2metadata.EC2Metadata, ioutil ioutilwrapper.IOUtil, netLink netlinkwrapper.NetLink, ns cninswrapper.NS) Engine {
+func create(metadata ec2metadata.EC2Metadata, ioutil ioutilwrapper.IOUtil, netLink netlinkwrapper.NetLink, ns cninswrapper.NS, exec execwrapper.Exec) Engine {
 	return &engine{
 		metadata: metadata,
 		ioutil:   ioutil,
 		netLink:  netLink,
 		ns:       ns,
+		exec:     exec,
 	}
+}
+
+func (engine *engine) IsDHClientInPath() bool {
+	dhclientPath, err := engine.exec.LookPath(dhclientExecutableName)
+	if err != nil {
+		log.Warnf("Error searching dhclient in PATH: %v", err)
+		return false
+	}
+
+	log.Debugf("dhclient found in: %s", dhclientPath)
+	return true
 }
 
 // GetAllMACAddresses gets a list of mac addresses for all interfaces from the instance
