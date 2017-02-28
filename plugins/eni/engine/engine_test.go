@@ -21,6 +21,7 @@ import (
 	"github.com/aws/amazon-ecs-cni-plugins/pkg/cninswrapper/mocks"
 	"github.com/aws/amazon-ecs-cni-plugins/pkg/cninswrapper/mocks_netns"
 	"github.com/aws/amazon-ecs-cni-plugins/pkg/ec2metadata/mocks"
+	"github.com/aws/amazon-ecs-cni-plugins/pkg/execwrapper/mocks"
 	"github.com/aws/amazon-ecs-cni-plugins/pkg/ioutilwrapper/mocks_fileinfo"
 	"github.com/aws/amazon-ecs-cni-plugins/pkg/ioutilwrapper/mocks_ioutilwrapper"
 	"github.com/aws/amazon-ecs-cni-plugins/pkg/netlinkwrapper/mocks"
@@ -44,21 +45,43 @@ const (
 	eniIPV4CIDRBlock          = "10.10.10.10/20"
 )
 
-func setup(t *testing.T) (*gomock.Controller, *mock_ec2metadata.MockEC2Metadata, *mock_ioutilwrapper.MockIOUtil, *mock_cninswrapper.MockNS, *mock_netlinkwrapper.MockNetLink) {
+func setup(t *testing.T) (*gomock.Controller, *mock_ec2metadata.MockEC2Metadata, *mock_ioutilwrapper.MockIOUtil, *mock_cninswrapper.MockNS, *mock_netlinkwrapper.MockNetLink, *mock_execwrapper.MockExec) {
 	ctrl := gomock.NewController(t)
-	return ctrl, mock_ec2metadata.NewMockEC2Metadata(ctrl), mock_ioutilwrapper.NewMockIOUtil(ctrl), mock_cninswrapper.NewMockNS(ctrl), mock_netlinkwrapper.NewMockNetLink(ctrl)
+	return ctrl, mock_ec2metadata.NewMockEC2Metadata(ctrl), mock_ioutilwrapper.NewMockIOUtil(ctrl), mock_cninswrapper.NewMockNS(ctrl), mock_netlinkwrapper.NewMockNetLink(ctrl), mock_execwrapper.NewMockExec(ctrl)
 }
 
 func TestCreate(t *testing.T) {
-	ctrl, mockMetadata, mockIOUtil, mockNS, mockNetLink := setup(t)
+	ctrl, mockMetadata, mockIOUtil, mockNS, mockNetLink, mockExec := setup(t)
 	defer ctrl.Finish()
 
-	engine := create(mockMetadata, mockIOUtil, mockNetLink, mockNS)
+	engine := create(mockMetadata, mockIOUtil, mockNetLink, mockNS, mockExec)
 	assert.NotNil(t, engine)
 }
 
+func TestIsDHClientInPathReturnsFalseOnLookPathError(t *testing.T) {
+	ctrl, _, _, _, _, mockExec := setup(t)
+	defer ctrl.Finish()
+
+	mockExec.EXPECT().LookPath(dhclientExecutableName).Return("", errors.New("error"))
+	engine := &engine{exec: mockExec}
+
+	ok := engine.IsDHClientInPath()
+	assert.False(t, ok)
+}
+
+func TestIsDHClientInPath(t *testing.T) {
+	ctrl, _, _, _, _, mockExec := setup(t)
+	defer ctrl.Finish()
+
+	mockExec.EXPECT().LookPath(dhclientExecutableName).Return("dhclient", nil)
+	engine := &engine{exec: mockExec}
+
+	ok := engine.IsDHClientInPath()
+	assert.True(t, ok)
+}
+
 func TestGetAllMACAddressesReturnsErrorOnGetMetadataError(t *testing.T) {
-	ctrl, mockMetadata, _, _, _ := setup(t)
+	ctrl, mockMetadata, _, _, _, _ := setup(t)
 	defer ctrl.Finish()
 
 	mockMetadata.EXPECT().GetMetadata(metadataNetworkInterfacesPath).Return("", errors.New("error"))
@@ -69,7 +92,7 @@ func TestGetAllMACAddressesReturnsErrorOnGetMetadataError(t *testing.T) {
 }
 
 func TestGetAllMACAddresses(t *testing.T) {
-	ctrl, mockMetadata, _, _, _ := setup(t)
+	ctrl, mockMetadata, _, _, _, _ := setup(t)
 	defer ctrl.Finish()
 
 	mockMetadata.EXPECT().GetMetadata(metadataNetworkInterfacesPath).Return("a\nb", nil)
@@ -82,7 +105,7 @@ func TestGetAllMACAddresses(t *testing.T) {
 }
 
 func TestGetMACAddressOfENIReturnsErrorOnGetMetadataError(t *testing.T) {
-	ctrl, mockMetadata, _, _, _ := setup(t)
+	ctrl, mockMetadata, _, _, _, _ := setup(t)
 	defer ctrl.Finish()
 
 	mockMetadata.EXPECT().GetMetadata(metadataNetworkInterfacesPath+firstMACAddress+metadataNetworkInterfaceIDPathSuffix).Return("", errors.New("error"))
@@ -95,7 +118,7 @@ func TestGetMACAddressOfENIReturnsErrorOnGetMetadataError(t *testing.T) {
 }
 
 func TestGetMACAddressOfENIReturnsErrorWhenNotFound(t *testing.T) {
-	ctrl, mockMetadata, _, _, _ := setup(t)
+	ctrl, mockMetadata, _, _, _, _ := setup(t)
 	defer ctrl.Finish()
 
 	mockMetadata.EXPECT().GetMetadata(metadataNetworkInterfacesPath+firstMACAddress+metadataNetworkInterfaceIDPathSuffix).Return(firstENIID, nil)
@@ -108,7 +131,7 @@ func TestGetMACAddressOfENIReturnsErrorWhenNotFound(t *testing.T) {
 }
 
 func TestGetMACAddressOfENI(t *testing.T) {
-	ctrl, mockMetadata, _, _, _ := setup(t)
+	ctrl, mockMetadata, _, _, _, _ := setup(t)
 	defer ctrl.Finish()
 
 	gomock.InOrder(
@@ -123,7 +146,7 @@ func TestGetMACAddressOfENI(t *testing.T) {
 }
 
 func TestGetInterfaceDeviceNameReturnsErrorOnReadDirError(t *testing.T) {
-	ctrl, _, mockIOUtil, _, _ := setup(t)
+	ctrl, _, mockIOUtil, _, _, _ := setup(t)
 	defer ctrl.Finish()
 
 	mockIOUtil.EXPECT().ReadDir(sysfsPathForNetworkDevices).Return(nil, errors.New("error"))
@@ -136,7 +159,7 @@ func TestGetInterfaceDeviceNameReturnsErrorOnReadDirError(t *testing.T) {
 }
 
 func TestGetInterfaceDeviceNameReturnsErrorOnReadFileError(t *testing.T) {
-	ctrl, _, mockIOUtil, _, _ := setup(t)
+	ctrl, _, mockIOUtil, _, _, _ := setup(t)
 	defer ctrl.Finish()
 
 	mockFileInfo := mock_os.NewMockFileInfo(ctrl)
@@ -155,7 +178,7 @@ func TestGetInterfaceDeviceNameReturnsErrorOnReadFileError(t *testing.T) {
 }
 
 func TestGetInterfaceDeviceNameReturnsErrorWhenDeviceNotFound(t *testing.T) {
-	ctrl, _, mockIOUtil, _, _ := setup(t)
+	ctrl, _, mockIOUtil, _, _, _ := setup(t)
 	defer ctrl.Finish()
 
 	mockFileInfo := mock_os.NewMockFileInfo(ctrl)
@@ -174,7 +197,7 @@ func TestGetInterfaceDeviceNameReturnsErrorWhenDeviceNotFound(t *testing.T) {
 }
 
 func TestGetInterfaceDeviceNameReturnsDeviceWhenFound(t *testing.T) {
-	ctrl, _, mockIOUtil, _, _ := setup(t)
+	ctrl, _, mockIOUtil, _, _, _ := setup(t)
 	defer ctrl.Finish()
 
 	mockFileInfoEth1 := mock_os.NewMockFileInfo(ctrl)
@@ -229,7 +252,7 @@ func TestGetIPV4GatewayNetMaskLocal(t *testing.T) {
 }
 
 func TestGetIPV4GatewayNetMaskReturnsErrorOnGetMetadataError(t *testing.T) {
-	ctrl, mockMetadata, _, _, _ := setup(t)
+	ctrl, mockMetadata, _, _, _, _ := setup(t)
 	defer ctrl.Finish()
 
 	mockMetadata.EXPECT().GetMetadata(
@@ -243,7 +266,7 @@ func TestGetIPV4GatewayNetMaskReturnsErrorOnGetMetadataError(t *testing.T) {
 }
 
 func TestGetIPV4GatewayNetMaskReturnsErrorWhenUnableToParseCIDRNetmaskResponse(t *testing.T) {
-	ctrl, mockMetadata, _, _, _ := setup(t)
+	ctrl, mockMetadata, _, _, _, _ := setup(t)
 	defer ctrl.Finish()
 
 	engine := &engine{metadata: mockMetadata}
@@ -256,7 +279,7 @@ func TestGetIPV4GatewayNetMaskReturnsErrorWhenUnableToParseCIDRNetmaskResponse(t
 }
 
 func TestGetIPV4GatewayNetMaskWhenUnableToParseIPV6CIDRNetmaskResponse(t *testing.T) {
-	ctrl, mockMetadata, _, _, _ := setup(t)
+	ctrl, mockMetadata, _, _, _, _ := setup(t)
 	defer ctrl.Finish()
 
 	mockMetadata.EXPECT().GetMetadata(
@@ -270,7 +293,7 @@ func TestGetIPV4GatewayNetMaskWhenUnableToParseIPV6CIDRNetmaskResponse(t *testin
 }
 
 func TestGetIPV4GatewayNetMask(t *testing.T) {
-	ctrl, mockMetadata, _, _, _ := setup(t)
+	ctrl, mockMetadata, _, _, _, _ := setup(t)
 	defer ctrl.Finish()
 
 	mockMetadata.EXPECT().GetMetadata(
@@ -284,7 +307,7 @@ func TestGetIPV4GatewayNetMask(t *testing.T) {
 }
 
 func TestIsValidGetIPV4AddressReturnsErrorOnGetMetadataError(t *testing.T) {
-	ctrl, mockMetadata, _, _, _ := setup(t)
+	ctrl, mockMetadata, _, _, _, _ := setup(t)
 	defer ctrl.Finish()
 
 	mockMetadata.EXPECT().GetMetadata(metadataNetworkInterfacesPath+firstMACAddressSanitized+metadataNetworkInterfaceIPV4AddressesSuffix).Return("", errors.New("error"))
@@ -295,7 +318,7 @@ func TestIsValidGetIPV4AddressReturnsErrorOnGetMetadataError(t *testing.T) {
 }
 
 func TestDoesMACAddressMapToIPV4AddressReturnsFalseWhenNotFound(t *testing.T) {
-	ctrl, mockMetadata, _, _, _ := setup(t)
+	ctrl, mockMetadata, _, _, _, _ := setup(t)
 	defer ctrl.Finish()
 
 	mockMetadata.EXPECT().GetMetadata(metadataNetworkInterfacesPath+firstMACAddressSanitized+metadataNetworkInterfaceIPV4AddressesSuffix).Return("172.31.32.3", nil)
@@ -307,7 +330,7 @@ func TestDoesMACAddressMapToIPV4AddressReturnsFalseWhenNotFound(t *testing.T) {
 }
 
 func TestDoesMACAddressMapToIPV4AddressReturnsTrueWhenFound(t *testing.T) {
-	ctrl, mockMetadata, _, _, _ := setup(t)
+	ctrl, mockMetadata, _, _, _, _ := setup(t)
 	defer ctrl.Finish()
 
 	mockMetadata.EXPECT().GetMetadata(metadataNetworkInterfacesPath+firstMACAddressSanitized+metadataNetworkInterfaceIPV4AddressesSuffix).Return(eniIPV4Address, nil)
@@ -319,7 +342,7 @@ func TestDoesMACAddressMapToIPV4AddressReturnsTrueWhenFound(t *testing.T) {
 }
 
 func TestSetupContainerNamespaceFailsOnLinkByNameError(t *testing.T) {
-	ctrl, _, _, _, mockNetLink := setup(t)
+	ctrl, _, _, _, mockNetLink, _ := setup(t)
 	defer ctrl.Finish()
 
 	mockNetLink.EXPECT().LinkByName(deviceName).Return(nil, errors.New("error"))
@@ -329,7 +352,7 @@ func TestSetupContainerNamespaceFailsOnLinkByNameError(t *testing.T) {
 }
 
 func TestSetupContainerNamespaceFailsOnGetNSError(t *testing.T) {
-	ctrl, _, _, mockNS, mockNetLink := setup(t)
+	ctrl, _, _, mockNS, mockNetLink, _ := setup(t)
 	defer ctrl.Finish()
 
 	mockLink := mock_netlink.NewMockLink(ctrl)
@@ -343,7 +366,7 @@ func TestSetupContainerNamespaceFailsOnGetNSError(t *testing.T) {
 }
 
 func TestSetupContainerNamespaceFailsOnLinksetNsFdError(t *testing.T) {
-	ctrl, _, _, mockNS, mockNetLink := setup(t)
+	ctrl, _, _, mockNS, mockNetLink, _ := setup(t)
 	defer ctrl.Finish()
 
 	mockENILink := mock_netlink.NewMockLink(ctrl)
@@ -361,7 +384,7 @@ func TestSetupContainerNamespaceFailsOnLinksetNsFdError(t *testing.T) {
 }
 
 func TestSetupContainerNamespaceFailsOnParseAddrError(t *testing.T) {
-	ctrl, _, _, mockNS, mockNetLink := setup(t)
+	ctrl, _, _, mockNS, mockNetLink, _ := setup(t)
 	defer ctrl.Finish()
 
 	mockENILink := mock_netlink.NewMockLink(ctrl)
@@ -380,7 +403,7 @@ func TestSetupContainerNamespaceFailsOnParseAddrError(t *testing.T) {
 }
 
 func TestSetupContainerNamespaceFailsOnWithNetNSPathError(t *testing.T) {
-	ctrl, _, _, mockNS, mockNetLink := setup(t)
+	ctrl, _, _, mockNS, mockNetLink, _ := setup(t)
 	defer ctrl.Finish()
 
 	mockENILink := mock_netlink.NewMockLink(ctrl)
@@ -401,7 +424,7 @@ func TestSetupContainerNamespaceFailsOnWithNetNSPathError(t *testing.T) {
 }
 
 func TestSetupContainerNamespace(t *testing.T) {
-	ctrl, _, _, mockNS, mockNetLink := setup(t)
+	ctrl, _, _, mockNS, mockNetLink, _ := setup(t)
 	defer ctrl.Finish()
 
 	mockENILink := mock_netlink.NewMockLink(ctrl)
@@ -422,7 +445,7 @@ func TestSetupContainerNamespace(t *testing.T) {
 }
 
 func TestNSClosureCreationFailsOnParseAddrError(t *testing.T) {
-	ctrl, _, _, _, mockNetLink := setup(t)
+	ctrl, _, _, _, mockNetLink, _ := setup(t)
 	defer ctrl.Finish()
 
 	mockNetLink.EXPECT().ParseAddr(eniIPV4CIDRBlock).Return(nil, errors.New("error"))
@@ -431,7 +454,7 @@ func TestNSClosureCreationFailsOnParseAddrError(t *testing.T) {
 }
 
 func TestNSClosureRunFailsOnLinkByNameError(t *testing.T) {
-	ctrl, _, _, _, mockNetLink := setup(t)
+	ctrl, _, _, _, mockNetLink, _ := setup(t)
 	defer ctrl.Finish()
 
 	mockNetNS := mock_ns.NewMockNetNS(ctrl)
@@ -448,7 +471,7 @@ func TestNSClosureRunFailsOnLinkByNameError(t *testing.T) {
 }
 
 func TestNSClosureRunFailsOnAddrAddError(t *testing.T) {
-	ctrl, _, _, _, mockNetLink := setup(t)
+	ctrl, _, _, _, mockNetLink, _ := setup(t)
 	defer ctrl.Finish()
 
 	mockNetNS := mock_ns.NewMockNetNS(ctrl)
@@ -467,7 +490,7 @@ func TestNSClosureRunFailsOnAddrAddError(t *testing.T) {
 }
 
 func TestNSClosureRunFailsOnLinkSetupError(t *testing.T) {
-	ctrl, _, _, _, mockNetLink := setup(t)
+	ctrl, _, _, _, mockNetLink, _ := setup(t)
 	defer ctrl.Finish()
 
 	mockNetNS := mock_ns.NewMockNetNS(ctrl)
@@ -487,7 +510,7 @@ func TestNSClosureRunFailsOnLinkSetupError(t *testing.T) {
 }
 
 func TestNSClosureRun(t *testing.T) {
-	ctrl, _, _, _, mockNetLink := setup(t)
+	ctrl, _, _, _, mockNetLink, _ := setup(t)
 	defer ctrl.Finish()
 
 	mockNetNS := mock_ns.NewMockNetNS(ctrl)

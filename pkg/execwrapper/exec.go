@@ -36,6 +36,11 @@ type Exec interface {
 	Command(name string, arg ...string) Cmd
 }
 
+// NewExec creates a new Exec object
+func NewExec() Exec {
+	return &_exec{}
+}
+
 type _exec struct {
 }
 

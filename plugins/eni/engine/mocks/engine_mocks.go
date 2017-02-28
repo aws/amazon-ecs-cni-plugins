@@ -97,6 +97,16 @@ func (_mr *_MockEngineRecorder) GetMACAddressOfENI(arg0, arg1 interface{}) *gomo
 	return _mr.mock.ctrl.RecordCall(_mr.mock, "GetMACAddressOfENI", arg0, arg1)
 }
 
+func (_m *MockEngine) IsDHClientInPath() bool {
+	ret := _m.ctrl.Call(_m, "IsDHClientInPath")
+	ret0, _ := ret[0].(bool)
+	return ret0
+}
+
+func (_mr *_MockEngineRecorder) IsDHClientInPath() *gomock.Call {
+	return _mr.mock.ctrl.RecordCall(_mr.mock, "IsDHClientInPath")
+}
+
 func (_m *MockEngine) SetupContainerNamespace(_param0 string, _param1 string, _param2 string, _param3 string) error {
 	ret := _m.ctrl.Call(_m, "SetupContainerNamespace", _param0, _param1, _param2, _param3)
 	ret0, _ := ret[0].(error)
