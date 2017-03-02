@@ -17,11 +17,20 @@ import "github.com/vishvananda/netlink"
 
 // NetLink wraps methods used from the vishvananda/netlink package
 type NetLink interface {
+	// LinkByName gets a link object given the device name
 	LinkByName(name string) (netlink.Link, error)
+	// LinkSetNsFd is equivalent to `ip link set $link netns $ns`
 	LinkSetNsFd(link netlink.Link, fd int) error
+	// ParseAddr parses an address string
 	ParseAddr(s string) (*netlink.Addr, error)
+	// AddrAdd is equivalent to `ip addr add $addr dev $link`
 	AddrAdd(link netlink.Link, addr *netlink.Addr) error
+	// LinkSetUp is equivalent to `ip link set $link up`
 	LinkSetUp(link netlink.Link) error
+	// LinkList is equivalent to: `ip link show`
+	LinkList() ([]netlink.Link, error)
+	// LinkSetDown is equivalent to: `ip link set $link down`
+	LinkSetDown(link netlink.Link) error
 }
 
 type netLink struct {
@@ -50,4 +59,12 @@ func (*netLink) AddrAdd(link netlink.Link, addr *netlink.Addr) error {
 
 func (*netLink) LinkSetUp(link netlink.Link) error {
 	return netlink.LinkSetUp(link)
+}
+
+func (*netLink) LinkList() ([]netlink.Link, error) {
+	return netlink.LinkList()
+}
+
+func (*netLink) LinkSetDown(link netlink.Link) error {
+	return netlink.LinkSetDown(link)
 }

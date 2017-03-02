@@ -116,3 +116,13 @@ func (_m *MockEngine) SetupContainerNamespace(_param0 string, _param1 string, _p
 func (_mr *_MockEngineRecorder) SetupContainerNamespace(arg0, arg1, arg2, arg3 interface{}) *gomock.Call {
 	return _mr.mock.ctrl.RecordCall(_mr.mock, "SetupContainerNamespace", arg0, arg1, arg2, arg3)
 }
+
+func (_m *MockEngine) TeardownContainerNamespace(_param0 string, _param1 string) error {
+	ret := _m.ctrl.Call(_m, "TeardownContainerNamespace", _param0, _param1)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+func (_mr *_MockEngineRecorder) TeardownContainerNamespace(arg0, arg1 interface{}) *gomock.Call {
+	return _mr.mock.ctrl.RecordCall(_mr.mock, "TeardownContainerNamespace", arg0, arg1)
+}

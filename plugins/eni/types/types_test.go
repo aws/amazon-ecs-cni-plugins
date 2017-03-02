@@ -7,11 +7,13 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-var validConfig = `{"eni":"eni1", "ipv4-address":"10.11.12.13"}`
-var configNoENIID = `{"ipv4-address":"10.11.12.13"}`
-var configNoIPV4Address = `{"eni":"eni1"}`
-var configInvalidIPV4AddressMalformed = `{"eni":"eni1", "ipv4-address" : "1"}`
-var configInvalidIPV4AddressIPv6 = `{"eni":"eni1", "ipv4-address" : "2001:db8::68"}`
+var validConfig = `{"eni":"eni1", "ipv4-address":"10.11.12.13", "mac":"01:23:45:67:89:ab"}`
+var configNoENIID = `{"ipv4-address":"10.11.12.13", "mac":"01:23:45:67:89:ab"}`
+var configNoIPV4Address = `{"eni":"eni1", "mac":"01:23:45:67:89:ab"}`
+var configNoMAC = `{"eni":"eni1", "ipv4-address":"10.11.12.13"}`
+var configInvalidIPV4AddressMalformed = `{"eni":"eni1", "ipv4-address":"1", "mac":"01:23:45:67:89:ab"}`
+var configInvalidIPV4AddressIPv6 = `{"eni":"eni1", "ipv4-address":"2001:db8::68", "mac":"01:23:45:67:89:ab"}`
+var configMalformedMAC = `{"eni":"eni1", "ipv4-address":"10.11.12.13", "mac":"01:23:45:67:89"}`
 
 func TestNewConfWithValidConfig(t *testing.T) {
 	args := &skel.CmdArgs{
@@ -53,6 +55,14 @@ func TestNewConfWithMissingIPV4AddressConfig(t *testing.T) {
 	assert.Error(t, err)
 }
 
+func TestNewConfWithMissingMACConfig(t *testing.T) {
+	args := &skel.CmdArgs{
+		StdinData: []byte(configNoMAC),
+	}
+	_, err := NewConf(args)
+	assert.Error(t, err)
+}
+
 func TestNewConfWithInvalidMalformedIPV4AddressConfig(t *testing.T) {
 	args := &skel.CmdArgs{
 		StdinData: []byte(configInvalidIPV4AddressMalformed),
@@ -64,6 +74,14 @@ func TestNewConfWithInvalidMalformedIPV4AddressConfig(t *testing.T) {
 func TestNewConfWithInvalidIPV4AddressIPV6Config(t *testing.T) {
 	args := &skel.CmdArgs{
 		StdinData: []byte(configInvalidIPV4AddressIPv6),
+	}
+	_, err := NewConf(args)
+	assert.Error(t, err)
+}
+
+func TestNewConfWithInvalidMACConfig(t *testing.T) {
+	args := &skel.CmdArgs{
+		StdinData: []byte(configMalformedMAC),
 	}
 	_, err := NewConf(args)
 	assert.Error(t, err)

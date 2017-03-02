@@ -31,10 +31,11 @@ const (
 	macAddressSanitized = "mac1"
 	eniIPV4Gateway      = "10.10.10.10"
 	eniSubnetMask       = "20"
+	mac                 = "01:23:45:67:89:ab"
 )
 
 var eniArgs = &skel.CmdArgs{
-	StdinData: []byte(`{"eni":"` + eniID + `", "ipv4-address":"` + eniIPV4Address + `"}`),
+	StdinData: []byte(`{"eni":"` + eniID + `", "ipv4-address":"` + eniIPV4Address + `", "mac":"` + mac + `"}`),
 	Netns:     nsName,
 }
 
@@ -207,5 +208,34 @@ func TestAddNoError(t *testing.T) {
 	)
 
 	err := add(eniArgs, mockEngine)
+	assert.NoError(t, err)
+}
+
+func TestDelWithInvalidConfig(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockEngine := mock_engine.NewMockEngine(ctrl)
+	err := del(&skel.CmdArgs{}, mockEngine)
+	assert.Error(t, err)
+}
+
+func TestDelFailsWhenTearDownContainerNamespaceFails(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockEngine := mock_engine.NewMockEngine(ctrl)
+	mockEngine.EXPECT().TeardownContainerNamespace(nsName, mac).Return(errors.New("error"))
+	err := del(eniArgs, mockEngine)
+	assert.Error(t, err)
+}
+
+func TestDel(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockEngine := mock_engine.NewMockEngine(ctrl)
+	mockEngine.EXPECT().TeardownContainerNamespace(nsName, mac).Return(nil)
+	err := del(eniArgs, mockEngine)
 	assert.NoError(t, err)
 }

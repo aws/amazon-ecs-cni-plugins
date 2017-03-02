@@ -29,27 +29,43 @@ type NetConf struct {
 	types.NetConf
 	ENIID       string `json:"eni"`
 	IPV4Address string `json:"ipv4-address"`
+	MACAddress  string `json:"mac"`
 }
 
 // NewConf creates a new NetConf object by parsing the arguments supplied
 func NewConf(args *skel.CmdArgs) (*NetConf, error) {
 	var conf NetConf
 	if err := json.Unmarshal(args.StdinData, &conf); err != nil {
-		return nil, errors.Wrap(err, "Failed to parse config")
+		return nil, errors.Wrap(err, "newconf types: failed to parse config")
 	}
+
+	// Validate if all the required fields are present
 	if conf.ENIID == "" {
-		return nil, errors.Errorf("Missing required parameter in config: '%s'", "eni")
+		return nil, errors.Errorf("newconf types: missing required parameter in config: '%s'", "eni")
 	}
 	if conf.IPV4Address == "" {
-		return nil, errors.Errorf("Missing required parameter in config: '%s'", "ipv4-address")
+		return nil, errors.Errorf("newconf types: missing required parameter in config: '%s'", "ipv4-address")
 	}
+	if conf.MACAddress == "" {
+		return nil, errors.Errorf("newconf types: missing required parameter in config: '%s'", "mac")
+	}
+
+	// Validate if the ipv4 address in the config is valid
 	ip := net.ParseIP(conf.IPV4Address)
 	if ip == nil {
-		return nil, errors.Errorf("Malformed IPv4 address specified")
+		return nil, errors.Errorf("newconf types: malformed IPv4 address specified")
 	}
 	if ip.To4() == nil {
-		return nil, errors.Errorf("Invalid IPv4 address specified")
+		return nil, errors.Errorf("newconf types: invalid IPv4 address specified")
 	}
+
+	// Validate if the mac address in the config is valid
+	_, err := net.ParseMAC(conf.MACAddress)
+	if err != nil {
+		return nil, errors.Wrapf(err, "newconf types: malformatted mac address specified")
+	}
+
+	// Validation complete. Return the parsed config object
 	log.Debugf("Loaded config: %v", conf)
 	return &conf, nil
 }
