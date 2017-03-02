@@ -35,8 +35,8 @@ func Add(args *skel.CmdArgs) error {
 
 // Del invokes the command to remove ENI from a container's namespace
 func Del(args *skel.CmdArgs) error {
-	// TODO take down the device and stop the dhclient process
-	return nil
+	// TODO take down the device
+	return del(args, engine.New())
 }
 
 func add(args *skel.CmdArgs, engine engine.Engine) error {
@@ -113,6 +113,27 @@ func add(args *skel.CmdArgs, engine engine.Engine) error {
 		return err
 	}
 	log.Debug("ENI has been assigned to the container's namespace")
+
+	return nil
+}
+
+// del removes the ENI setup within the container's namespace. It stops the dhclient
+// process so that the ENI device can be brought down properly
+func del(args *skel.CmdArgs, engine engine.Engine) error {
+	conf, err := types.NewConf(args)
+	if err != nil {
+		// TODO: We log and return errors throughout this function.
+		// Either should be sufficient.
+		log.Errorf("Error loading config from args: %v", err)
+		return err
+	}
+
+	// Valid config. Tear it down!
+	err = engine.TeardownContainerNamespace(args.Netns, conf.MACAddress)
+	if err != nil {
+		log.Errorf("Unable to teardown container's namespace: %v", err)
+		return err
+	}
 
 	return nil
 }

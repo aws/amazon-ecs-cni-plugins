@@ -63,6 +63,27 @@ func (_mr *_MockNetLinkRecorder) LinkByName(arg0 interface{}) *gomock.Call {
 	return _mr.mock.ctrl.RecordCall(_mr.mock, "LinkByName", arg0)
 }
 
+func (_m *MockNetLink) LinkList() ([]netlink.Link, error) {
+	ret := _m.ctrl.Call(_m, "LinkList")
+	ret0, _ := ret[0].([]netlink.Link)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+func (_mr *_MockNetLinkRecorder) LinkList() *gomock.Call {
+	return _mr.mock.ctrl.RecordCall(_mr.mock, "LinkList")
+}
+
+func (_m *MockNetLink) LinkSetDown(_param0 netlink.Link) error {
+	ret := _m.ctrl.Call(_m, "LinkSetDown", _param0)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+func (_mr *_MockNetLinkRecorder) LinkSetDown(arg0 interface{}) *gomock.Call {
+	return _mr.mock.ctrl.RecordCall(_mr.mock, "LinkSetDown", arg0)
+}
+
 func (_m *MockNetLink) LinkSetNsFd(_param0 netlink.Link, _param1 int) error {
 	ret := _m.ctrl.Call(_m, "LinkSetNsFd", _param0, _param1)
 	ret0, _ := ret[0].(error)
