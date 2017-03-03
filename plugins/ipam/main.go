@@ -3,7 +3,7 @@ package main
 import (
 	"net"
 
-	"github.com/aws/amazon-ecs-cni-plugins/pkg/version/cnispec"
+	"github.com/aws/amazon-ecs-cni-plugins/pkg/version"
 	"github.com/containernetworking/cni/pkg/ip"
 	"github.com/containernetworking/cni/pkg/skel"
 	"github.com/containernetworking/cni/pkg/types"
@@ -12,7 +12,7 @@ import (
 )
 
 func main() {
-	skel.PluginMain(cmdAdd, cmdDel, cnispec.GetSpecVersionSupported())
+	skel.PluginMain(cmdAdd, cmdDel, version.GetPluginVersionSupported())
 }
 
 // cmdAdd will return ip, gateway, routes which can be
