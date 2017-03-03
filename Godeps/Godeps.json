@@ -1,7 +1,7 @@
 {
 	"ImportPath": "github.com/aws/amazon-ecs-cni-plugins",
 	"GoVersion": "go1.6",
-	"GodepVersion": "v79",
+	"GodepVersion": "v74",
 	"Packages": [
 		"./..."
 	],
@@ -142,6 +142,11 @@
 			"Rev": "f561c5e57575bb1e0a2167028b7339b3a8d16fb4"
 		},
 		{
+			"ImportPath": "github.com/containernetworking/cni/pkg/ip",
+			"Comment": "v0.4.0-28-g6f3b0ab",
+			"Rev": "6f3b0abcc7d4ba4bee93fd7a5c64d6a06ea162c2"
+		},
+		{
 			"ImportPath": "github.com/containernetworking/cni/pkg/ns",
 			"Comment": "v0.4.0-28-g6f3b0ab",
 			"Rev": "6f3b0abcc7d4ba4bee93fd7a5c64d6a06ea162c2"
@@ -167,9 +172,19 @@
 			"Rev": "6f3b0abcc7d4ba4bee93fd7a5c64d6a06ea162c2"
 		},
 		{
+			"ImportPath": "github.com/containernetworking/cni/pkg/utils/hwaddr",
+			"Comment": "v0.4.0-28-g6f3b0ab",
+			"Rev": "6f3b0abcc7d4ba4bee93fd7a5c64d6a06ea162c2"
+		},
+		{
 			"ImportPath": "github.com/containernetworking/cni/pkg/version",
 			"Comment": "v0.4.0-28-g6f3b0ab",
 			"Rev": "6f3b0abcc7d4ba4bee93fd7a5c64d6a06ea162c2"
+		},
+		{
+			"ImportPath": "github.com/coreos/go-iptables/iptables",
+			"Comment": "v0.1.0-5-g5463fba",
+			"Rev": "5463fbac3bcc6b990663941c2e12660d19f6b36d"
 		},
 		{
 			"ImportPath": "github.com/davecgh/go-spew/spew",
@@ -202,6 +217,11 @@
 		},
 		{
 			"ImportPath": "github.com/stretchr/testify/assert",
+			"Comment": "v1.1.4-27-g4d4bfba",
+			"Rev": "4d4bfba8f1d1027c4fdbe371823030df51419987"
+		},
+		{
+			"ImportPath": "github.com/stretchr/testify/require",
 			"Comment": "v1.1.4-27-g4d4bfba",
 			"Rev": "4d4bfba8f1d1027c4fdbe371823030df51419987"
 		},
