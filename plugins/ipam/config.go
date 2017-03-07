@@ -26,11 +26,11 @@ const SupportedVersions = ""
 // IPAMConfig represents the IP related network configuration
 type IPAMConfig struct {
 	types.CommonArgs
-	Type     string         `json:"type,omitempty"`
-	Subnet   types.IPNet    `json:"subnet,omitempty"`
-	IPAddres types.IPNet    `json:"ipAddress,omitempty"`
-	Gateway  net.IP         `json:"gateway,omitempty"`
-	Routes   []*types.Route `json:"routes,omitempty"`
+	Type      string         `json:"type,omitempty"`
+	Subnet    types.IPNet    `json:"subnet,omitempty"`
+	IPAddress types.IPNet    `json:"ipAddress,omitempty"`
+	Gateway   net.IP         `json:"gateway,omitempty"`
+	Routes    []*types.Route `json:"routes,omitempty"`
 }
 
 // Net loads the option from configuration file

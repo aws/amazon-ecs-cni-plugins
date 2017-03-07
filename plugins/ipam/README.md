@@ -2,7 +2,7 @@
 
 ## Overview
 
-ECS-Ipam plugin will construct the IP, Gateway, Routes as a struct which will be used by the bridge plugin to configure the bridge and veth pair in container network namespace. Example of this configuration looks like:
+Ipam plugin will construct the IP, Gateway, Routes as a struct which will be used by the bridge plugin to configure the bridge and veth pair in container network namespace. Example of this configuration looks like:
 ```
 {
 		"ipam": {

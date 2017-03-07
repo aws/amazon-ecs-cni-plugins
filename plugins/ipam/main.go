@@ -43,8 +43,8 @@ func cmdAdd(args *skel.CmdArgs) error {
 	}
 
 	ipAddress := net.IPNet{
-		IP:   conf.IPAddres.IP,
-		Mask: conf.IPAddres.Mask,
+		IP:   conf.IPAddress.IP,
+		Mask: conf.IPAddress.Mask,
 	}
 
 	// Check the ip address
@@ -72,9 +72,9 @@ func cmdAdd(args *skel.CmdArgs) error {
 	result := &current.Result{}
 
 	var ipversion string
-	if conf.IPAddres.IP.To4() != nil {
+	if conf.IPAddress.IP.To4() != nil {
 		ipversion = "4"
-	} else if conf.IPAddres.IP.To16() != nil {
+	} else if conf.IPAddress.IP.To16() != nil {
 		ipversion = "6"
 	} else {
 		return errors.New("invalid ip address")
