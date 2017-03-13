@@ -74,10 +74,10 @@ func TestDefaultGw(t *testing.T) {
 			}
 		}`
 
-	result, _, err := LoadIPAMConfig([]byte(conf), "")
+	ipamConf, _, err := LoadIPAMConfig([]byte(conf), "")
 	require.NoError(t, err, "valid configuration should not cause error")
 
-	assert.Equal(t, result.IPs[0].Gateway.To4(), net.ParseIP("10.0.0.1").To4(), "expect to set the first address as default gateway")
+	assert.Equal(t, ipamConf.Gateway.To4(), net.ParseIP("10.0.0.1").To4(), "expect to set the first address as default gateway")
 }
 
 func TestIPv4HappyPath(t *testing.T) {
@@ -87,6 +87,7 @@ func TestIPv4HappyPath(t *testing.T) {
 			"ipam": {
 				"type": "ipam",
 				"ipAddress": "10.0.0.2/24",
+				"subnet": "10.0.0.0/16",
 				"gateway": "10.0.0.8",
 				"routes": [
 				{"dst": "192.168.2.3/32"}
@@ -94,12 +95,12 @@ func TestIPv4HappyPath(t *testing.T) {
 			}
 		}`
 
-	result, _, err := LoadIPAMConfig([]byte(conf), "")
+	ipamConf, _, err := LoadIPAMConfig([]byte(conf), "")
 	require.NoError(t, err, "valid configuration should not cause error")
 
-	assert.Equal(t, result.IPs[0].Gateway, net.ParseIP("10.0.0.8"), "result should be same as configured")
-	assert.Equal(t, result.IPs[0].Address.IP, net.ParseIP("10.0.0.2"), "result should be same as configured")
-	assert.Equal(t, result.Routes[0].Dst.String(), "192.168.2.3/32", "result should be same as configured")
+	assert.Equal(t, ipamConf.Gateway, net.ParseIP("10.0.0.8"), "result should be same as configured")
+	assert.Equal(t, ipamConf.IPAddress.IP, net.ParseIP("10.0.0.2"), "result should be same as configured")
+	assert.Equal(t, ipamConf.Routes[0].Dst.String(), "192.168.2.3/32", "result should be same as configured")
 }
 
 func TestIPv6HappyPath(t *testing.T) {
@@ -116,14 +117,14 @@ func TestIPv6HappyPath(t *testing.T) {
 			}
 		}`
 
-	result, _, err := LoadIPAMConfig([]byte(conf), "")
+	ipamConf, _, err := LoadIPAMConfig([]byte(conf), "")
 	require.NoError(t, err, "valid configuration should not cause error")
 
-	assert.Equal(t, result.IPs[0].Gateway, net.ParseIP("3ffe:ffff:0:01ff::1"), "result should be same as configured")
-	assert.Equal(t, result.IPs[0].Address.IP, net.ParseIP("3ffe:ffff:0:01ff::0010"), "result should be same as configured")
+	assert.Equal(t, ipamConf.Gateway, net.ParseIP("3ffe:ffff:0:01ff::1"), "result should be same as configured")
+	assert.Equal(t, ipamConf.IPAddress.IP, net.ParseIP("3ffe:ffff:0:01ff::0010"), "result should be same as configured")
 
 	expectedIP, expectedRouteDst, _ := net.ParseCIDR("fe:f:0:0::3/64")
-	assert.Equal(t, result.Routes[0].Dst.IP, expectedIP, "result should be same as configured")
-	assert.Equal(t, result.Routes[0].Dst.Mask, expectedRouteDst.Mask, "result should be same as configured")
-	assert.Equal(t, result.Routes[0].GW, net.ParseIP("3ffe:ffff:0:01ff::1"), "result should be same as configured")
+	assert.Equal(t, ipamConf.Routes[0].Dst.IP, expectedIP, "result should be same as configured")
+	assert.Equal(t, ipamConf.Routes[0].Dst.Mask, expectedRouteDst.Mask, "result should be same as configured")
+	assert.Equal(t, ipamConf.Routes[0].GW, net.ParseIP("3ffe:ffff:0:01ff::1"), "result should be same as configured")
 }
