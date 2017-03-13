@@ -27,7 +27,7 @@ generate: $(SOURCES)
 
 .PHONY: unit-tests
 unit-tests: $(SOURCES)
-	go test -cover -timeout 10s ./pkg/... ./plugins/...
+	go test -v -cover -timeout 10s ./pkg/... ./plugins/...
 
 .PHONY: clean
 clean:
