@@ -23,6 +23,11 @@ import (
 	"github.com/pkg/errors"
 )
 
+const (
+	LastKnownIPKey           = "lastKnownIP"
+	DefaultConnectionTimeout = 5 * time.Second
+)
+
 // IPAMConfig represents the IP related network configuration
 type IPAMConfig struct {
 	types.CommonArgs
@@ -31,6 +36,9 @@ type IPAMConfig struct {
 	IPAddress types.IPNet    `json:"ipAddress,omitempty"`
 	Gateway   net.IP         `json:"gateway,omitempty"`
 	Routes    []*types.Route `json:"routes,omitempty"`
+	DB        string         `json:"db,omitempty"`
+	Bucket    string         `json:"bucket,omitempty"`
+	Timeout   string         `json:"timeout,omitempty"`
 }
 
 // Conf loads the option from configuration file
@@ -43,7 +51,7 @@ type Conf struct {
 // LoadIPAMConfig loads the IPAM configuration from the input bytes and validates the parameter
 // bytes: Configuration read from os.stdin
 // args: Configuration read from environment variable "CNI_ARGS"
-func LoadIPAMConfig(bytes []byte, args string) (*current.Result, string, error) {
+func LoadIPAMConfig(bytes []byte, args string) (*IPAMConfig, string, error) {
 	conf := &Conf{}
 	if err := json.Unmarshal(bytes, &conf); err != nil {
 		return nil, "", errors.Wrapf(err, "failed to load netconf")
@@ -56,59 +64,25 @@ func LoadIPAMConfig(bytes []byte, args string) (*current.Result, string, error) 
 		return nil, conf.CNIVersion, errors.Wrapf(err, "failed to parse args: %v", args)
 	}
 
-	// convert from types.IPNet to net.IPNet
-	subnet := net.IPNet{
-		IP:   conf.IPAM.Subnet.IP,
-		Mask: conf.IPAM.Subnet.Mask,
+	// subnet is required to allocate ip address
+	if conf.IPAM.Subnet.IP == nil || conf.IPAM.Subnet.Mask == nil {
+		return nil, conf.CNIVersion, errors.New("subnet is required")
 	}
 
-	ipAddress := net.IPNet{
-		IP:   conf.IPAM.IPAddress.IP,
-		Mask: conf.IPAM.IPAddress.Mask,
-	}
-
-	// Check the ip address
-	if ipAddress.IP == nil {
-		return nil, "", errors.New("IPAddress is missing")
-	}
-
-	// check if the ip address is within the subnet
-	if subnet.IP == nil || subnet.Mask == nil {
-		if conf.IPAM.Gateway == nil {
-			return nil, conf.CNIVersion, errors.New("gateway and subnet can't both be empty")
-		}
-	} else {
-		err := validateSubnetIP(ipAddress.IP, subnet)
+	// Validate the ip if specified explicitly
+	if conf.IPAM.IPAddress.IP != nil {
+		err := validateSubnetIP(conf.IPAM.IPAddress.IP, subnet)
 		if err != nil {
 			return nil, conf.CNIVersion, err
 		}
-
-		// get the default gateway
-		if conf.IPAM.Gateway == nil {
-			conf.IPAM.Gateway = defaultGWFromSubnet(conf.IPAM.Subnet)
-		}
 	}
 
-	var ipversion string
-	if conf.IPAM.IPAddress.IP.To4() != nil {
-		ipversion = "4"
-	} else if conf.IPAM.IPAddress.IP.To16() != nil {
-		ipversion = "6"
-	} else {
-		return nil, conf.CNIVersion, errors.New("invalid ip address")
+	// get the default gateway
+	if conf.IPAM.Gateway == nil {
+		conf.IPAM.Gateway = defaultGWFromSubnet(conf.IPAM.Subnet)
 	}
 
-	ipConfig := &current.IPConfig{
-		Version: ipversion,
-		Address: ipAddress,
-		Gateway: conf.IPAM.Gateway,
-	}
-
-	result := &current.Result{}
-	result.IPs = []*current.IPConfig{ipConfig}
-	result.Routes = conf.IPAM.Routes
-
-	return result, conf.CNIVersion, nil
+	return conf.IPAM, conf.CNIVersion, nil
 }
 
 // validateSubnetIP check if the ip is within the subnet
