@@ -14,15 +14,16 @@
 package main
 
 import (
-	"github.com/aws/amazon-ecs-cni-plugins/plugins/ipam/config"
-	"github.com/aws/amazon-ecs-cni-plugins/plugins/ipam/version/cnispec"
 	"net"
 	"time"
 
+	"github.com/aws/amazon-ecs-cni-plugins/plugins/ipam/config"
 	"github.com/aws/amazon-ecs-cni-plugins/plugins/ipam/ipstore"
-	"github.com/containernetworking/cni/pkg/ip"
+	"github.com/aws/amazon-ecs-cni-plugins/plugins/ipam/version/cnispec"
 	"github.com/containernetworking/cni/pkg/skel"
 	"github.com/containernetworking/cni/pkg/types"
+	"github.com/containernetworking/cni/pkg/types/current"
+	"github.com/pkg/errors"
 )
 
 func main() {
@@ -38,11 +39,11 @@ func cmdAdd(args *skel.CmdArgs) error {
 	}
 
 	// Create the ip manager
-	timeout := DefaultConnectionTimeout
-	if conf.IPAM.Timeout != "" {
+	timeout := config.DefaultConnectionTimeout
+	if conf.Timeout != "" {
 		duration, err := time.ParseDuration(conf.Timeout)
 		if err != nil {
-			return nil, conf.CNIVersion, errors.Errorf("parsing duration from string failed: %v", err)
+			return errors.Errorf("parsing duration from string failed: %v", err)
 		}
 		timeout = duration
 	}
@@ -53,7 +54,10 @@ func cmdAdd(args *skel.CmdArgs) error {
 		ConnectionTimeout: timeout,
 		DB:                conf.DB,
 	}
-	ipManager, err := ipstore.New(dbConf, subnet)
+	ipManager, err := ipstore.New(dbConf, net.IPNet{
+		IP:   conf.Subnet.IP,
+		Mask: conf.Subnet.Mask,
+	})
 	if err != nil {
 		return err
 	}
@@ -64,7 +68,7 @@ func cmdAdd(args *skel.CmdArgs) error {
 		IP:   conf.IPAddress.IP,
 		Mask: conf.IPAddress.Mask,
 	}
-	start := conf.IPAM.Subnet.IP.Mask(conf.IPAM.Subnet.Mask)
+	start := conf.Subnet.IP.Mask(conf.Subnet.Mask)
 	if assignedIP.IP == nil {
 		// First get the previous referenced ip address from boltdb
 		exist, err := ipManager.Exists(config.LastKnownIPKey)
@@ -73,7 +77,7 @@ func cmdAdd(args *skel.CmdArgs) error {
 		}
 
 		if exist {
-			lastKnownIPStr, err := ipManager.Get(LastKnownIPKey)
+			lastKnownIPStr, err := ipManager.Get(config.LastKnownIPKey)
 			if err != nil {
 				return err
 			}
@@ -88,25 +92,26 @@ func cmdAdd(args *skel.CmdArgs) error {
 			return err
 		}
 
-		assignedIP = net.ParseIP(nextIP)
+		assignedIP.IP = net.ParseIP(nextIP)
+		assignedIP.Mask = conf.Subnet.Mask
 	} else {
 		// check whether this ip is available
-		exist, err := ipManager.Exists(ipAddress.IP.String())
+		exist, err := ipManager.Exists(assignedIP.IP.String())
 		if err != nil {
 			return err
 		}
 		if exist {
-			return errors.Errorf("ip %v has already been used", ipAddress)
+			return errors.Errorf("ip %v has already been used", assignedIP)
 		}
 
-		err = ipManager.Assign(ipAddress.IP.String(), time.Now().UTC().String())
+		err = ipManager.Assign(assignedIP.IP.String(), time.Now().UTC().String())
 		if err != nil {
 			return err
 		}
 	}
 
 	// update the last known ip
-	err = ipManager.Update(LastKnownIPKey, ipAddress.IP.String())
+	err = ipManager.Update(config.LastKnownIPKey, assignedIP.IP.String())
 	if err != nil {
 		return err
 	}
@@ -147,7 +152,7 @@ func cmdAdd(args *skel.CmdArgs) error {
 
 // cmdDel will release one ip address and update the last known ip
 func cmdDel(args *skel.CmdArgs) error {
-	conf, _, err := LoadIPAMConfig(args.StdinData, args.Args)
+	conf, _, err := config.LoadIPAMConfig(args.StdinData, args.Args)
 	if err != nil {
 		return err
 	}
@@ -163,7 +168,7 @@ func cmdDel(args *skel.CmdArgs) error {
 		Mask: conf.IPAddress.Mask,
 	}
 
-	timeout := DefaultConnectionTimeout
+	timeout := config.DefaultConnectionTimeout
 	if conf.Timeout != "" {
 		duration, err := time.ParseDuration(conf.Timeout)
 		if err != nil {

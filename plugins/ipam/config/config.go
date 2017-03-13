@@ -16,10 +16,10 @@ package config
 import (
 	"encoding/json"
 	"net"
+	"time"
 
 	"github.com/containernetworking/cni/pkg/ip"
 	"github.com/containernetworking/cni/pkg/types"
-	"github.com/containernetworking/cni/pkg/types/current"
 	"github.com/pkg/errors"
 )
 
@@ -71,7 +71,10 @@ func LoadIPAMConfig(bytes []byte, args string) (*IPAMConfig, string, error) {
 
 	// Validate the ip if specified explicitly
 	if conf.IPAM.IPAddress.IP != nil {
-		err := validateSubnetIP(conf.IPAM.IPAddress.IP, subnet)
+		err := VerifyIPSubnet(conf.IPAM.IPAddress.IP,
+			net.IPNet{
+				IP:   conf.IPAM.Subnet.IP,
+				Mask: conf.IPAM.Subnet.Mask})
 		if err != nil {
 			return nil, conf.CNIVersion, err
 		}
@@ -79,14 +82,14 @@ func LoadIPAMConfig(bytes []byte, args string) (*IPAMConfig, string, error) {
 
 	// get the default gateway
 	if conf.IPAM.Gateway == nil {
-		conf.IPAM.Gateway = defaultGWFromSubnet(conf.IPAM.Subnet)
+		conf.IPAM.Gateway = getDefaultGW(conf.IPAM.Subnet)
 	}
 
 	return conf.IPAM, conf.CNIVersion, nil
 }
 
-// validateSubnetIP check if the ip is within the subnet
-func validateSubnetIP(ip net.IP, subnet net.IPNet) error {
+// VerifyIPSubnet check if the ip is within the subnet
+func VerifyIPSubnet(ip net.IP, subnet net.IPNet) error {
 	if !subnet.Contains(ip) {
 		return errors.Errorf("ip %v is not within the subnet %v", ip, subnet)
 	}
@@ -94,7 +97,7 @@ func validateSubnetIP(ip net.IP, subnet net.IPNet) error {
 	return nil
 }
 
-// defaultGWFromSubnet returns the first ip address in the subnet as the gateway
-func defaultGWFromSubnet(subnet types.IPNet) net.IP {
+// getDefaultGW returns the first ip address in the subnet as the gateway
+func getDefaultGW(subnet types.IPNet) net.IP {
 	return ip.NextIP(subnet.IP)
 }
