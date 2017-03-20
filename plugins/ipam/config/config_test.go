@@ -11,18 +11,13 @@
 // express or implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-package main
+package config
 
 import (
 	"fmt"
-	"io/ioutil"
 	"net"
-	"os"
 	"testing"
 
-	"github.com/containernetworking/cni/pkg/skel"
-	"github.com/containernetworking/cni/pkg/types/current"
-	"github.com/containernetworking/cni/pkg/version"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -46,7 +41,7 @@ func TestInvalidIPAddress(t *testing.T) {
 	assert.Error(t, err, "expect error for missing mask in ipaddress")
 
 	_, _, err = LoadIPAMConfig([]byte(fmt.Sprintf(conf, "10.0.0.2/24")), "")
-	assert.NoError(t, err, "valid ip address should cause loading configuration error")
+	assert.NoError(t, err, "valid ip address should not cause loading configuration error")
 
 	_, _, err = LoadIPAMConfig([]byte(fmt.Sprintf(conf, "")), "")
 	assert.Error(t, err, "expect error for missing IP address in the configuration")
@@ -63,11 +58,7 @@ func TestEmptySubnentGw(t *testing.T) {
 			}
 		}`
 
-	args := &skel.CmdArgs{
-		StdinData: []byte(conf),
-	}
-
-	err := cmdAdd(args)
+	_, _, err := LoadIPAMConfig([]byte(conf), "")
 	assert.Error(t, err, "expect error for missing both subnent and gateway in configuration")
 }
 
@@ -83,32 +74,10 @@ func TestDefaultGw(t *testing.T) {
 			}
 		}`
 
-	// redirect the stdout to capture the returned output
-	oldStdout := os.Stdout
-	r, w, err := os.Pipe()
-	require.NoError(t, err, "expect redirect os.stdin succeed")
+	result, _, err := LoadIPAMConfig([]byte(conf), "")
+	require.NoError(t, err, "valid configuration should not cause error")
 
-	os.Stdout = w
-
-	args := &skel.CmdArgs{
-		StdinData: []byte(conf),
-	}
-	err = cmdAdd(args)
-	assert.NoError(t, err, "expect no error")
-
-	w.Close()
-	output, err := ioutil.ReadAll(r)
-
-	os.Stdout = oldStdout
-	require.NoError(t, err, "expect reading from stdin succeed")
-
-	res, err := version.NewResult("0.3.0", output)
-	require.NoError(t, err, "")
-
-	result, err := current.GetResult(res)
-	require.NoError(t, err, "expect the result has correct format")
-
-	assert.Equal(t, result.IPs[0].Gateway, net.ParseIP("10.0.0.1"), "expect to set the first address as default gateway")
+	assert.Equal(t, result.IPs[0].Gateway.To4(), net.ParseIP("10.0.0.1").To4(), "expect to set the first address as default gateway")
 }
 
 func TestIPv4HappyPath(t *testing.T) {
@@ -125,27 +94,8 @@ func TestIPv4HappyPath(t *testing.T) {
 			}
 		}`
 
-	// redirect the stdout to capture the returned output
-	oldStdout := os.Stdout
-	r, w, err := os.Pipe()
-	require.NoError(t, err, "expect redirect os.stdin succeed")
-
-	os.Stdout = w
-
-	args := &skel.CmdArgs{
-		StdinData: []byte(conf),
-	}
-	err = cmdAdd(args)
-	assert.NoError(t, err, "expect no error")
-	w.Close()
-
-	output, err := ioutil.ReadAll(r)
-	os.Stdout = oldStdout
-	require.NoError(t, err, "expect reading from stdin succeed")
-
-	res, _ := version.NewResult("0.3.0", output)
-	result, err := current.GetResult(res)
-	require.NoError(t, err, "expect the result has correct format")
+	result, _, err := LoadIPAMConfig([]byte(conf), "")
+	require.NoError(t, err, "valid configuration should not cause error")
 
 	assert.Equal(t, result.IPs[0].Gateway, net.ParseIP("10.0.0.8"), "result should be same as configured")
 	assert.Equal(t, result.IPs[0].Address.IP, net.ParseIP("10.0.0.2"), "result should be same as configured")
@@ -166,26 +116,8 @@ func TestIPv6HappyPath(t *testing.T) {
 			}
 		}`
 
-	// redirect the stdout to capture the returned output
-	oldStdout := os.Stdout
-	r, w, err := os.Pipe()
-	require.NoError(t, err, "expect redirect os.stdin succeed")
-
-	os.Stdout = w
-
-	args := &skel.CmdArgs{
-		StdinData: []byte(conf),
-	}
-	err = cmdAdd(args)
-	assert.NoError(t, err, "expect no error")
-	w.Close()
-	output, err := ioutil.ReadAll(r)
-	os.Stdout = oldStdout
-	require.NoError(t, err, "expect reading from stdin succeed")
-
-	res, _ := version.NewResult("0.3.0", output)
-	result, err := current.GetResult(res)
-	require.NoError(t, err, "expect the result has correct format")
+	result, _, err := LoadIPAMConfig([]byte(conf), "")
+	require.NoError(t, err, "valid configuration should not cause error")
 
 	assert.Equal(t, result.IPs[0].Gateway, net.ParseIP("3ffe:ffff:0:01ff::1"), "result should be same as configured")
 	assert.Equal(t, result.IPs[0].Address.IP, net.ParseIP("3ffe:ffff:0:01ff::0010"), "result should be same as configured")
