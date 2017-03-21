@@ -29,6 +29,9 @@ generate: $(SOURCES)
 unit-tests: $(SOURCES)
 	go test -v -cover -timeout 10s ./pkg/... ./plugins/...
 
+integration-test: $(SOURCE)
+	go test -v -tags integration -timeout 10s ./pkg/... ./plugins/...
+
 .PHONY: clean
 clean:
 	rm -rf ${ROOT}/bin ||:

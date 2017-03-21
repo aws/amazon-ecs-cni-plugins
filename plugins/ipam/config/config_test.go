@@ -16,21 +16,27 @@ package config
 import (
 	"fmt"
 	"net"
+	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-// TestInvalidIPAddress tests invalid IP address will cause error
-func TestInvalidIPAddress(t *testing.T) {
+func init() {
+	os.Setenv(EnvDBName, "dummy")
+	os.Setenv(EnvBucketName, "dummy")
+}
+
+// TestInvalidIPV4Address tests invalid IP address will cause error
+func TestInvalidIPV4Address(t *testing.T) {
 	conf := `{
 			"name": "testnet",
 			"cniVersion": "0.3.0",
 			"ipam": {
 				"type": "ipam",
-				"subnet": "10.0.0.0/24",
-				"ipAddress": "%s"
+				"ipv4-subnet": "10.0.0.0/24",
+				"ipv4-address": "%s"
 			}
 		}`
 
@@ -38,7 +44,7 @@ func TestInvalidIPAddress(t *testing.T) {
 	assert.Error(t, err, "expect error for invalid ip address")
 
 	_, _, err = LoadIPAMConfig([]byte(fmt.Sprintf(conf, "10.0.0.1")), "")
-	assert.Error(t, err, "expect error for missing mask in ipaddress")
+	assert.Error(t, err, "expect error for missing mask in ipv4-address")
 
 	_, _, err = LoadIPAMConfig([]byte(fmt.Sprintf(conf, "10.0.0.2/24")), "")
 	assert.NoError(t, err, "valid ip address should not cause loading configuration error")
@@ -54,7 +60,7 @@ func TestEmptySubnentGw(t *testing.T) {
 			"cniVersion": "0.3.0",
 			"ipam": {
 				"type": "ipam",
-				"ipAddress": "10.0.0.2/24"
+				"ipv4-address": "10.0.0.2/24"
 			}
 		}`
 
@@ -69,15 +75,15 @@ func TestDefaultGw(t *testing.T) {
 			"cniVersion": "0.3.0",
 			"ipam": {
 				"type": "ipam",
-				"ipAddress": "10.0.0.2/24",
-				"subnet": "10.0.0.0/24"
+				"ipv4-address": "10.0.0.2/24",
+				"ipv4-subnet": "10.0.0.0/24"
 			}
 		}`
 
 	ipamConf, _, err := LoadIPAMConfig([]byte(conf), "")
 	require.NoError(t, err, "valid configuration should not cause error")
 
-	assert.Equal(t, ipamConf.Gateway.To4(), net.ParseIP("10.0.0.1").To4(), "expect to set the first address as default gateway")
+	assert.Equal(t, ipamConf.IPV4Gateway.To4(), net.ParseIP("10.0.0.1").To4(), "expect to set the first address as default gateway")
 }
 
 func TestIPv4HappyPath(t *testing.T) {
@@ -86,9 +92,9 @@ func TestIPv4HappyPath(t *testing.T) {
 			"cniVersion": "0.3.0",
 			"ipam": {
 				"type": "ipam",
-				"ipAddress": "10.0.0.2/24",
-				"subnet": "10.0.0.0/16",
-				"gateway": "10.0.0.8",
+				"ipv4-address": "10.0.0.2/16",
+				"ipv4-subnet": "10.0.0.0/16",
+				"ipv4-gateway": "10.0.0.8",
 				"routes": [
 				{"dst": "192.168.2.3/32"}
 				]
@@ -98,33 +104,7 @@ func TestIPv4HappyPath(t *testing.T) {
 	ipamConf, _, err := LoadIPAMConfig([]byte(conf), "")
 	require.NoError(t, err, "valid configuration should not cause error")
 
-	assert.Equal(t, ipamConf.Gateway, net.ParseIP("10.0.0.8"), "result should be same as configured")
-	assert.Equal(t, ipamConf.IPAddress.IP, net.ParseIP("10.0.0.2"), "result should be same as configured")
+	assert.Equal(t, ipamConf.IPV4Gateway, net.ParseIP("10.0.0.8"), "result should be same as configured")
+	assert.Equal(t, ipamConf.IPV4Address.IP, net.ParseIP("10.0.0.2"), "result should be same as configured")
 	assert.Equal(t, ipamConf.Routes[0].Dst.String(), "192.168.2.3/32", "result should be same as configured")
-}
-
-func TestIPv6HappyPath(t *testing.T) {
-	conf := `{
-			"name": "testnet",
-			"cniVersion": "0.3.0",
-			"ipam": {
-				"type": "ipam",
-				"ipAddress": "3ffe:ffff:0:01ff::0010/60",
-				"subnet": "3ffe:ffff:0:01ff::/60",
-				"routes": [
-				{"dst": "fe:f:0:0::3/64", "gw": "3ffe:ffff:0:01ff::1"}
-				]
-			}
-		}`
-
-	ipamConf, _, err := LoadIPAMConfig([]byte(conf), "")
-	require.NoError(t, err, "valid configuration should not cause error")
-
-	assert.Equal(t, ipamConf.Gateway, net.ParseIP("3ffe:ffff:0:01ff::1"), "result should be same as configured")
-	assert.Equal(t, ipamConf.IPAddress.IP, net.ParseIP("3ffe:ffff:0:01ff::0010"), "result should be same as configured")
-
-	expectedIP, expectedRouteDst, _ := net.ParseCIDR("fe:f:0:0::3/64")
-	assert.Equal(t, ipamConf.Routes[0].Dst.IP, expectedIP, "result should be same as configured")
-	assert.Equal(t, ipamConf.Routes[0].Dst.Mask, expectedRouteDst.Mask, "result should be same as configured")
-	assert.Equal(t, ipamConf.Routes[0].GW, net.ParseIP("3ffe:ffff:0:01ff::1"), "result should be same as configured")
 }
