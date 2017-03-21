@@ -28,3 +28,55 @@ Ipam plugin will construct the IP, Gateway, Routes as a struct which will be use
 * `timeout` (string, optional): timeout for the connection to the boltdb.
 * `db` (string, required): where the boltdb file should put.
 * `bucket` (string, required): bucket name of the boltdb.
+
+
+## Example
+Before running the command you should set up the environment variable `CNI_CONTAINERID`, `CNI_NETNS`, `CNI_PATH` and `CNI_IFNAME` to any value, which is required for other plugin.
+### Add:
+```
+export CNI_COMMAND=ADD && cat /etc/cni/net.d/mynet.conf | ../bin/ipam
+```
+
+### Del:
+```
+export CNI_COMMAND=DEL && cat /etc/cni/net.d/mynet.conf | ../bin/ipam
+```
+
+Then you can use the following program to check the content of the db:
+```golang
+package main
+
+import (
+	"fmt"
+	"github.com/docker/libkv"
+	"github.com/docker/libkv/store"
+	"github.com/libkv/store/boltdb"
+	"time"
+)
+
+func init() {
+	boltdb.Register()
+}
+
+func main() {
+	db := "/home/ec2-user/db"
+	bucket := "bucket"
+
+	kv, err := libkv.NewStore(
+		store.BOLTDB,
+		[]string{db},
+		&store.Config{
+			Bucket:            bucket,
+			ConnectionTimeout: 10 * time.Second,
+		},
+	)
+	if err != nil {
+		fmt.Printf("Creating db failed: %v\n", err)
+	}
+
+	entries, err := kv.List("1")
+	for _, pair := range entries {
+		fmt.Printf("key=%v - value=%v\n", pair.Key, string(pair.Value))
+	}
+}
+```
