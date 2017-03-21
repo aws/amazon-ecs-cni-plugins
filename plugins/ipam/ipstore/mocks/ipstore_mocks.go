@@ -17,6 +17,8 @@
 package mock_ipstore
 
 import (
+	net "net"
+
 	gomock "github.com/golang/mock/gomock"
 )
 
@@ -100,6 +102,14 @@ func (_m *MockIPAllocator) Release(_param0 string) error {
 
 func (_mr *_MockIPAllocatorRecorder) Release(arg0 interface{}) *gomock.Call {
 	return _mr.mock.ctrl.RecordCall(_mr.mock, "Release", arg0)
+}
+
+func (_m *MockIPAllocator) SetLastKnownIP(_param0 net.IP) {
+	_m.ctrl.Call(_m, "SetLastKnownIP", _param0)
+}
+
+func (_mr *_MockIPAllocatorRecorder) SetLastKnownIP(arg0 interface{}) *gomock.Call {
+	return _mr.mock.ctrl.RecordCall(_mr.mock, "SetLastKnownIP", arg0)
 }
 
 func (_m *MockIPAllocator) Update(_param0 string, _param1 string) error {

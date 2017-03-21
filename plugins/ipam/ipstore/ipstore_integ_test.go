@@ -1,3 +1,4 @@
+// +build integration
 // Copyright 2017 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License"). You may
@@ -42,8 +43,11 @@ func setup(t *testing.T) *IPManager {
 	_, subnet, err := net.ParseCIDR(subnet)
 	require.NoError(t, err)
 
-	ipManager, err := New(&Config{DB: testdb, PersistConnection: true, Bucket: testBucket, ConnectionTimeout: 1 * time.Millisecond}, *subnet)
+	ipAllocator, err := New(&Config{DB: testdb, PersistConnection: true, Bucket: testBucket, ConnectionTimeout: 1 * time.Millisecond}, *subnet)
 	require.NoError(t, err, "creating the IPManager failed")
+
+	ipManager, ok := ipAllocator.(*IPManager)
+	require.True(t, ok, "Create ip manager should succeed")
 
 	return ipManager
 }
