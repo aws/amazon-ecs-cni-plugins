@@ -43,7 +43,7 @@ func setup(t *testing.T) *IPManager {
 	_, subnet, err := net.ParseCIDR(subnet)
 	require.NoError(t, err)
 
-	ipAllocator, err := New(&Config{DB: testdb, PersistConnection: true, Bucket: testBucket, ConnectionTimeout: 1 * time.Millisecond}, *subnet)
+	ipAllocator, err := NewIPAllocator(&Config{DB: testdb, PersistConnection: true, Bucket: testBucket, ConnectionTimeout: 1 * time.Millisecond}, *subnet)
 	require.NoError(t, err, "creating the IPManager failed")
 
 	ipManager, ok := ipAllocator.(*IPManager)

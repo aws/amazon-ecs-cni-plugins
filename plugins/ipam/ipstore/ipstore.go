@@ -20,7 +20,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/aws/amazon-ecs-cni-plugins/plugins/ipam/config"
 	log "github.com/cihub/seelog"
 	"github.com/docker/libkv/store"
 	"github.com/docker/libkv/store/boltdb"
@@ -57,8 +56,8 @@ type IPAllocator interface {
 	Close()
 }
 
-// New creates an ip manager from the db configuration
-func New(options *Config, subnet net.IPNet) (IPAllocator, error) {
+// NewIPAllocator creates an ip manager from the IPAM and  db configuration
+func NewIPAllocator(options *Config, subnet net.IPNet) (IPAllocator, error) {
 	config := &store.Config{
 		PersistConnection: options.PersistConnection,
 		ConnectionTimeout: options.ConnectionTimeout,
@@ -75,30 +74,6 @@ func New(options *Config, subnet net.IPNet) (IPAllocator, error) {
 		allocated:   0,
 		lastKnownIP: subnet.IP.Mask(subnet.Mask),
 	}, nil
-}
-
-// NewFromIPAM creates the ip addresses manager from the IPAM configuration
-func NewFromIPAM(conf *config.IPAMConfig) (IPAllocator, error) {
-	timeout := config.DefaultConnectionTimeout
-	if conf.Timeout != "" {
-		duration, err := time.ParseDuration(conf.Timeout)
-		if err != nil {
-			return nil, errors.Errorf("NewIPManagerFromConf main: parsing duration from string failed: %v", err)
-		}
-		timeout = duration
-	}
-
-	dbConf := &Config{
-		PersistConnection: false,
-		Bucket:            conf.Bucket,
-		ConnectionTimeout: timeout,
-		DB:                conf.DB,
-	}
-
-	return New(dbConf, net.IPNet{
-		IP:   conf.IPV4Subnet.IP,
-		Mask: conf.IPV4Subnet.Mask,
-	})
 }
 
 // SetLastKnownIP updates the record of last visited ip address
@@ -119,7 +94,7 @@ func (manager *IPManager) GetAvailableIP(id string) (string, error) {
 	total := int(math.Pow(2, float64(bits-ones)) - 1)
 
 	if manager.allocated >= total {
-		return "", errors.New("GetAvailableIP ipstore: all the ip addresses are used in the subnet")
+		return "", errors.New("getAvailableIP ipstore: all the ip addresses are used in the subnet")
 	}
 
 	startIP := manager.lastKnownIP
@@ -147,7 +122,7 @@ func (manager *IPManager) GetAvailableIP(id string) (string, error) {
 		}
 	}
 
-	return "", errors.New("GetAvailableIP ipstore: failed to find available ip addresses in the subnet")
+	return "", errors.New("getAvailableIP ipstore: failed to find available ip addresses in the subnet")
 }
 
 // Get returns the id by which the ip was used
@@ -171,10 +146,10 @@ func (manager *IPManager) Assign(ip string, id string) error {
 
 	ok, err := manager.exists(ip)
 	if err != nil {
-		return errors.Wrapf(err, "Assign ipstore: query the db failed, err: %v", err)
+		return errors.Wrapf(err, "assign ipstore: query the db failed, err: %v", err)
 	}
 	if ok {
-		return errors.Errorf("Assign ipstore: ip %v already been used", ip)
+		return errors.Errorf("assign ipstore: ip %v already been used", ip)
 	}
 	return manager.assign(ip, id)
 }
@@ -202,15 +177,15 @@ func (manager *IPManager) Release(ip string) error {
 	ok, err := manager.exists(ip)
 
 	if err != nil {
-		return errors.Wrap(err, "Release ipstore: failed to query the db")
+		return errors.Wrap(err, "release ipstore: failed to query the db")
 	}
 	if !ok {
-		return errors.Errorf("Release ipstore: ip does not existed in the db: %s", ip)
+		return errors.Errorf("release ipstore: ip does not existed in the db: %s", ip)
 	}
 
 	err = manager.client.Delete(ip)
 	if err != nil {
-		return errors.Wrap(err, "Release ipstore: failed to delete the key in the db")
+		return errors.Wrap(err, "release ipstore: failed to delete the key in the db")
 	}
 
 	manager.allocated--
@@ -252,17 +227,17 @@ func (manager *IPManager) Close() {
 // NextIP returns the next ip in the subnet
 func NextIP(ip net.IP, subnet net.IPNet) (net.IP, error) {
 	if ones, _ := subnet.Mask.Size(); ones > 30 {
-		return nil, errors.Errorf("NextIP ipstore: no available ip in the subnet: %v", subnet)
+		return nil, errors.Errorf("nextIP ipstore: no available ip in the subnet: %v", subnet)
 	}
 
 	// currently only ipv4 is supported
 	ipv4 := ip.To4()
 	if ipv4 == nil {
-		return nil, errors.Errorf("NextIP ipstore: invalid ipv4 address: %v", ipv4)
+		return nil, errors.Errorf("nextIP ipstore: invalid ipv4 address: %v", ipv4)
 	}
 
 	if !subnet.Contains(ipv4) {
-		return nil, errors.Errorf("NextIP ipstore: ip %v is not within subnet %s", ipv4.String(), subnet.String())
+		return nil, errors.Errorf("nextIP ipstore: ip %v is not within subnet %s", ipv4.String(), subnet.String())
 	}
 
 	minIP := subnet.IP.Mask(subnet.Mask)
@@ -272,13 +247,15 @@ func NextIP(ip net.IP, subnet net.IPNet) (net.IP, error) {
 	}
 
 	nextIP := ipv4
+	// Reserve the broadcast address(all 1) and the network address(all 0)
 	for nextIP.Equal(ipv4) || nextIP.Equal(minIP) || nextIP.Equal(maxIP) {
 		if nextIP.Equal(maxIP) {
 			nextIP = minIP
 		}
-		i := big.NewInt(0).SetBytes(nextIP)
-		i.Add(i, big.NewInt(1))
-		nextIP = net.IP(i.Bytes())
+		// convert the IP into Int for easily calculation
+		nextIPInBytes := big.NewInt(0).SetBytes(nextIP)
+		nextIPInBytes.Add(nextIPInBytes, big.NewInt(1))
+		nextIP = net.IP(nextIPInBytes.Bytes())
 	}
 
 	return nextIP, nil
