@@ -122,31 +122,6 @@ func TestGetExist(t *testing.T) {
 	assert.Equal(t, "id1", id)
 }
 
-func TestNextIPHappyPath(t *testing.T) {
-	ipManager := setup(t)
-	defer ipManager.Close()
-
-	ip := net.ParseIP("10.0.0.3")
-	_, subnet, err := net.ParseCIDR("10.0.0.0/24")
-	assert.NoError(t, err)
-
-	nextIP, err := NextIP(ip, *subnet)
-	assert.NoError(t, err)
-	assert.True(t, nextIP.Equal(net.ParseIP("10.0.0.4")), "next ip should return the next available ip")
-}
-
-func TestNextIPNotInSubnet(t *testing.T) {
-	ipManager := setup(t)
-	defer ipManager.Close()
-
-	ip := net.ParseIP("10.0.0.3")
-	_, subnet, err := net.ParseCIDR("10.1.0.0/16")
-	assert.NoError(t, err)
-
-	_, err = NextIP(ip, *subnet)
-	assert.Error(t, err)
-}
-
 func TestGetAvailableIPSerially(t *testing.T) {
 	ipManager := setup(t)
 	defer ipManager.Close()
