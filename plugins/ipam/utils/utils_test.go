@@ -54,8 +54,6 @@ func setup(subnetStr, ipStr, gwStr string, t *testing.T) (*config.IPAMConfig, *m
 		IPV4Subnet:  types.IPNet{IP: subnet.IP, Mask: subnet.Mask},
 		IPV4Address: types.IPNet{IP: ip.IP, Mask: ip.Mask},
 		IPV4Gateway: gw,
-		DB:          "db",
-		Bucket:      "bucket",
 	}
 
 	mockCtrl := gomock.NewController(t)
@@ -73,9 +71,9 @@ func TestGetSpecificIPV4HappyPath(t *testing.T) {
 		allocator.EXPECT().Assign(gomock.Any(), gomock.Any()).Return(nil),
 		allocator.EXPECT().SetLastKnownIP(net.ParseIP("10.0.0.3")),
 	)
-	assignedIP, err := GetIPV4Address(allocator, conf)
+	assignedAddress, err := GetIPV4Address(allocator, conf)
 	assert.NoError(t, err, "get specific ip from subnet failed")
-	assert.Equal(t, "10.0.0.3/29", assignedIP.String(), "Assigned IP is not the one specified")
+	assert.Equal(t, "10.0.0.3/29", assignedAddress.String(), "Assigned IP is not the one specified")
 }
 
 // TestGetNextIPV4HappyPath tests if ip isn't specified, next available one will be picked up
@@ -88,9 +86,9 @@ func TestGetNextIPV4HappyPath(t *testing.T) {
 		allocator.EXPECT().SetLastKnownIP(net.ParseIP("10.0.0.3")),
 		allocator.EXPECT().GetAvailableIP(gomock.Any()).Return("10.0.0.4", nil),
 	)
-	assignedIP, err := GetIPV4Address(allocator, conf)
+	assignedAddress, err := GetIPV4Address(allocator, conf)
 	assert.NoError(t, err, "get available ip from subnet failed")
-	assert.Equal(t, "10.0.0.4/29", assignedIP.String(), "Assigned ip should be the next available ip")
+	assert.Equal(t, "10.0.0.4/29", assignedAddress.String(), "Assigned ip should be the next available ip")
 }
 
 // TestGetUsedIPv4 tests if the specified ip has already been used, it will cause error
@@ -101,9 +99,9 @@ func TestGetUsedIPv4(t *testing.T) {
 		allocator.EXPECT().Exists("10.0.0.3").Return(true, nil),
 	)
 
-	assignedIP, err := GetIPV4Address(allocator, conf)
+	assignedAddress, err := GetIPV4Address(allocator, conf)
 	assert.Error(t, err, "assign an used ip should cause error")
-	assert.Nil(t, assignedIP, "error will cause ip not be assigned")
+	assert.Nil(t, assignedAddress, "error will cause ip not be assigned")
 }
 
 // TestIPUsedUPInSubnet tests there is no available ip in the subnet should cause error
@@ -114,12 +112,12 @@ func TestIPUsedUPInSubnet(t *testing.T) {
 		allocator.EXPECT().Exists(config.LastKnownIPKey).Return(true, nil),
 		allocator.EXPECT().Get(config.LastKnownIPKey).Return("10.0.0.3", nil),
 		allocator.EXPECT().SetLastKnownIP(net.ParseIP("10.0.0.3")),
-		allocator.EXPECT().GetAvailableIP(gomock.Any()).Return("", errors.New("No available ip in the subnet")),
+		allocator.EXPECT().GetAvailableIP(gomock.Any()).Return("", errors.New("no available ip in the subnet")),
 	)
 
-	assignedIP, err := GetIPV4Address(allocator, conf)
+	assignedAddress, err := GetIPV4Address(allocator, conf)
 	assert.Error(t, err, "no available ip in the subnet should cause error")
-	assert.Nil(t, assignedIP, "error will cause ip not be assigned")
+	assert.Nil(t, assignedAddress, "error will cause ip not be assigned")
 }
 
 // TestGWUsed tests the default gateway can be used by multiple container

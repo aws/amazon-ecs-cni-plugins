@@ -29,13 +29,11 @@ import (
 )
 
 const (
-	testdb     = "/tmp/ipam_test"
-	testBucket = "ipam"
+	testdb = "/tmp/ipam_test"
 )
 
 func init() {
 	os.Setenv(config.EnvDBName, testdb)
-	os.Setenv(config.EnvBucketName, testBucket)
 }
 
 func cleanup(t *testing.T) {
@@ -60,7 +58,7 @@ func TestGetExistedIP(t *testing.T) {
 				"timeout": "5s",
 				"ipv4-subnet": "10.0.0.0/24",
 				"ipv4-gateway": "10.0.0.8",
-				"routes": [
+				"ipv4-routes": [
 				{"dst": "192.168.2.3/32"}
 				]
 			}
@@ -88,7 +86,7 @@ func TestGetAvailableIPv4(t *testing.T) {
 				"timeout": "5s",
 				"ipv4-subnet": "10.0.0.0/24",
 				"ipv4-gateway": "10.0.0.8",
-				"routes": [
+				"ipv4-routes": [
 				{"dst": "192.168.2.3/32"}
 				]
 			}
@@ -133,7 +131,7 @@ func TestDel(t *testing.T) {
 				"ipv4-subnet": "10.0.0.0/24",
 				"ipv4-address": "10.0.0.3/24",
 				"ipv4-gateway": "10.0.0.8",
-				"routes": [
+				"ipv4-routes": [
 				{"dst": "192.168.2.3/32"}
 				]
 			}

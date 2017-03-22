@@ -16,16 +16,15 @@ package config
 import (
 	"fmt"
 	"net"
-	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-func init() {
-	os.Setenv(EnvDBName, "dummy")
-	os.Setenv(EnvBucketName, "dummy")
+// TODO
+func TestSetDBFromEnv(t *testing.T) {
+
 }
 
 // TestInvalidIPV4Address tests invalid IP address will cause error
@@ -112,7 +111,7 @@ func TestIPv4HappyPath(t *testing.T) {
 				"ipv4-address": "10.0.0.2/16",
 				"ipv4-subnet": "10.0.0.0/16",
 				"ipv4-gateway": "10.0.0.8",
-				"routes": [
+				"ipv4-routes": [
 				{"dst": "192.168.2.3/32"}
 				]
 			}
@@ -123,5 +122,5 @@ func TestIPv4HappyPath(t *testing.T) {
 
 	assert.Equal(t, ipamConf.IPV4Gateway, net.ParseIP("10.0.0.8"), "result should be same as configured")
 	assert.Equal(t, ipamConf.IPV4Address.IP, net.ParseIP("10.0.0.2"), "result should be same as configured")
-	assert.Equal(t, ipamConf.Routes[0].Dst.String(), "192.168.2.3/32", "result should be same as configured")
+	assert.Equal(t, ipamConf.IPV4Routes[0].Dst.String(), "192.168.2.3/32", "result should be same as configured")
 }

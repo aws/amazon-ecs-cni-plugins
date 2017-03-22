@@ -1,6 +1,6 @@
 // Copyright 2017 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 //
-// Licensed under the Apache License, Version 2.0 (the "License"). You may
+// Licensed under the Apache License, Version 2.0 (the "license"). You may
 // not use this file except in compliance with the License. A copy of the
 // License is located at
 //
@@ -20,17 +20,19 @@ import (
 	"strings"
 	"time"
 
+	"github.com/aws/amazon-ecs-cni-plugins/plugins/ipam/ipstore"
 	"github.com/containernetworking/cni/pkg/ip"
 	"github.com/containernetworking/cni/pkg/types"
 	"github.com/pkg/errors"
 )
 
 const (
-	EnvDBName                = "IPAM_DB_NAME"
-	EnvBucketName            = "IPAM_BUCKET_NAME"
-	EnvIpamTimeout           = "IPAM_TIMEOUT"
+	EnvDBName                = "IPAM_DB_PATH"
+	EnvIpamTimeout           = "IPAM_DB_CONNECTION_TIMEOUT"
 	LastKnownIPKey           = "lastKnownIP"
 	GatewayValue             = "GateWay"
+	DefaultDBPath            = "/var/lib/ecs/data/ipam"
+	BucketName               = "IPAM"
 	DefaultConnectionTimeout = 5 * time.Second
 )
 
@@ -41,10 +43,7 @@ type IPAMConfig struct {
 	IPV4Subnet  types.IPNet    `json:"ipv4-subnet,omitempty"`
 	IPV4Address types.IPNet    `json:"ipv4-address,omitempty"`
 	IPV4Gateway net.IP         `json:"ipv4-gateway,omitempty"`
-	Routes      []*types.Route `json:"routes,omitempty"`
-	DB          string         `json:"db,omitempty"`
-	Bucket      string         `json:"bucket,omitempty"`
-	Timeout     string         `json:"timeout,omitempty"`
+	IPV4Routes  []*types.Route `json:"ipv4-routes,omitempty"`
 }
 
 // Conf stores the option from configuration file
@@ -58,60 +57,68 @@ type Conf struct {
 // bytes: Configuration read from os.stdin
 // args: Configuration read from environment variable "CNI_ARGS"
 func LoadIPAMConfig(bytes []byte, args string) (*IPAMConfig, string, error) {
-	conf := &Conf{}
-	if err := json.Unmarshal(bytes, &conf); err != nil {
-		return nil, "", errors.Wrapf(err, "LoadIPAMConfig config: 'failed to load netconf")
+	ipamConf := &Conf{}
+
+	if err := json.Unmarshal(bytes, &ipamConf); err != nil {
+		return nil, "", errors.Wrapf(err, "loadIPAMConfig config: 'failed to load netconf")
 	}
-	if conf.IPAM == nil {
-		return nil, "", errors.New("LoadIPAMConfig config: 'IPAM' field missing in configuration")
+	if ipamConf.IPAM == nil {
+		return nil, "", errors.New("loadIPAMConfig config: 'IPAM' field missing in configuration")
 	}
 
-	if err := types.LoadArgs(args, conf.IPAM); err != nil {
-		return nil, "", errors.Wrapf(err, "LoadIPAMConfig config: failed to parse args: %v", args)
+	if err := types.LoadArgs(args, ipamConf.IPAM); err != nil {
+		return nil, "", errors.Wrapf(err, "loadIPAMConfig config: failed to parse args: %v", args)
 	}
 
 	// subnet is required to allocate ip address
-	if conf.IPAM.IPV4Subnet.IP == nil || conf.IPAM.IPV4Subnet.Mask == nil {
-		return nil, "", errors.New("LoadIPAMConfig config: subnet is required")
+	if ipamConf.IPAM.IPV4Subnet.IP == nil || ipamConf.IPAM.IPV4Subnet.Mask == nil {
+		return nil, "", errors.New("loadIPAMConfig config: subnet is required")
 	}
-	if ones, _ := conf.IPAM.IPV4Subnet.Mask.Size(); ones > 30 {
-		return nil, "", errors.New("LoadIPAMConfig config: no available ip with mask beyond 31 in the subnet")
+	if ones, _ := ipamConf.IPAM.IPV4Subnet.Mask.Size(); ones > 30 {
+		return nil, "", errors.New("loadIPAMConfig config: no available ip with mask beyond 31 in the subnet")
 	}
 
 	// Validate the ip if specified explicitly
-	if conf.IPAM.IPV4Address.IP != nil {
-		err := verifyIPSubnet(conf.IPAM.IPV4Address.IP,
+	if ipamConf.IPAM.IPV4Address.IP != nil {
+		err := verifyIPSubnet(ipamConf.IPAM.IPV4Address.IP,
 			net.IPNet{
-				IP:   conf.IPAM.IPV4Subnet.IP,
-				Mask: conf.IPAM.IPV4Subnet.Mask})
+				IP:   ipamConf.IPAM.IPV4Subnet.IP,
+				Mask: ipamConf.IPAM.IPV4Subnet.Mask})
 		if err != nil {
 			return nil, "", err
 		}
 	}
 
 	// get the default gateway
-	if conf.IPAM.IPV4Gateway == nil {
-		conf.IPAM.IPV4Gateway = getDefaultIPV4GW(conf.IPAM.IPV4Subnet)
+	if ipamConf.IPAM.IPV4Gateway == nil {
+		ipamConf.IPAM.IPV4Gateway = getDefaultIPV4GW(ipamConf.IPAM.IPV4Subnet)
 	}
+
+	return ipamConf.IPAM, ipamConf.CNIVersion, nil
+}
+
+func LoadDBConfig() (*ipstore.Config, error) {
+	dbConf := &ipstore.Config{PersistConnection: true}
 
 	db := os.Getenv(EnvDBName)
 	if len(strings.TrimSpace(db)) == 0 {
-		return nil, "", errors.Errorf("LoadIPAMConfig config: IPAM DB path is not set")
+		db = DefaultDBPath
 	}
-	conf.IPAM.DB = db
+	dbConf.DB = db
+	dbConf.Bucket = BucketName
 
-	bucket := os.Getenv(EnvBucketName)
-	if len(strings.TrimSpace(bucket)) == 0 {
-		return nil, "", errors.Errorf("LoadIPAMConfig config: IPAM Bucket name is not set")
+	dbTimeoutStr := os.Getenv(EnvIpamTimeout)
+	if len(strings.TrimSpace(dbTimeoutStr)) == 0 {
+		dbConf.ConnectionTimeout = DefaultConnectionTimeout
+	} else {
+		duration, err := time.ParseDuration(dbTimeoutStr)
+		if err != nil {
+			return nil, errors.Errorf("loadDBConfig config: parsing timeout string failed: %v", duration)
+		}
+		dbConf.ConnectionTimeout = duration
 	}
-	conf.IPAM.Bucket = bucket
 
-	dbTimeout := os.Getenv(EnvIpamTimeout)
-	if len(strings.TrimSpace(dbTimeout)) != 0 {
-		conf.IPAM.Timeout = dbTimeout
-	}
-
-	return conf.IPAM, conf.CNIVersion, nil
+	return dbConf, nil
 }
 
 // verifyIPSubnet check if the ip is within the subnet

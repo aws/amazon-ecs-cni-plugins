@@ -14,6 +14,8 @@
 package main
 
 import (
+	"net"
+
 	"github.com/aws/amazon-ecs-cni-plugins/plugins/ipam/config"
 	"github.com/aws/amazon-ecs-cni-plugins/plugins/ipam/ipstore"
 	"github.com/aws/amazon-ecs-cni-plugins/plugins/ipam/utils"
@@ -30,24 +32,31 @@ func main() {
 // cmdAdd will return ip, gateway, routes which can be
 // used in bridge plugin to configure veth pair and bridge
 func cmdAdd(args *skel.CmdArgs) error {
-	conf, cniVersion, err := config.LoadIPAMConfig(args.StdinData, args.Args)
+	ipamConf, cniVersion, err := config.LoadIPAMConfig(args.StdinData, args.Args)
+	if err != nil {
+		return err
+	}
+
+	dbConf, err := config.LoadDBConfig()
 	if err != nil {
 		return err
 	}
 
 	// Create the ip manager
-	ipManager, err := ipstore.NewFromIPAM(conf)
+	ipManager, err := ipstore.NewIPAllocator(dbConf, net.IPNet{
+		IP:   ipamConf.IPV4Subnet.IP,
+		Mask: ipamConf.IPV4Subnet.Mask})
 	if err != nil {
 		return err
 	}
 	defer ipManager.Close()
 
-	err = utils.VerifyGateway(conf.IPV4Gateway, ipManager)
+	err = utils.VerifyGateway(ipamConf.IPV4Gateway, ipManager)
 	if err != nil {
 		return err
 	}
 
-	nextIP, err := utils.GetIPV4Address(ipManager, conf)
+	nextIP, err := utils.GetIPV4Address(ipManager, ipamConf)
 	if err != nil {
 		return err
 	}
@@ -57,40 +66,47 @@ func cmdAdd(args *skel.CmdArgs) error {
 		return err
 	}
 
-	return types.PrintResult(utils.ConstructResults(conf, *nextIP), cniVersion)
+	return types.PrintResult(utils.ConstructResults(ipamConf, *nextIP), cniVersion)
 }
 
 // cmdDel will release one ip address and update the last known ip
 func cmdDel(args *skel.CmdArgs) error {
-	conf, _, err := config.LoadIPAMConfig(args.StdinData, args.Args)
+	ipamConf, _, err := config.LoadIPAMConfig(args.StdinData, args.Args)
 	if err != nil {
 		return err
 	}
 
+	dbConf, err := config.LoadDBConfig()
+	if err != nil {
+		return err
+	}
 	// Create the ip manager
-	ipManager, err := ipstore.NewFromIPAM(conf)
+	ipManager, err := ipstore.NewIPAllocator(dbConf, net.IPNet{
+		IP:   ipamConf.IPV4Subnet.IP,
+		Mask: ipamConf.IPV4Subnet.Mask,
+	})
 	if err != nil {
 		return err
 	}
 	defer ipManager.Close()
 
-	if conf.IPV4Address.IP == nil {
+	if ipamConf.IPV4Address.IP == nil {
 		return errors.New("cmdDel main: ip address is required for deletion")
 	}
 
-	ok, err := ipManager.Exists(conf.IPV4Address.IP.String())
+	ok, err := ipManager.Exists(ipamConf.IPV4Address.IP.String())
 	if err != nil {
 		return err
 	}
 	if !ok {
-		return errors.Errorf("cmdDel main: ip %v not existed in the db", conf.IPV4Address)
+		return errors.Errorf("cmdDel main: ip %v not existed in the db", ipamConf.IPV4Address)
 	}
 
-	err = ipManager.Release(conf.IPV4Address.IP.String())
+	err = ipManager.Release(ipamConf.IPV4Address.IP.String())
 	if err != nil {
 		return err
 	}
 
 	// Update the last known ip
-	return ipManager.Update("lastKnownIP", conf.IPV4Address.IP.String())
+	return ipManager.Update("lastKnownIP", ipamConf.IPV4Address.IP.String())
 }

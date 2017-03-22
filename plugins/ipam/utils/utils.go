@@ -25,24 +25,24 @@ import (
 
 // GetIPV4Address return the ip address from configuration
 func GetIPV4Address(ipManager ipstore.IPAllocator, conf *config.IPAMConfig) (*net.IPNet, error) {
-	assignedIP := &net.IPNet{
+	assignedAddress := &net.IPNet{
 		IP:   conf.IPV4Address.IP,
 		Mask: conf.IPV4Address.Mask,
 	}
-	if assignedIP.IP != nil {
+	if assignedAddress.IP != nil {
 		// IP was specifed in the configuration
-		ok, err := ipManager.Exists(assignedIP.IP.String())
+		ok, err := ipManager.Exists(assignedAddress.IP.String())
 		if err != nil {
 			return nil, errors.Wrap(err, "getIPV4Address main: failed to read the db")
 		}
 		if ok {
-			return nil, errors.Errorf("getIPV4Address main: ip %v has already been used", assignedIP)
+			return nil, errors.Errorf("getIPV4Address main: ip %v has already been used", assignedAddress)
 		}
 
 		// Record this ip as used
-		err = ipManager.Assign(assignedIP.IP.String(), time.Now().UTC().String())
+		err = ipManager.Assign(assignedAddress.IP.String(), time.Now().UTC().String())
 		if err != nil {
-			return nil, errors.Wrapf(err, "getIPV4Address main: failed to mark this ip %v as used", assignedIP)
+			return nil, errors.Wrapf(err, "getIPV4Address main: failed to mark this ip %v as used", assignedAddress)
 		}
 	} else {
 		// Get the next ip from db based on the last used ip
@@ -64,10 +64,10 @@ func GetIPV4Address(ipManager ipstore.IPAllocator, conf *config.IPAMConfig) (*ne
 		if err != nil {
 			return nil, errors.Wrap(err, "getIPV4Address main: failed to get available ip from the db")
 		}
-		assignedIP.IP = net.ParseIP(nextIP)
-		assignedIP.Mask = conf.IPV4Subnet.Mask
+		assignedAddress.IP = net.ParseIP(nextIP)
+		assignedAddress.Mask = conf.IPV4Subnet.Mask
 	}
-	return assignedIP, nil
+	return assignedAddress, nil
 }
 
 // ConstructResults construct the struct from IPAM configuration to be used
@@ -88,7 +88,7 @@ func ConstructResults(conf *config.IPAMConfig, ipv4 net.IPNet) *current.Result {
 	}
 
 	result.IPs = []*current.IPConfig{ipConfig}
-	result.Routes = conf.Routes
+	result.Routes = conf.IPV4Routes
 
 	return result
 }
