@@ -53,19 +53,36 @@ func TestInvalidIPV4Address(t *testing.T) {
 	assert.Error(t, err, "expect error for missing IP address in the configuration")
 }
 
-// TestEmptySubnentGw tests missing both subnent and gateway will cause error
-func TestEmptySubnentGw(t *testing.T) {
+// TestIPNotINSubnet tests if the specified ip is not in the subnet
+func TestIPNotINSubnet(t *testing.T) {
 	conf := `{
 			"name": "testnet",
 			"cniVersion": "0.3.0",
 			"ipam": {
 				"type": "ipam",
+				"ipv4-gateway": "10.0.1.1",
 				"ipv4-address": "10.0.0.2/24"
 			}
 		}`
 
 	_, _, err := LoadIPAMConfig([]byte(conf), "")
-	assert.Error(t, err, "expect error for missing both subnent and gateway in configuration")
+	assert.Error(t, err, "Specified IP not in the subnet should cause error")
+}
+
+// TestEmptySubnent tests missing subnent will cause error
+func TestEmptySubnent(t *testing.T) {
+	conf := `{
+			"name": "testnet",
+			"cniVersion": "0.3.0",
+			"ipam": {
+				"type": "ipam",
+				"ipv4-gateway": "10.0.0.1",
+				"ipv4-address": "10.0.0.2/24"
+			}
+		}`
+
+	_, _, err := LoadIPAMConfig([]byte(conf), "")
+	assert.Error(t, err, "expect error for missing subnent")
 }
 
 // TestDefaultGw tests the default gateway will be given if gateway is not specified

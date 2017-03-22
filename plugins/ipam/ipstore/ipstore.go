@@ -251,6 +251,10 @@ func (manager *IPManager) Close() {
 
 // NextIP returns the next ip in the subnet
 func NextIP(ip net.IP, subnet net.IPNet) (net.IP, error) {
+	if ones, _ := subnet.Mask.Size(); ones > 30 {
+		return nil, errors.Errorf("NextIP ipstore: no available ip in the subnet: %v", subnet)
+	}
+
 	// currently only ipv4 is supported
 	ipv4 := ip.To4()
 	if ipv4 == nil {

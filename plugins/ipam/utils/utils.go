@@ -76,8 +76,9 @@ func ConstructResults(conf *config.IPAMConfig, ipv4 net.IPNet) *current.Result {
 	result := &current.Result{}
 	ipversion := "4"
 
+	// Currently only ipv4 is supported
 	if ipv4.IP.To4() == nil {
-		ipversion = "6"
+		return nil
 	}
 
 	ipConfig := &current.IPConfig{
