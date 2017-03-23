@@ -33,7 +33,7 @@ const (
 )
 
 func init() {
-	os.Setenv(config.EnvDBName, testdb)
+	os.Setenv(config.EnvDBPath, testdb)
 }
 
 func cleanup(t *testing.T) {

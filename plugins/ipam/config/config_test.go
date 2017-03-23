@@ -16,15 +16,27 @@ package config
 import (
 	"fmt"
 	"net"
+	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-// TODO
-func TestSetDBFromEnv(t *testing.T) {
+func TestDefaultDBPath(t *testing.T) {
+	os.Unsetenv(EnvDBPath)
+	conf, err := LoadDBConfig()
+	assert.NoError(t, err, "loading db config failed")
+	assert.Equal(t, DefaultDBPath, conf.DB, "the default DB path will be used if not set by IPAM_DB_PATH")
+}
 
+func TestDBPathFromEnv(t *testing.T) {
+	os.Setenv(EnvDBPath, "/tmp/test")
+	defer os.Unsetenv(EnvDBPath)
+
+	conf, err := LoadDBConfig()
+	assert.NoError(t, err, "loading db config failed")
+	assert.Equal(t, conf.DB, "/tmp/test")
 }
 
 // TestInvalidIPV4Address tests invalid IP address will cause error
