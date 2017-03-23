@@ -27,7 +27,7 @@ import (
 )
 
 const (
-	EnvDBName                = "IPAM_DB_PATH"
+	EnvDBPath                = "IPAM_DB_PATH"
 	EnvIpamTimeout           = "IPAM_DB_CONNECTION_TIMEOUT"
 	LastKnownIPKey           = "lastKnownIP"
 	GatewayValue             = "GateWay"
@@ -100,7 +100,7 @@ func LoadIPAMConfig(bytes []byte, args string) (*IPAMConfig, string, error) {
 func LoadDBConfig() (*ipstore.Config, error) {
 	dbConf := &ipstore.Config{PersistConnection: true}
 
-	db := os.Getenv(EnvDBName)
+	db := os.Getenv(EnvDBPath)
 	if len(strings.TrimSpace(db)) == 0 {
 		db = DefaultDBPath
 	}
