@@ -6,7 +6,7 @@ IPAM plugin will construct the IP, Gateway, Routes as a struct which will be use
 ```
 {
 		"ipam": {
-			"type": "ecs-ipam",
+			"type": "ipam",
 			"ipv4-address": "10.0.0.2/24",
 			"ipv4-gateway": "10.0.0.1",
 			"ipv4-subnet": "10.0.0.0/24",

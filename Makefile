@@ -10,7 +10,7 @@ get-deps:
 	go get golang.org/x/tools/cmd/goimports
 	go get github.com/tools/godep
 
-.PHONY: plugins $(LOCAL_IPAM_PLUGIN_BINARY) $(LOCAL_ENI_PLUGIN_BINARY)
+.PHONY: plugins
 plugins: $(LOCAL_ENI_PLUGIN_BINARY) $(LOCAL_IPAM_PLUGIN_BINARY)
 
 $(LOCAL_IPAM_PLUGIN_BINARY): $(SOURCE)
@@ -26,10 +26,10 @@ generate: $(SOURCES)
 	go generate -x ./pkg/... ./plugins/...
 
 .PHONY: unit-tests
-unit-tests: $(SOURCES)
+unit-test: $(SOURCES)
 	go test -v -cover -timeout 10s ./pkg/... ./plugins/...
 
-integration-tests: $(SOURCE)
+integration-test: $(SOURCE)
 	go test -v -tags integration -timeout 10s ./pkg/... ./plugins/...
 
 .PHONY: clean

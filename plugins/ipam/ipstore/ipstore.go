@@ -26,12 +26,15 @@ import (
 	"github.com/pkg/errors"
 )
 
+const (
+	maxMask = 30
+)
+
 // IPManager is responsible for managing the ip addresses using boltdb
 type IPManager struct {
 	client      store.Store
 	subnet      net.IPNet
 	lastKnownIP net.IP
-	allocated   int
 	updateLock  sync.RWMutex
 }
 
@@ -71,7 +74,6 @@ func NewIPAllocator(options *Config, subnet net.IPNet) (IPAllocator, error) {
 	return &IPManager{
 		client:      client,
 		subnet:      subnet,
-		allocated:   0,
 		lastKnownIP: subnet.IP.Mask(subnet.Mask),
 	}, nil
 }
@@ -92,10 +94,6 @@ func (manager *IPManager) GetAvailableIP(id string) (string, error) {
 	// NO. of IP address in the subnet
 	ones, bits := manager.subnet.Mask.Size()
 	total := int(math.Pow(2, float64(bits-ones)) - 1)
-
-	if manager.allocated >= total {
-		return "", errors.New("getAvailableIP ipstore: all the ip addresses are used in the subnet")
-	}
 
 	startIP := manager.lastKnownIP
 	for i := 0; i < total; i++ {
@@ -132,7 +130,7 @@ func (manager *IPManager) Get(ip string) (string, error) {
 
 	kvPair, err := manager.client.Get(ip)
 	if err != nil {
-		return "", err
+		return "", errors.Wrapf(err, "get ipstore: failed to get %v from db", kvPair)
 	}
 
 	return string(kvPair.Value), nil
@@ -163,7 +161,6 @@ func (manager *IPManager) assign(ip string, id string) error {
 	}
 
 	manager.lastKnownIP = net.ParseIP(ip)
-	manager.allocated++
 
 	return nil
 }
@@ -188,7 +185,6 @@ func (manager *IPManager) Release(ip string) error {
 		return errors.Wrap(err, "release ipstore: failed to delete the key in the db")
 	}
 
-	manager.allocated--
 	manager.lastKnownIP = net.ParseIP(ip)
 
 	return nil
@@ -226,7 +222,7 @@ func (manager *IPManager) Close() {
 
 // NextIP returns the next ip in the subnet
 func NextIP(ip net.IP, subnet net.IPNet) (net.IP, error) {
-	if ones, _ := subnet.Mask.Size(); ones > 30 {
+	if ones, _ := subnet.Mask.Size(); ones > maxMask {
 		return nil, errors.Errorf("nextIP ipstore: no available ip in the subnet: %v", subnet)
 	}
 
