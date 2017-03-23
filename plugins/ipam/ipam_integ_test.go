@@ -20,6 +20,7 @@ import (
 	"os"
 	"testing"
 
+	"github.com/aws/amazon-ecs-cni-plugins/plugins/ipam/commands"
 	"github.com/aws/amazon-ecs-cni-plugins/plugins/ipam/config"
 	"github.com/containernetworking/cni/pkg/skel"
 	"github.com/containernetworking/cni/pkg/types/current"
@@ -67,11 +68,11 @@ func TestGetExistedIP(t *testing.T) {
 	args := &skel.CmdArgs{
 		StdinData: []byte(conf),
 	}
-	err := cmdAdd(args)
+	err := commands.Add(args)
 	assert.NoError(t, err, "expect no error")
 
 	// Try to acquire the used IP
-	err = cmdAdd(args)
+	err = commands.Add(args)
 	assert.Error(t, err, "expect error for requiring used IP")
 }
 
@@ -102,7 +103,7 @@ func TestGetAvailableIPv4(t *testing.T) {
 	args := &skel.CmdArgs{
 		StdinData: []byte(conf),
 	}
-	err = cmdAdd(args)
+	err = commands.Add(args)
 	assert.NoError(t, err, "expect no error")
 	w.Close()
 
@@ -141,16 +142,16 @@ func TestDel(t *testing.T) {
 		StdinData: []byte(conf),
 	}
 
-	err := cmdDel(args)
+	err := commands.Del(args)
 	assert.Error(t, err, "release an available ip should cause error")
 
-	err = cmdAdd(args)
+	err = commands.Add(args)
 	assert.NoError(t, err, "expect no error")
 
-	err = cmdAdd(args)
+	err = commands.Add(args)
 	assert.Error(t, err, "use existed ip should cause error")
 
-	err = cmdDel(args)
+	err = commands.Del(args)
 	assert.NoError(t, err, "delete an used ip from db should succeed")
 
 	// redirect the stdout to capture the returned output
@@ -159,7 +160,7 @@ func TestDel(t *testing.T) {
 	require.NoError(t, err, "expect redirect os.stdin succeed")
 
 	os.Stdout = w
-	err = cmdAdd(args)
+	err = commands.Add(args)
 	assert.NoError(t, err, "use a released ip should success")
 
 	w.Close()

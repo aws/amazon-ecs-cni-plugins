@@ -97,6 +97,7 @@ func LoadIPAMConfig(bytes []byte, args string) (*IPAMConfig, string, error) {
 	return ipamConf.IPAM, ipamConf.CNIVersion, nil
 }
 
+// LoadDBConfig will read the configuration of db from environment variable
 func LoadDBConfig() (*ipstore.Config, error) {
 	dbConf := &ipstore.Config{PersistConnection: true}
 

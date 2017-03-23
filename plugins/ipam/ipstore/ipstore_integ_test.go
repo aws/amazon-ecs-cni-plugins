@@ -20,7 +20,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/docker/libkv/store"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -59,7 +58,6 @@ func TestAssignReleaseExistGetAvailableIP(t *testing.T) {
 	ip, err := ipManager.GetAvailableIP("id")
 	assert.NoError(t, err)
 	assert.Equal(t, ip, "169.254.172.1")
-	assert.Equal(t, 1, ipManager.allocated, "One ip address was allocated")
 
 	exist, err := ipManager.Exists("169.254.172.1")
 	assert.NoError(t, err)
@@ -67,18 +65,15 @@ func TestAssignReleaseExistGetAvailableIP(t *testing.T) {
 
 	err = ipManager.Assign("169.254.172.1", "id2")
 	assert.Error(t, err, "Assign to an used ip should casue error")
-	assert.Equal(t, 1, ipManager.allocated)
 
 	ip, err = ipManager.GetAvailableIP("id3")
 	assert.NoError(t, err)
 	assert.Equal(t, "169.254.172.2", ip, "ip should be allocated serially")
 	assert.True(t, ipManager.lastKnownIP.Equal(net.ParseIP("169.254.172.2")), "ipmanager should record the recently referenced ip")
-	assert.Equal(t, 2, ipManager.allocated)
 
 	err = ipManager.Assign("169.254.172.3", "id")
 	assert.NoError(t, err)
 	assert.True(t, ipManager.lastKnownIP.Equal(net.ParseIP("169.254.172.3")), "ipmanager should record the recently reference ip")
-	assert.Equal(t, 3, ipManager.allocated)
 
 	exist, err = ipManager.Exists("169.254.172.1")
 	assert.NoError(t, err)
@@ -95,7 +90,6 @@ func TestAssignReleaseExistGetAvailableIP(t *testing.T) {
 	err = ipManager.Release("169.254.172.1")
 	assert.NoError(t, err)
 	assert.True(t, ipManager.lastKnownIP.Equal(net.ParseIP("169.254.172.1")))
-	assert.Equal(t, 2, ipManager.allocated, "number of ip allocated should decrease by 1 after releasing one")
 
 	exist, err = ipManager.Exists("169.254.172.1")
 	assert.NoError(t, err)
@@ -104,7 +98,6 @@ func TestAssignReleaseExistGetAvailableIP(t *testing.T) {
 	err = ipManager.Assign("169.254.172.1", "id")
 	assert.NoError(t, err)
 	assert.True(t, ipManager.lastKnownIP.Equal(net.ParseIP("169.254.172.1")), "ipmanager should record the recently reference ip")
-	assert.Equal(t, 3, ipManager.allocated, "allocated one ip by Assign")
 }
 
 func TestGetExist(t *testing.T) {
@@ -112,7 +105,7 @@ func TestGetExist(t *testing.T) {
 	defer ipManager.Close()
 
 	_, err := ipManager.Get("169.254.172.0")
-	assert.Equal(t, err, store.ErrKeyNotFound, "Get an non-existed key should cause error")
+	assert.Error(t, err, "Get an non-existed key should cause error")
 
 	err = ipManager.Assign("169.254.170.0", "id1")
 	assert.NoError(t, err)

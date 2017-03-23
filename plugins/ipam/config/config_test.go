@@ -80,8 +80,8 @@ func TestIPNotINSubnet(t *testing.T) {
 	assert.Error(t, err, "Specified IP not in the subnet should cause error")
 }
 
-// TestEmptySubnent tests missing subnent will cause error
-func TestEmptySubnent(t *testing.T) {
+// TestEmptySubnet tests missing subnet will cause error
+func TestEmptySubnet(t *testing.T) {
 	conf := `{
 			"name": "testnet",
 			"cniVersion": "0.3.0",
@@ -93,11 +93,11 @@ func TestEmptySubnent(t *testing.T) {
 		}`
 
 	_, _, err := LoadIPAMConfig([]byte(conf), "")
-	assert.Error(t, err, "expect error for missing subnent")
+	assert.Error(t, err, "expect error for missing subnet")
 }
 
-// TestDefaultGw tests the default gateway will be given if gateway is not specified
-func TestDefaultGw(t *testing.T) {
+// TestDefaultGateway tests the default gateway will be given if gateway is not specified
+func TestDefaultGateway(t *testing.T) {
 	conf := `{
 			"name": "testnet",
 			"cniVersion": "0.3.0",
