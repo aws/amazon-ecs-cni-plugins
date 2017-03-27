@@ -48,7 +48,11 @@ func Add(args *skel.CmdArgs) error {
 	}
 	defer ipManager.Close()
 
-	err = verifyGateway(ipamConf.IPV4Gateway, ipManager)
+	return add(ipManager, ipamConf, cniVersion)
+}
+
+func add(ipManager ipstore.IPAllocator, ipamConf *config.IPAMConfig, cniVersion string) error {
+	err := verifyGateway(ipamConf.IPV4Gateway, ipManager)
 	if err != nil {
 		return err
 	}
@@ -62,10 +66,14 @@ func Add(args *skel.CmdArgs) error {
 	if err != nil {
 		// This error will only impact how the next ip will be find, it shouldn't cause
 		// the command to fail
-		seelog.Errorf("add commands: update the last known ip failed: %v", err)
+		seelog.Warnf("Add commands: update the last known ip failed: %v", err)
 	}
 
-	return types.PrintResult(constructResults(ipamConf, *nextIP), cniVersion)
+	result, err := constructResults(ipamConf, *nextIP)
+	if err != nil {
+		return err
+	}
+	return types.PrintResult(result, cniVersion)
 }
 
 // Del will release one ip address and update the last known ip
@@ -89,19 +97,15 @@ func Del(args *skel.CmdArgs) error {
 	}
 	defer ipManager.Close()
 
+	return del(ipManager, ipamConf)
+}
+
+func del(ipManager ipstore.IPAllocator, ipamConf *config.IPAMConfig) error {
 	if ipamConf.IPV4Address.IP == nil {
 		return errors.New("del commands: ip address is required for deletion")
 	}
 
-	ok, err := ipManager.Exists(ipamConf.IPV4Address.IP.String())
-	if err != nil {
-		return err
-	}
-	if !ok {
-		return errors.Errorf("del commands: ip %v not existed in the db", ipamConf.IPV4Address)
-	}
-
-	err = ipManager.Release(ipamConf.IPV4Address.IP.String())
+	err := ipManager.Release(ipamConf.IPV4Address.IP.String())
 	if err != nil {
 		return err
 	}
@@ -111,7 +115,7 @@ func Del(args *skel.CmdArgs) error {
 	if err != nil {
 		// This error will only impact how the next ip will be find, it shouldn't cause
 		// the command to fail
-		seelog.Errorf("del commands: update the last known ip failed: %v", err)
+		seelog.Warnf("Del commands: update the last known ip failed: %v", err)
 	}
 
 	return nil
@@ -133,23 +137,9 @@ func getIPV4Address(ipManager ipstore.IPAllocator, conf *config.IPAMConfig) (*ne
 		}
 	} else {
 		// Get the next ip from db based on the last used ip
-		startIP := conf.IPV4Subnet.IP.Mask(conf.IPV4Subnet.Mask)
-		ok, err := ipManager.Exists(config.LastKnownIPKey)
+		nextIP, err := getIPV4AddressFromDB(ipManager, conf)
 		if err != nil {
-			return nil, errors.Wrap(err, "getIPV4Address commands: failed to read the db")
-		}
-		if ok {
-			lastKnownIPStr, err := ipManager.Get(config.LastKnownIPKey)
-			if err != nil {
-				return nil, errors.Wrap(err, "getIPV4Address commands: failed to get lask known ip from the db")
-			}
-			startIP = net.ParseIP(lastKnownIPStr)
-		}
-
-		ipManager.SetLastKnownIP(startIP)
-		nextIP, err := ipManager.GetAvailableIP(time.Now().UTC().String())
-		if err != nil {
-			return nil, errors.Wrap(err, "getIPV4Address commands: failed to get available ip from the db")
+			return nil, err
 		}
 		assignedAddress.IP = net.ParseIP(nextIP)
 		assignedAddress.Mask = conf.IPV4Subnet.Mask
@@ -157,15 +147,39 @@ func getIPV4Address(ipManager ipstore.IPAllocator, conf *config.IPAMConfig) (*ne
 	return assignedAddress, nil
 }
 
+// getIPV4AddressFromDB will try to get an ipv4 address from the ipmanager
+func getIPV4AddressFromDB(ipManager ipstore.IPAllocator, conf *config.IPAMConfig) (string, error) {
+	startIP := conf.IPV4Subnet.IP.Mask(conf.IPV4Subnet.Mask)
+	ok, err := ipManager.Exists(config.LastKnownIPKey)
+	if err != nil {
+		return "", errors.Wrap(err, "getIPV4AddressFromDB commands: failed to read the db")
+	}
+	if ok {
+		lastKnownIPStr, err := ipManager.Get(config.LastKnownIPKey)
+		if err != nil {
+			return "", errors.Wrap(err, "getIPV4AddressFromDB commands: failed to get lask known ip from the db")
+		}
+		startIP = net.ParseIP(lastKnownIPStr)
+	}
+
+	ipManager.SetLastKnownIP(startIP)
+	nextIP, err := ipManager.GetAvailableIP(time.Now().UTC().String())
+	if err != nil {
+		return "", errors.Wrap(err, "getIPV4AddressFromDB commands: failed to get available ip from the db")
+	}
+
+	return nextIP, nil
+}
+
 // constructResults construct the struct from IPAM configuration to be used
 // by bridge plugin
-func constructResults(conf *config.IPAMConfig, ipv4 net.IPNet) *current.Result {
+func constructResults(conf *config.IPAMConfig, ipv4 net.IPNet) (*current.Result, error) {
 	result := &current.Result{}
 	ipversion := "4"
 
 	// Currently only ipv4 is supported
 	if ipv4.IP.To4() == nil {
-		return nil
+		return nil, errors.New("constructResults commands: invalid ipv4 address")
 	}
 
 	ipConfig := &current.IPConfig{
@@ -177,32 +191,27 @@ func constructResults(conf *config.IPAMConfig, ipv4 net.IPNet) *current.Result {
 	result.IPs = []*current.IPConfig{ipConfig}
 	result.Routes = conf.IPV4Routes
 
-	return result
+	return result, nil
 }
 
 // verifyGateway checks if this gateway address is the default gateway or used by other container
 func verifyGateway(gw net.IP, ipManager ipstore.IPAllocator) error {
-	ok, err := ipManager.Exists(gw.String())
+	// Check if gateway address has already been used and if it's used by gateway
+	value, err := ipManager.Get(gw.String())
 	if err != nil {
-		return errors.Wrap(err, "verifyGateway commands: failed to read the db")
+		return errors.Wrap(err, "verifyGateway commands: failed to get the value of gateway")
 	}
-
-	if ok {
-		// Gateway address has already been used, check if it's used by default gateway
-		value, err := ipManager.Get(gw.String())
-		if err != nil {
-			return errors.Wrap(err, "verifyGateway commands: failed to get the value of gateway")
-		}
-		if value == config.GatewayValue {
-			return nil
-		} else {
-			return errors.New("verifyGateway commands: ip of gateway has already been used")
-		}
-	} else {
+	if value == "" {
+		// Address not used, mark it as used
 		err := ipManager.Assign(gw.String(), config.GatewayValue)
 		if err != nil {
 			return errors.Wrap(err, "verifyGateway commands: failed to update gateway into the db")
 		}
+	} else if value == config.GatewayValue {
+		// Address is used by gateway
+		return nil
+	} else {
+		return errors.New("verifyGateway commands: ip of gateway has already been used")
 	}
 
 	return nil

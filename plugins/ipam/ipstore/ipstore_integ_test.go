@@ -25,7 +25,7 @@ import (
 )
 
 const (
-	subnet     = "169.254.172.0/22"
+	subnet     = "169.254.172.0/29"
 	testdb     = "/tmp/__boltdb_test"
 	testBucket = "ipmanager"
 )
@@ -59,9 +59,9 @@ func TestAssignReleaseExistGetAvailableIP(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, ip, "169.254.172.1")
 
-	exist, err := ipManager.Exists("169.254.172.1")
+	ok, err := ipManager.Exists("169.254.172.1")
 	assert.NoError(t, err)
-	assert.True(t, exist)
+	assert.True(t, ok)
 
 	err = ipManager.Assign("169.254.172.1", "id2")
 	assert.Error(t, err, "Assign to an used ip should casue error")
@@ -75,42 +75,44 @@ func TestAssignReleaseExistGetAvailableIP(t *testing.T) {
 	assert.NoError(t, err)
 	assert.True(t, ipManager.lastKnownIP.Equal(net.ParseIP("169.254.172.3")), "ipmanager should record the recently reference ip")
 
-	exist, err = ipManager.Exists("169.254.172.1")
+	ok, err = ipManager.Exists("169.254.172.1")
 	assert.NoError(t, err)
-	assert.True(t, exist, "ip has been assigned should existed in the db")
+	assert.True(t, ok, "ip has been assigned should existed in the db")
 
-	exist, err = ipManager.Exists("169.254.172.2")
+	ok, err = ipManager.Exists("169.254.172.2")
 	assert.NoError(t, err)
-	assert.True(t, exist, "ip has been assigned should existed in the db")
+	assert.True(t, ok, "ip has been assigned should existed in the db")
 
-	exist, err = ipManager.Exists("169.254.172.3")
+	ok, err = ipManager.Exists("169.254.172.3")
 	assert.NoError(t, err)
-	assert.True(t, exist, "ip has been assigned should existed in the db")
+	assert.True(t, ok, "ip has been assigned should existed in the db")
 
 	err = ipManager.Release("169.254.172.1")
 	assert.NoError(t, err)
 	assert.True(t, ipManager.lastKnownIP.Equal(net.ParseIP("169.254.172.1")))
 
-	exist, err = ipManager.Exists("169.254.172.1")
+	ok, err = ipManager.Exists("169.254.172.1")
 	assert.NoError(t, err)
-	assert.False(t, exist, "released ip address should not existed in the db")
+	assert.False(t, ok, "released ip address should not existed in the db")
 
 	err = ipManager.Assign("169.254.172.1", "id")
 	assert.NoError(t, err)
 	assert.True(t, ipManager.lastKnownIP.Equal(net.ParseIP("169.254.172.1")), "ipmanager should record the recently reference ip")
 }
 
-func TestGetExist(t *testing.T) {
+// TestGet tests the Get function
+func TestGet(t *testing.T) {
 	ipManager := setup(t)
 	defer ipManager.Close()
 
-	_, err := ipManager.Get("169.254.172.0")
-	assert.Error(t, err, "Get an non-existed key should cause error")
+	id, err := ipManager.Get("169.254.172.0")
+	assert.NoError(t, err, "Get an non-existed key should not cause error")
+	assert.Empty(t, id, "Get an non-existed key should return empty value")
 
 	err = ipManager.Assign("169.254.170.0", "id1")
 	assert.NoError(t, err)
 
-	id, err := ipManager.Get("169.254.170.0")
+	id, err = ipManager.Get("169.254.170.0")
 	assert.NoError(t, err)
 	assert.Equal(t, "id1", id)
 }

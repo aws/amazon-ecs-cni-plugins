@@ -74,24 +74,37 @@ func LoadIPAMConfig(bytes []byte, args string) (*IPAMConfig, string, error) {
 	if ipamConf.IPAM.IPV4Subnet.IP == nil || ipamConf.IPAM.IPV4Subnet.Mask == nil {
 		return nil, "", errors.New("loadIPAMConfig config: subnet is required")
 	}
-	if ones, _ := ipamConf.IPAM.IPV4Subnet.Mask.Size(); ones > 30 {
-		return nil, "", errors.New("loadIPAMConfig config: no available ip with mask beyond 31 in the subnet")
+	if ones, _ := ipamConf.IPAM.IPV4Subnet.Mask.Size(); ones > ipstore.MaxMask {
+		return nil, "", errors.New("loadIPAMConfig config: no available ip in the subnet")
+	}
+
+	// convert from types.IPNet to net.IPNet
+	subnet := net.IPNet{
+		IP:   ipamConf.IPAM.IPV4Subnet.IP,
+		Mask: ipamConf.IPAM.IPV4Subnet.Mask,
 	}
 
 	// Validate the ip if specified explicitly
 	if ipamConf.IPAM.IPV4Address.IP != nil {
-		err := verifyIPSubnet(ipamConf.IPAM.IPV4Address.IP,
-			net.IPNet{
-				IP:   ipamConf.IPAM.IPV4Subnet.IP,
-				Mask: ipamConf.IPAM.IPV4Subnet.Mask})
+		err := verifyIPSubnet(ipamConf.IPAM.IPV4Address.IP, subnet)
 		if err != nil {
 			return nil, "", err
+		}
+		if isNetworkOrBroadcast(subnet, ipamConf.IPAM.IPV4Address.IP) {
+			return nil, "", errors.Errorf("ip specified is reserved by default: %v", ipamConf.IPAM.IPV4Address)
 		}
 	}
 
 	// get the default gateway
 	if ipamConf.IPAM.IPV4Gateway == nil {
 		ipamConf.IPAM.IPV4Gateway = getDefaultIPV4GW(ipamConf.IPAM.IPV4Subnet)
+	} else {
+		if isNetworkOrBroadcast(subnet, ipamConf.IPAM.IPV4Gateway) {
+			return nil, "", errors.Errorf("gateway specified is reserved by default: %v", ipamConf.IPAM.IPV4Gateway)
+		}
+		if err := verifyIPSubnet(ipamConf.IPAM.IPV4Gateway, subnet); err != nil {
+			return nil, "", err
+		}
 	}
 
 	return ipamConf.IPAM, ipamConf.CNIVersion, nil
@@ -134,4 +147,18 @@ func verifyIPSubnet(ip net.IP, subnet net.IPNet) error {
 // getDefaultGW returns the first ip address in the subnet as the gateway
 func getDefaultIPV4GW(subnet types.IPNet) net.IP {
 	return ip.NextIP(subnet.IP)
+}
+
+// isNetworkOrBroadcast checks whether the ip is the network address or broadcast address of the subnet
+func isNetworkOrBroadcast(subnet net.IPNet, ip net.IP) bool {
+	network := subnet.IP.Mask(subnet.Mask)
+	broadcast := net.IP(make([]byte, 4))
+	for i := 0; i < 4; i++ {
+		broadcast[i] = network[i] | ^subnet.Mask[i]
+	}
+
+	if ip.Equal(network) || ip.Equal(broadcast) {
+		return true
+	}
+	return false
 }
