@@ -14,10 +14,8 @@
 package ipstore
 
 import (
-	"math"
 	"math/big"
 	"net"
-	"sync"
 	"time"
 
 	log "github.com/cihub/seelog"
@@ -27,7 +25,8 @@ import (
 )
 
 const (
-	maxMask = 30
+	// Mask size beyond 30 won't be accepted since the .0 and .255 are reserved
+	MaxMask = 30
 )
 
 // IPManager is responsible for managing the ip addresses using boltdb
@@ -35,7 +34,6 @@ type IPManager struct {
 	client      store.Store
 	subnet      net.IPNet
 	lastKnownIP net.IP
-	updateLock  sync.RWMutex
 }
 
 // Config represents the configuration for boltdb opermation where the
@@ -80,99 +78,70 @@ func NewIPAllocator(options *Config, subnet net.IPNet) (IPAllocator, error) {
 
 // SetLastKnownIP updates the record of last visited ip address
 func (manager *IPManager) SetLastKnownIP(ip net.IP) {
-	manager.updateLock.Lock()
-	defer manager.updateLock.Unlock()
-
 	manager.lastKnownIP = ip
 }
 
 // GetAvailableIP returns the next available ip address
 func (manager *IPManager) GetAvailableIP(id string) (string, error) {
-	manager.updateLock.RLock()
-	defer manager.updateLock.RUnlock()
-
-	// NO. of IP address in the subnet
-	ones, bits := manager.subnet.Mask.Size()
-	total := int(math.Pow(2, float64(bits-ones)) - 1)
-
-	startIP := manager.lastKnownIP
-	for i := 0; i < total; i++ {
-		ip, err := NextIP(startIP, manager.subnet)
+	var err error
+	nextIP := manager.lastKnownIP
+	for {
+		nextIP, err = NextIP(nextIP, manager.subnet)
 		if err != nil {
 			return "", err
 		}
-		startIP = ip
-
-		ok, err := manager.exists(ip.String())
-		if err != nil {
+		err = manager.Assign(nextIP.String(), time.Now().UTC().String())
+		if err != nil && err != store.ErrKeyExists {
 			log.Debugf("query to the db failed, err: %v", err)
 			return "", err
+		} else if err == store.ErrKeyExists {
+			// ip already be used
+		} else {
+			// assing the ip succeed
+			manager.lastKnownIP = nextIP
+			return nextIP.String(), nil
 		}
-
-		if !ok {
-			manager.lastKnownIP = ip
-
-			err = manager.assign(ip.String(), id)
-			if err != nil {
-				return "", err
-			}
-			return ip.String(), nil
+		if nextIP.Equal(manager.lastKnownIP) {
+			return "", errors.New("getAvailableIP ipstore: failed to find available ip addresses in the subnet")
 		}
 	}
-
-	return "", errors.New("getAvailableIP ipstore: failed to find available ip addresses in the subnet")
 }
 
-// Get returns the id by which the ip was used
+// Get returns the id by which the ip was used and return empty if the key not exists
 func (manager *IPManager) Get(ip string) (string, error) {
-	manager.updateLock.RLock()
-	defer manager.updateLock.RUnlock()
-
 	kvPair, err := manager.client.Get(ip)
-	if err != nil {
+	if err != nil && err != store.ErrKeyNotFound {
 		return "", errors.Wrapf(err, "get ipstore: failed to get %v from db", kvPair)
+	}
+	if err == store.ErrKeyNotFound {
+		return "", nil
 	}
 
 	return string(kvPair.Value), nil
 }
 
-// Assign marks the ip as used or return an error if the
-// ip has already been used
+// Assign marks the ip as used or return an error if the ip has already been used
 func (manager *IPManager) Assign(ip string, id string) error {
-	manager.updateLock.Lock()
-	defer manager.updateLock.Unlock()
-
-	ok, err := manager.exists(ip)
+	ok, err := manager.Exists(ip)
 	if err != nil {
 		return errors.Wrapf(err, "assign ipstore: query the db failed, err: %v", err)
 	}
 	if ok {
-		return errors.Errorf("assign ipstore: ip %v already been used", ip)
+		return store.ErrKeyExists
 	}
-	return manager.assign(ip, id)
-}
-
-// assign will insert a record into the db to indicate the ip has already
-// been used, it should be used with a lock to avoild race condtition
-func (manager *IPManager) assign(ip string, id string) error {
-	err := manager.client.Put(ip, []byte(id), nil)
+	err = manager.client.Put(ip, []byte(id), nil)
 	if err != nil {
 		return errors.Wrapf(err, "assign ipstore: failed to put the key/value into the db: %s -> %s", ip, id)
 	}
 
 	manager.lastKnownIP = net.ParseIP(ip)
-
 	return nil
 }
 
 // Release marks the ip as available or return an error if
 // the ip is avaialble already
 func (manager *IPManager) Release(ip string) error {
-	manager.updateLock.Lock()
-	defer manager.updateLock.Unlock()
-
-	ok, err := manager.exists(ip)
-
+	ok, err := manager.Exists(ip)
 	if err != nil {
 		return errors.Wrap(err, "release ipstore: failed to query the db")
 	}
@@ -192,27 +161,17 @@ func (manager *IPManager) Release(ip string) error {
 
 // Update updates the value of existed key in the db
 func (manager *IPManager) Update(key string, value string) error {
-	manager.updateLock.Lock()
-	defer manager.updateLock.Unlock()
-
 	return manager.client.Put(key, []byte(value), nil)
 }
 
 // Exists checks whether the ip is used or not
 func (manager *IPManager) Exists(ip string) (bool, error) {
-	manager.updateLock.RLock()
-	defer manager.updateLock.RUnlock()
-
-	return manager.exists(ip)
-}
-
-func (manager *IPManager) exists(ip string) (bool, error) {
-	exist, err := manager.client.Exists(ip)
+	ok, err := manager.client.Exists(ip)
 	if err == store.ErrKeyNotFound {
 		return false, nil
 	}
 
-	return exist, err
+	return ok, err
 }
 
 // Close will close the connection to the db
@@ -222,7 +181,7 @@ func (manager *IPManager) Close() {
 
 // NextIP returns the next ip in the subnet
 func NextIP(ip net.IP, subnet net.IPNet) (net.IP, error) {
-	if ones, _ := subnet.Mask.Size(); ones > maxMask {
+	if ones, _ := subnet.Mask.Size(); ones > MaxMask {
 		return nil, errors.Errorf("nextIP ipstore: no available ip in the subnet: %v", subnet)
 	}
 

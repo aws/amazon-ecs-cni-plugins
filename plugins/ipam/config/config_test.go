@@ -71,13 +71,99 @@ func TestIPNotINSubnet(t *testing.T) {
 			"cniVersion": "0.3.0",
 			"ipam": {
 				"type": "ipam",
-				"ipv4-gateway": "10.0.1.1",
-				"ipv4-address": "10.0.0.2/24"
+				"ipv4-gateway": "10.0.0.1",
+				"ipv4-subnet": '10.0.0.0/24'
+				"ipv4-address": "10.0.1.2/24"
 			}
 		}`
 
 	_, _, err := LoadIPAMConfig([]byte(conf), "")
 	assert.Error(t, err, "Specified IP not in the subnet should cause error")
+}
+
+// TestGatewayNotINSubnet tests if the specified ip is not in the subnet
+func TestGatewayNotINSubnet(t *testing.T) {
+	conf := `{
+			"name": "testnet",
+			"cniVersion": "0.3.0",
+			"ipam": {
+				"type": "ipam",
+				"ipv4-gateway": "10.0.1.1",
+				"ipv4-subnet": '10.0.0.0/24'
+				"ipv4-address": "10.0.0.2/24"
+			}
+		}`
+
+	_, _, err := LoadIPAMConfig([]byte(conf), "")
+	assert.Error(t, err, "Specified gateway not in the subnet should cause error")
+}
+
+// TestIPIsNetworkAddress tests use network address should cause error
+func TestIPIsNetworkAddress(t *testing.T) {
+	conf := `{
+			"name": "testnet",
+			"cniVersion": "0.3.0",
+			"ipam": {
+				"type": "ipam",
+				"ipv4-gateway": "10.0.0.1",
+				"ipv4-subnet": "10.0.0.0/24",
+				"ipv4-address": "10.0.0.0/24"
+			}
+		}`
+
+	_, _, err := LoadIPAMConfig([]byte(conf), "")
+	assert.Error(t, err, "Specified IP is the network address should cause error")
+}
+
+// TestIPIsBroadcastAddress tests use broadcast address should cause error
+func TestIPIsBroadcastAddress(t *testing.T) {
+	conf := `{
+			"name": "testnet",
+			"cniVersion": "0.3.0",
+			"ipam": {
+				"type": "ipam",
+				"ipv4-gateway": "10.0.0.1",
+				"ipv4-subnet": "10.0.0.0/24",
+				"ipv4-address": "10.0.0.255/24"
+			}
+		}`
+
+	_, _, err := LoadIPAMConfig([]byte(conf), "")
+	assert.Error(t, err, "Specified IP is the broadcast address should cause error")
+}
+
+// TestGWIsNetworkAddress tests use network address should cause error
+func TestGWIsNetworkAddress(t *testing.T) {
+	conf := `{
+			"name": "testnet",
+			"cniVersion": "0.3.0",
+			"ipam": {
+				"type": "ipam",
+				"ipv4-gateway": "10.0.0.0",
+				"ipv4-subnet": "10.0.0.0/24",
+				"ipv4-address": "10.0.0.2/24"
+			}
+		}`
+
+	_, _, err := LoadIPAMConfig([]byte(conf), "")
+	assert.Error(t, err, "Specified gateway is the broadcast address should cause error")
+}
+
+// TestGWIsBroadcastAddress tests use broadcast address should cause error
+func TestGWIsBroadcastAddress(t *testing.T) {
+	conf := `{
+			"name": "testnet",
+			"cniVersion": "0.3.0",
+			"ipam": {
+				"type": "ipam",
+				"ipv4-gateway": "10.0.1.255",
+				"ipv4-subnet": "10.0.0.0/24",
+				"ipv4-address": "10.0.0.2/24"
+			}
+		}`
+
+	_, _, err := LoadIPAMConfig([]byte(conf), "")
+	assert.Error(t, err, "Specified gateway is the broadcast address should cause error")
 }
 
 // TestEmptySubnet tests missing subnet will cause error
@@ -135,4 +221,18 @@ func TestIPv4HappyPath(t *testing.T) {
 	assert.Equal(t, ipamConf.IPV4Gateway, net.ParseIP("10.0.0.8"), "result should be same as configured")
 	assert.Equal(t, ipamConf.IPV4Address.IP, net.ParseIP("10.0.0.2"), "result should be same as configured")
 	assert.Equal(t, ipamConf.IPV4Routes[0].Dst.String(), "192.168.2.3/32", "result should be same as configured")
+}
+
+func TestIsNetwokOrBroadcast(t *testing.T) {
+	_, subnet, err := net.ParseCIDR("10.0.0.2/29")
+	assert.NoError(t, err)
+
+	result := isNetworkOrBroadcast(*subnet, net.ParseIP("10.0.0.0"))
+	assert.True(t, result, "all 0 should be the network address of subnet")
+
+	result = isNetworkOrBroadcast(*subnet, net.ParseIP("10.0.0.2"))
+	assert.False(t, result, "regular ip is not broadcast or network address")
+
+	result = isNetworkOrBroadcast(*subnet, net.ParseIP("10.0.0.7"))
+	assert.True(t, result, "all 1 should be the broadcast address of subnet")
 }

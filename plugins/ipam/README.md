@@ -2,78 +2,95 @@
 
 ## Overview
 
-IPAM plugin will construct the IP, Gateway, Routes as a struct which will be used by the bridge plugin to configure the bridge and veth pair in container network namespace. Example of this configuration looks like:
-```
+The IPAM plugin will construct the IP, Gateway, Routes as a struct which will be
+used by the bridge plugin to configure the bridge and veth pair in the container
+network namespace. An example of this configuration looks like:
+```json
 {
-		"ipam": {
-			"type": "ipam",
-			"ipv4-address": "10.0.0.2/24",
-			"ipv4-gateway": "10.0.0.1",
-			"ipv4-subnet": "10.0.0.0/24",
-			"ipv4-routes": [
-				{"dst": "169.254.170.2/32"},
-				{"dst": "169.254.170.0/20", "gw": "10.0.0.1"}
-			]
-		}
+    "ipam": {
+       "type": "ipam",
+        "ipv4-address": "10.0.0.2/24",
+        "ipv4-gateway": "10.0.0.1",
+        "ipv4-subnet": "10.0.0.0/24",
+        "ipv4-routes": [
+            {"dst": "169.254.170.2/32"},
+            {"dst": "169.254.170.0/20", "gw": "10.0.0.1"}
+        ]
+    }
 }
 ```
 ## Parameter
-* `ipv4-address` (string, optional): ipv4 address of the veth inside the container network namespace.
-* `ipv4-routes` (string, optional): list of routes to add to the container network namespace. Each route is a dictionary with "dst" and optional "gw" fields. If "gw" is omitted, value of "gateway" will be used.
-* `ipv4-gateway` (string, optional): IP inside of "subnet" to designate as the gateway. Defaults to ".1" IP inside of the "subnet" block.
-* `ipv4-subnet` (string, required): CIDR block to allocate out of.
+* `ipv4-address` (string, optional): ipv4 address of the veth inside the
+container network namespace.
+* `ipv4-routes` (string, optional): list of routes to add to the container network
+namespace. Each route is a dictionary with "dst" and optional "gw" fields. 
+If "gw" is omitted, value of "gateway" will be used.
+* `ipv4-gateway` (string, optional): IP inside of "subnet" to designate as the
+gateway. Defaults to ".1" IP inside of the "subnet" block.
+* `ipv4-subnet` (string, required): CIDR block for allocations.
 
 ## Environment variable
 * `IPAM_DB_PATH` (string, optional): path of the boltdb file.
-* `IPAM_DB_CONNECTION_TIMEOUT` (string, optional): timeout for the connection to the boltdb.
+* `IPAM_DB_CONNECTION_TIMEOUT` (string, optional): timeout for the connection
+to the boltdb.
 
 ## Example
-Before running the command you should set up the environment variable `CNI_CONTAINERID`, `CNI_NETNS`, `CNI_PATH` and `CNI_IFNAME` to any value, which is required for other plugin.
+Before running the command you should set up these environment variable:
+* `CNI_COMMAND`: Command to execute eg: ADD.
+* `CNI_PATH`: Plugin binary path eg: `pwd`/bin.
+* `CNI_IFNAME`: Interface name inside the container, this is only required for
+bridge plugin, but is hard coded in skel package which we consume, so for use
+ipam plugin separately, it should be set but won't be used.
+Ref: https://github.com/containernetworking/cni/blob/v0.5.1/pkg/skel/skel.go#L53
 ### Add:
 ```
-export CNI_COMMAND=ADD && cat /etc/cni/net.d/mynet.conf | ../bin/ipam
+export CNI_COMMAND=ADD && cat mynet.conf | ../bin/ipam
 ```
 
 ### Del:
 ```
-export CNI_COMMAND=DEL && cat /etc/cni/net.d/mynet.conf | ../bin/ipam
+export CNI_COMMAND=DEL && cat mynet.conf | ../bin/ipam
 ```
 
-Then you can use the following program to check the content of the db:
+`mynet.conf` is the configuration file for the plugin, it's the same as descriped
+in the overview above.
+
+Then you can use the following program to check the content of the db, be sure
+to change the boltdb path and bucket name:
 ```golang
 package main
 
 import (
-	"fmt"
-	"github.com/docker/libkv"
-	"github.com/docker/libkv/store"
-	"github.com/libkv/store/boltdb"
-	"time"
+    "fmt"
+    "github.com/docker/libkv"
+    "github.com/docker/libkv/store"
+    "github.com/libkv/store/boltdb"
+    "time"
 )
 
 func init() {
-	boltdb.Register()
+    boltdb.Register()
 }
 
 func main() {
-	db := "/home/ec2-user/db"
-	bucket := "bucket"
+    db := "${BOLTDB_PATH}"
+    bucket := "${BUCKET_NAME}"
 
-	kv, err := libkv.NewStore(
-		store.BOLTDB,
-		[]string{db},
-		&store.Config{
-			Bucket:            bucket,
-			ConnectionTimeout: 10 * time.Second,
-		},
-	)
-	if err != nil {
-		fmt.Printf("Creating db failed: %v\n", err)
-	}
+    kv, err := libkv.NewStore(
+        store.BOLTDB,
+        []string{db},
+        &store.Config{
+            Bucket:            bucket,
+            ConnectionTimeout: 10 * time.Second,
+        },
+    )
+    if err != nil {
+        fmt.Printf("Creating db failed: %v\n", err)
+    }
 
-	entries, err := kv.List("1")
-	for _, pair := range entries {
-		fmt.Printf("key=%v - value=%v\n", pair.Key, string(pair.Value))
-	}
+    entries, err := kv.List("1")
+    for _, pair := range entries {
+        fmt.Printf("key=%v - value=%v\n", pair.Key, string(pair.Value))
+    }
 }
 ```

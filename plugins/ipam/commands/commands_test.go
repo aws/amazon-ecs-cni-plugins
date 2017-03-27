@@ -125,12 +125,23 @@ func TestGWUsed(t *testing.T) {
 	gw := "10.0.0.1"
 
 	gomock.InOrder(
-		allocator.EXPECT().Exists(gw).Return(true, nil),
 		allocator.EXPECT().Get(gw).Return(config.GatewayValue, nil),
 	)
 
 	err := verifyGateway(net.ParseIP("10.0.0.1"), allocator)
 	assert.NoError(t, err, "gateway can be used by multiple containers")
+}
+
+// TestGWUsedByContainer tests the gateway address used by container should cause error
+func TestGWUsedByContainer(t *testing.T) {
+	_, allocator := setup("10.0.0.0/29", "", "10.0.0.2/29", t)
+
+	gomock.InOrder(
+		allocator.EXPECT().Get("10.0.0.2").Return("not gateway", nil),
+	)
+
+	err := verifyGateway(net.ParseIP("10.0.0.2"), allocator)
+	assert.Error(t, err, "gateway used by container should fail the command")
 }
 
 func TestConstructResult(t *testing.T) {
@@ -143,7 +154,8 @@ func TestConstructResult(t *testing.T) {
 		Mask: tsub.Mask,
 	}
 
-	result := constructResults(conf, ip)
+	result, err := constructResults(conf, ip)
+	assert.NoError(t, err)
 	assert.NotNil(t, result, "Construct result for bridge plugin failed")
 	assert.Equal(t, 1, len(result.IPs), "Only one ip should be assigned each time")
 }
@@ -158,6 +170,66 @@ func TestConstructResultErrorForIPV6(t *testing.T) {
 		Mask: tsub.Mask,
 	}
 
-	result := constructResults(conf, ip)
-	assert.Nil(t, result, "currently ipv6 is not support")
+	_, err = constructResults(conf, ip)
+	assert.Error(t, err, "currently ipv6 is not support")
+}
+
+func TestAddExistedIP(t *testing.T) {
+	conf, allocator := setup("10.0.0.0/29", "10.0.0.3/29", "10.0.0.1", t)
+
+	gomock.InOrder(
+		allocator.EXPECT().Get(conf.IPV4Gateway.String()).Return(config.GatewayValue, nil),
+		allocator.EXPECT().Assign(conf.IPV4Address.IP.String(), gomock.Any()).Return(errors.New("ip already been used")),
+	)
+
+	err := add(allocator, conf, "0.3.0")
+	assert.Error(t, err, "assign used ip should cause ADD fail")
+}
+
+func TestAddConstructResultError(t *testing.T) {
+	conf, allocator := setup("10.0.0.0/29", "2001:db8::2:1/60", "10.0.0.1", t)
+
+	gomock.InOrder(
+		allocator.EXPECT().Get(conf.IPV4Gateway.String()).Return(config.GatewayValue, nil),
+		allocator.EXPECT().Assign(conf.IPV4Address.IP.String(), gomock.Any()).Return(nil),
+		allocator.EXPECT().Update(config.LastKnownIPKey, conf.IPV4Address.IP.String()).Return(nil),
+	)
+	err := add(allocator, conf, "0.3.0")
+	assert.Error(t, err, "assign used ip should cause ADD fail")
+}
+
+// TestPrintResultError tests the types.Print error cause command fail
+func TestPrintResultError(t *testing.T) {
+	conf, allocator := setup("10.0.0.0/29", "10.0.0.2/29", "10.0.0.1", t)
+
+	gomock.InOrder(
+		allocator.EXPECT().Get(conf.IPV4Gateway.String()).Return(config.GatewayValue, nil),
+		allocator.EXPECT().Assign(conf.IPV4Address.IP.String(), gomock.Any()).Return(nil),
+		allocator.EXPECT().Update(config.LastKnownIPKey, conf.IPV4Address.IP.String()).Return(nil),
+	)
+	err := add(allocator, conf, "invalid")
+	assert.Error(t, err, "invalid cni version should cause ADD fail")
+}
+
+func TestUpdateFail(t *testing.T) {
+	conf, allocator := setup("10.0.0.0/29", "10.0.0.2/29", "", t)
+
+	gomock.InOrder(
+		allocator.EXPECT().Release("10.0.0.2").Return(nil),
+		allocator.EXPECT().Update(config.LastKnownIPKey, conf.IPV4Address.IP.String()).Return(errors.New("update fail")),
+	)
+
+	err := del(allocator, conf)
+	assert.NoError(t, err, "Update the last known IP should not cause the DEL fail")
+}
+
+func TestDelReleaseError(t *testing.T) {
+	conf, allocator := setup("10.0.0.0/29", "10.0.0.2/29", "", t)
+
+	gomock.InOrder(
+		allocator.EXPECT().Release("10.0.0.2").Return(errors.New("failed to query the db")),
+	)
+
+	err := del(allocator, conf)
+	assert.Error(t, err, "Release the ip from db failed should cause the DEL fail")
 }
