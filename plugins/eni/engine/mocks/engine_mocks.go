@@ -52,6 +52,17 @@ func (_mr *_MockEngineRecorder) DoesMACAddressMapToIPV4Address(arg0, arg1 interf
 	return _mr.mock.ctrl.RecordCall(_mr.mock, "DoesMACAddressMapToIPV4Address", arg0, arg1)
 }
 
+func (_m *MockEngine) DoesMACAddressMapToIPV6Address(_param0 string, _param1 string) (bool, error) {
+	ret := _m.ctrl.Call(_m, "DoesMACAddressMapToIPV6Address", _param0, _param1)
+	ret0, _ := ret[0].(bool)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+func (_mr *_MockEngineRecorder) DoesMACAddressMapToIPV6Address(arg0, arg1 interface{}) *gomock.Call {
+	return _mr.mock.ctrl.RecordCall(_mr.mock, "DoesMACAddressMapToIPV6Address", arg0, arg1)
+}
+
 func (_m *MockEngine) GetAllMACAddresses() ([]string, error) {
 	ret := _m.ctrl.Call(_m, "GetAllMACAddresses")
 	ret0, _ := ret[0].([]string)
@@ -73,6 +84,17 @@ func (_m *MockEngine) GetIPV4GatewayNetmask(_param0 string) (string, string, err
 
 func (_mr *_MockEngineRecorder) GetIPV4GatewayNetmask(arg0 interface{}) *gomock.Call {
 	return _mr.mock.ctrl.RecordCall(_mr.mock, "GetIPV4GatewayNetmask", arg0)
+}
+
+func (_m *MockEngine) GetIPV6Netmask(_param0 string) (string, error) {
+	ret := _m.ctrl.Call(_m, "GetIPV6Netmask", _param0)
+	ret0, _ := ret[0].(string)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+func (_mr *_MockEngineRecorder) GetIPV6Netmask(arg0 interface{}) *gomock.Call {
+	return _mr.mock.ctrl.RecordCall(_mr.mock, "GetIPV6Netmask", arg0)
 }
 
 func (_m *MockEngine) GetInterfaceDeviceName(_param0 string) (string, error) {
@@ -117,12 +139,12 @@ func (_mr *_MockEngineRecorder) SetupContainerNamespace(arg0, arg1, arg2, arg3 i
 	return _mr.mock.ctrl.RecordCall(_mr.mock, "SetupContainerNamespace", arg0, arg1, arg2, arg3)
 }
 
-func (_m *MockEngine) TeardownContainerNamespace(_param0 string, _param1 string) error {
-	ret := _m.ctrl.Call(_m, "TeardownContainerNamespace", _param0, _param1)
+func (_m *MockEngine) TeardownContainerNamespace(_param0 string, _param1 string, _param2 bool) error {
+	ret := _m.ctrl.Call(_m, "TeardownContainerNamespace", _param0, _param1, _param2)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
-func (_mr *_MockEngineRecorder) TeardownContainerNamespace(arg0, arg1 interface{}) *gomock.Call {
-	return _mr.mock.ctrl.RecordCall(_mr.mock, "TeardownContainerNamespace", arg0, arg1)
+func (_mr *_MockEngineRecorder) TeardownContainerNamespace(arg0, arg1, arg2 interface{}) *gomock.Call {
+	return _mr.mock.ctrl.RecordCall(_mr.mock, "TeardownContainerNamespace", arg0, arg1, arg2)
 }
