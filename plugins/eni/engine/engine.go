@@ -33,6 +33,8 @@ const (
 	metadataNetworkInterfaceIDPathSuffix        = "interface-id"
 	metadataNetworkInterfaceIPV4CIDRPathSuffix  = "/subnet-ipv4-cidr-block"
 	metadataNetworkInterfaceIPV4AddressesSuffix = "/local-ipv4s"
+	metadataNetworkInterfaceIPV6AddressesSuffix = "/ipv6s"
+	metadataNetworkInterfaceIPV6CIDRPathSuffix  = "/subnet-ipv6-cidr-blocks"
 )
 
 // Engine represents the execution engine for the ENI plugin. It defines all the
@@ -42,10 +44,12 @@ type Engine interface {
 	GetMACAddressOfENI(macAddresses []string, eniID string) (string, error)
 	GetInterfaceDeviceName(macAddress string) (string, error)
 	GetIPV4GatewayNetmask(macAddress string) (string, string, error)
+	GetIPV6Netmask(macAddress string) (string, error)
 	DoesMACAddressMapToIPV4Address(macAddress string, ipv4Address string) (bool, error)
-	SetupContainerNamespace(netns string, deviceName string, ipv4Address string, netmask string) error
+	DoesMACAddressMapToIPV6Address(macAddress string, ipv4Address string) (bool, error)
+	SetupContainerNamespace(netns string, deviceName string, ipv4Address string, ipv6Address string) error
 	IsDHClientInPath() bool
-	TeardownContainerNamespace(netns string, macAddress string) error
+	TeardownContainerNamespace(netns string, macAddress string, stopDHClient6 bool) error
 }
 
 type engine struct {
@@ -160,22 +164,69 @@ func getIPV4GatewayNetmask(cidrBlock string) (string, string, error) {
 			fmt.Sprintf("unable to parse ipv4 gateway from cidr block '%s'", cidrBlock))
 	}
 
+	// ipv4 gateway is the first available IP address in the subnet
 	ip4[3] = ip4[3] + 1
 	maskOnes, _ := ipNet.Mask.Size()
 	return ip4.String(), fmt.Sprintf("%d", maskOnes), nil
 }
 
+// GetIPV6GatewayNetmask gets the ipv6 subnet mask from the instance
+// metadata, given a mac address
+func (engine *engine) GetIPV6Netmask(macAddress string) (string, error) {
+	// TODO Use fmt.Sprintf and wrap that in a method
+	cidrBlock, err := engine.metadata.GetMetadata(metadataNetworkInterfacesPath + macAddress + metadataNetworkInterfaceIPV6CIDRPathSuffix)
+	if err != nil {
+		return "", errors.Wrapf(err,
+			"getIPV6Netmask engine: unable to get ipv6 subnet and cidr block for '%s' from instance metadata", macAddress)
+	}
+
+	return getIPV6Netmask(cidrBlock)
+}
+
+func getIPV6Netmask(cidrBlock string) (string, error) {
+	// The IPV6 CIDR block is of the format ip-addr/netmask
+	_, ipNet, err := net.ParseCIDR(cidrBlock)
+	if err != nil {
+		return "", errors.Wrapf(err,
+			"getIPV6Netmask engine: unable to parse response for ipv6 cidr: '%s' from instance metadata", cidrBlock)
+	}
+
+	maskOnes, _ := ipNet.Mask.Size()
+	return fmt.Sprintf("%d", maskOnes), nil
+}
+
 // DoesMACAddressMapToIPV4Address validates in the MAC Address for the ENI maps to the
 // IPV4 Address specified
 func (engine *engine) DoesMACAddressMapToIPV4Address(macAddress string, ipv4Address string) (bool, error) {
-	// TODO Use fmt.Sprintf and wrap that in a method
-	addressesResponse, err := engine.metadata.GetMetadata(metadataNetworkInterfacesPath + macAddress + metadataNetworkInterfaceIPV4AddressesSuffix)
+	ok, err := engine.doesMACAddressMapToIPAddress(macAddress, ipv4Address, metadataNetworkInterfaceIPV4AddressesSuffix)
 	if err != nil {
 		return false, errors.Wrap(err,
 			"doesMACAddressMapToIPV4Address engine: unable to get ipv4 addresses from instance metadata")
 	}
+
+	return ok, nil
+}
+
+// DoesMACAddressMapToIPV6Address validates in the MAC Address for the ENI maps to the
+// IPV6 Address specified
+func (engine *engine) DoesMACAddressMapToIPV6Address(macAddress string, ipv6Address string) (bool, error) {
+	ok, err := engine.doesMACAddressMapToIPAddress(macAddress, ipv6Address, metadataNetworkInterfaceIPV6AddressesSuffix)
+	if err != nil {
+		return false, errors.Wrap(err,
+			"doesMACAddressMapToIPv6Address engine: unable to get ipv6 addresses from instance metadata")
+	}
+
+	return ok, nil
+}
+
+func (engine *engine) doesMACAddressMapToIPAddress(macAddress string, addressToFind string, metatdataPathSuffix string) (bool, error) {
+	// TODO Use fmt.Sprintf and wrap that in a method
+	addressesResponse, err := engine.metadata.GetMetadata(metadataNetworkInterfacesPath + macAddress + metatdataPathSuffix)
+	if err != nil {
+		return false, err
+	}
 	for _, address := range strings.Split(addressesResponse, "\n") {
-		if address == ipv4Address {
+		if address == addressToFind {
 			return true, nil
 		}
 	}
@@ -183,8 +234,9 @@ func (engine *engine) DoesMACAddressMapToIPV4Address(macAddress string, ipv4Addr
 }
 
 // SetupContainerNamespace configures the network namespace of the container with
-// the ipv4 address and routes to use the ENI interface
-func (engine *engine) SetupContainerNamespace(netns string, deviceName string, ipv4Address string, netmask string) error {
+// the ipv4 address and routes to use the ENI interface. The ipv4 address is of the
+// ipv4-address/netmask format
+func (engine *engine) SetupContainerNamespace(netns string, deviceName string, ipv4Address string, ipv6Address string) error {
 	// Get the device link for the ENI
 	eniLink, err := engine.netLink.LinkByName(deviceName)
 	if err != nil {
@@ -207,7 +259,7 @@ func (engine *engine) SetupContainerNamespace(netns string, deviceName string, i
 	}
 
 	// Generate the closure to execute within the container's namespace
-	toRun, err := newSetupNamespaceClosure(engine.netLink, engine.exec, deviceName, ipv4Address, netmask)
+	toRun, err := newSetupNamespaceClosure(engine.netLink, engine.exec, deviceName, ipv4Address, ipv6Address)
 	if err != nil {
 		return errors.Wrap(err,
 			"setupContainerNamespace engine: unable to create closure to execute in container namespace")
@@ -223,9 +275,9 @@ func (engine *engine) SetupContainerNamespace(netns string, deviceName string, i
 }
 
 // TeardownContainerNamespace brings down the ENI device in the container's namespace
-func (engine *engine) TeardownContainerNamespace(netns string, macAddress string) error {
+func (engine *engine) TeardownContainerNamespace(netns string, macAddress string, stopDHClient6 bool) error {
 	// Generate the closure to execute within the container's namespace
-	toRun, err := newTeardownNamespaceClosure(engine.netLink, engine.ioutil, engine.os, macAddress)
+	toRun, err := newTeardownNamespaceClosure(engine.netLink, engine.ioutil, engine.os, macAddress, stopDHClient6)
 	if err != nil {
 		return errors.Wrap(err,
 			"teardownContainerNamespace engine: unable to create closure to execute in container namespace")
