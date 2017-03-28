@@ -14,7 +14,6 @@
 package engine
 
 import (
-	"fmt"
 	"net"
 	"strconv"
 	"strings"
@@ -36,9 +35,11 @@ const (
 	// Example: /var/lib/dhclient/ns/ and /var/run/ns/
 	// It's more helpful when debugging to have it set that way. We
 	// expect the Agent to create those directories. We can also let
-	// these be conigured via the plugin config.
-	dhclientV4LeaseFilePathPrefix    = "/var/lib/dhclient/ns-dhclient"
-	dhclientV4LeasePIDFilePathPrefix = "/var/run/ns-dhclient"
+	// these be configured via the plugin config.
+	dhclientV4LeaseFilePathPrefix    = "/var/lib/dhclient/ns-dhclient4"
+	dhclientV4LeasePIDFilePathPrefix = "/var/run/ns-dhclient4"
+	dhclientV6LeaseFilePathPrefix    = "/var/lib/dhclient/ns-dhclient6"
+	dhclientV6LeasePIDFilePathPrefix = "/var/run/ns-dhclient6"
 )
 
 var linkWithMACNotFoundError = errors.Errorf("engine: device with mac address not found")
@@ -49,44 +50,56 @@ type setupNamespaceClosure struct {
 	exec       execwrapper.Exec
 	deviceName string
 	ipv4Addr   *netlink.Addr
+	ipv6Addr   *netlink.Addr
 }
 
 // teardownNamespaceClosure wraps the parameters and the method to teardown the
 // container's namespace
 type teardownNamespaceClosure struct {
-	netLink      netlinkwrapper.NetLink
-	ioutil       ioutilwrapper.IOUtil
-	os           oswrapper.OS
-	hardwareAddr net.HardwareAddr
+	netLink       netlinkwrapper.NetLink
+	ioutil        ioutilwrapper.IOUtil
+	os            oswrapper.OS
+	hardwareAddr  net.HardwareAddr
+	stopDHClient6 bool
 }
 
 // newSetupNamespaceClosure creates a new setupNamespaceClosure object
-func newSetupNamespaceClosure(netLink netlinkwrapper.NetLink, exec execwrapper.Exec, deviceName string, ipv4Address string, netmask string) (*setupNamespaceClosure, error) {
-	addr, err := netLink.ParseAddr(fmt.Sprintf("%s/%s", ipv4Address, netmask))
+func newSetupNamespaceClosure(netLink netlinkwrapper.NetLink, exec execwrapper.Exec, deviceName string, ipv4Address string, ipv6Address string) (*setupNamespaceClosure, error) {
+	nlIPV4Addr, err := netLink.ParseAddr(ipv4Address)
 	if err != nil {
-		return nil, errors.Wrap(err, "setupNamespaceClosure engine: unable to ipv4 address for the interface")
+		return nil, errors.Wrap(err, "setupNamespaceClosure engine: unable to parse ipv4 address for the interface")
 	}
 
-	return &setupNamespaceClosure{
+	nsClosure := &setupNamespaceClosure{
 		netLink:    netLink,
 		exec:       exec,
 		deviceName: deviceName,
-		ipv4Addr:   addr,
-	}, nil
+		ipv4Addr:   nlIPV4Addr,
+	}
+	if ipv6Address != "" {
+		nlIPV6Addr, err := netLink.ParseAddr(ipv6Address)
+		if err != nil {
+			return nil, errors.Wrap(err, "setupNamespaceClosure engine: unable to parse ipv6 address for the interface")
+		}
+		nsClosure.ipv6Addr = nlIPV6Addr
+	}
+
+	return nsClosure, nil
 }
 
 // newTeardownNamespaceClosure creates a new teardownNamespaceClosure object
-func newTeardownNamespaceClosure(netLink netlinkwrapper.NetLink, ioutil ioutilwrapper.IOUtil, os oswrapper.OS, mac string) (*teardownNamespaceClosure, error) {
+func newTeardownNamespaceClosure(netLink netlinkwrapper.NetLink, ioutil ioutilwrapper.IOUtil, os oswrapper.OS, mac string, stopDHClient6 bool) (*teardownNamespaceClosure, error) {
 	hardwareAddr, err := net.ParseMAC(mac)
 	if err != nil {
 		return nil, errors.Wrapf(err, "newTeardownNamespaceClosure engine: malformatted mac address specified")
 	}
 
 	return &teardownNamespaceClosure{
-		netLink:      netLink,
-		ioutil:       ioutil,
-		os:           os,
-		hardwareAddr: hardwareAddr,
+		netLink:       netLink,
+		ioutil:        ioutil,
+		os:            os,
+		hardwareAddr:  hardwareAddr,
+		stopDHClient6: stopDHClient6,
 	}, nil
 }
 
@@ -106,13 +119,35 @@ func (closure *setupNamespaceClosure) run(_ ns.NetNS) error {
 		return errors.Wrap(err, "setupNamespaceClosure engine: unable to add ipv4 address to the interface")
 	}
 
+	if closure.ipv6Addr != nil {
+		// Add the IPV6 Address to the link
+		err = closure.netLink.AddrAdd(eniLink, closure.ipv6Addr)
+		if err != nil {
+			return errors.Wrap(err, "setupNamespaceClosure engine: unable to add ipv6 address to the interface")
+		}
+	}
+
 	// Bring it up
 	err = closure.netLink.LinkSetUp(eniLink)
 	if err != nil {
 		return errors.Wrap(err, "setupNamespaceClosure engine: unable to bring up the device")
 	}
 
-	return closure.startDHClientV4()
+	// Start dhclient for IPV4 address
+	err = closure.startDHClientV4()
+	if err != nil {
+		return err
+	}
+
+	if closure.ipv6Addr != nil {
+		// Start dhclient for IPV6 address
+		err = closure.startDHClientV6()
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 // startDHClientV4 starts the dhclient with arguments to renew the lease on the IPV4 address
@@ -124,7 +159,8 @@ func (closure *setupNamespaceClosure) startDHClientV4() error {
 	if err != nil {
 		log.Errorf("Error executing '%s' with args '%v': raw output: %s",
 			dhclientExecutableName, args, string(out))
-		return errors.Wrapf(err, "unable to start dhclient for ipv4 address; command: %s %v; output: %s",
+		return errors.Wrapf(err,
+			"setupNamespaceClosure engine: unable to start dhclient for ipv4 address; command: %s %v; output: %s",
 			dhclientExecutableName, args, string(out))
 	}
 
@@ -137,15 +173,50 @@ func constructDHClientV4Args(deviceName string) []string {
 	return []string{
 		"-q",
 		"-lf", dhclientV4LeaseFilePathPrefix + "-" + deviceName + ".leases",
-		"-pf", constructDHClientLeasePIDFilePath(deviceName),
+		"-pf", constructDHClientLeasePIDFilePathIPV4(deviceName),
 		deviceName,
 	}
 }
 
-// constructDHClientLeasePIDFilePath constructs the PID file path for the dhclient
-// process that's renewing the lease for the ENI device
-func constructDHClientLeasePIDFilePath(deviceName string) string {
+// constructDHClientLeasePIDFilePathIPV4 constructs the PID file path for the dhclient
+// process that's renewing the IPV4 address lease for the ENI device
+func constructDHClientLeasePIDFilePathIPV4(deviceName string) string {
 	return dhclientV4LeasePIDFilePathPrefix + "-" + deviceName + ".pid"
+}
+
+// startDHClientV6 starts the dhclient with arguments to renew the lease on the IPV6 address
+// of the ENI
+func (closure *setupNamespaceClosure) startDHClientV6() error {
+	args := constructDHClientV6Args(closure.deviceName)
+	cmd := closure.exec.Command(dhclientExecutableName, args...)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		log.Errorf("Error executing '%s' with args '%v': raw output: %s",
+			dhclientExecutableName, args, string(out))
+		return errors.Wrapf(err,
+			"setupNamespaceClosure engine: unable to start dhclient for ipv6 address; command: %s %v; output: %s",
+			dhclientExecutableName, args, string(out))
+	}
+
+	return nil
+}
+
+// constructDHClientV6Args constructs the arguments list for the dhclient command to
+// renew the lease on the IPV6 address
+func constructDHClientV6Args(deviceName string) []string {
+	return []string{
+		"-q",
+		"-6",
+		"-lf", dhclientV6LeaseFilePathPrefix + "-" + deviceName + ".leases",
+		"-pf", constructDHClientLeasePIDFilePathIPV6(deviceName),
+		deviceName,
+	}
+}
+
+// constructDHClientLeasePIDFilePathIPV6 constructs the PID file path for the dhclient
+// process that's renewing the IPV6 address lease for the ENI device
+func constructDHClientLeasePIDFilePathIPV6(deviceName string) string {
+	return dhclientV6LeasePIDFilePathPrefix + "-" + deviceName + ".pid"
 }
 
 // run defines the closure to execute within the container's namespace to tear it down
@@ -159,28 +230,18 @@ func (closure *teardownNamespaceClosure) run(_ ns.NetNS) error {
 	deviceName := link.Attrs().Name
 	log.Debugf("Found link device as: %s", deviceName)
 
-	// Extract the PID of the dhclient process
-	contents, err := closure.ioutil.ReadFile(constructDHClientLeasePIDFilePath(deviceName))
+	// Stop the dhclient process for IPV4 address
+	err = closure.stopDHClient(constructDHClientLeasePIDFilePathIPV4(deviceName))
 	if err != nil {
-		return errors.Wrap(err,
-			"teardownNamespaceClosure engine: error reading dhclient pid")
-	}
-	pid, err := strconv.Atoi(strings.TrimSpace(string(contents)))
-	if err != nil {
-		return errors.Wrap(err,
-			"teardownNamespaceClosure engine: error parsing dhclient pid")
-	}
-	process, err := closure.os.FindProcess(pid)
-	if err != nil {
-		return errors.Wrap(err,
-			"teardownNamespaceClosure engine: error getting process handle for dhclient")
+		return err
 	}
 
-	// Stop the dhclient process
-	err = process.Kill()
-	if err != nil {
-		return errors.Wrap(err,
-			"teardownNamespaceClosure engine: error stopping dhclient")
+	if closure.stopDHClient6 {
+		// Stop the dhclient process for IPV6 address
+		err = closure.stopDHClient(constructDHClientLeasePIDFilePathIPV6(deviceName))
+		if err != nil {
+			return err
+		}
 	}
 
 	log.Infof("Cleaned up dhclient")
@@ -202,4 +263,32 @@ func getLinkByHardwareAddress(netLink netlinkwrapper.NetLink, hardwareAddr net.H
 	}
 
 	return nil, linkWithMACNotFoundError
+}
+
+func (closure *teardownNamespaceClosure) stopDHClient(pidFilePath string) error {
+	// Extract the PID of the dhclient process
+	contents, err := closure.ioutil.ReadFile(pidFilePath)
+	if err != nil {
+		return errors.Wrapf(err,
+			"teardownNamespaceClosure engine: error reading dhclient pid from '%s'", pidFilePath)
+	}
+	pid, err := strconv.Atoi(strings.TrimSpace(string(contents)))
+	if err != nil {
+		return errors.Wrapf(err,
+			"teardownNamespaceClosure engine: error parsing dhclient pid from '%s'", pidFilePath)
+	}
+	process, err := closure.os.FindProcess(pid)
+	if err != nil {
+		return errors.Wrapf(err,
+			"teardownNamespaceClosure engine: error getting process handle for dhclient, pid file: '%s'", pidFilePath)
+	}
+
+	// Stop the dhclient process
+	err = process.Kill()
+	if err != nil {
+		return errors.Wrapf(err,
+			"teardownNamespaceClosure engine: error stopping the dhclient process, pid file: '%s'", pidFilePath)
+	}
+
+	return nil
 }

@@ -30,6 +30,7 @@ type NetConf struct {
 	ENIID       string `json:"eni"`
 	IPV4Address string `json:"ipv4-address"`
 	MACAddress  string `json:"mac"`
+	IPV6Address string `json:"ipv6-address"`
 }
 
 // NewConf creates a new NetConf object by parsing the arguments supplied
@@ -51,21 +52,49 @@ func NewConf(args *skel.CmdArgs) (*NetConf, error) {
 	}
 
 	// Validate if the ipv4 address in the config is valid
-	ip := net.ParseIP(conf.IPV4Address)
-	if ip == nil {
-		return nil, errors.Errorf("newconf types: malformed IPv4 address specified")
-	}
-	if ip.To4() == nil {
-		return nil, errors.Errorf("newconf types: invalid IPv4 address specified")
+	if err := isValidIPV4Address(conf.IPV4Address); err != nil {
+		return nil, err
 	}
 
 	// Validate if the mac address in the config is valid
-	_, err := net.ParseMAC(conf.MACAddress)
-	if err != nil {
+	if _, err := net.ParseMAC(conf.MACAddress); err != nil {
 		return nil, errors.Wrapf(err, "newconf types: malformatted mac address specified")
+	}
+
+	// Validate if the ipv6 address in the config is valid, when supplied
+	if conf.IPV6Address != "" {
+		if err := isValidIPV6Address(conf.IPV6Address); err != nil {
+			return nil, err
+		}
 	}
 
 	// Validation complete. Return the parsed config object
 	log.Debugf("Loaded config: %v", conf)
 	return &conf, nil
+}
+
+func isValidIPV4Address(address string) error {
+	ip := net.ParseIP(address)
+	if ip == nil {
+		return errors.Errorf("newconf types: malformed IPv4 address specified")
+	}
+	if ip.To4() == nil {
+		return errors.Errorf("newconf types: invalid IPv4 address specified")
+	}
+
+	return nil
+}
+
+func isValidIPV6Address(address string) error {
+	ip := net.ParseIP(address)
+	if ip == nil {
+		return errors.Errorf("newconf types: malformed IPv6 address specified")
+	}
+	// There's no To6() method in the `net` package. Instead, just check that
+	// it's not a valid `v4` IP, but is a valid IP
+	if ip.To4() != nil {
+		return errors.Errorf("newconf types: invalid IPv6 address specified")
+	}
+
+	return nil
 }
