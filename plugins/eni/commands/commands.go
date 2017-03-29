@@ -88,6 +88,7 @@ func add(args *skel.CmdArgs, engine engine.Engine) error {
 			return err
 		}
 		ipv6Address = fmt.Sprintf("%s/%s", conf.IPV6Address, ipv6Netmask)
+		log.Debugf("IPV6 address: %v", ipv6Address)
 
 		// Next, figure out the gateway ip
 		ipv6Gateway, err = engine.GetIPV6Gateway(networkDeviceName)

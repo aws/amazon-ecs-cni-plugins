@@ -147,7 +147,9 @@ func (closureContext *setupNamespaceClosureContext) run(_ ns.NetNS) error {
 	}
 
 	// Setup ipv4 route for the gateway
-	err = closureContext.netLink.RouteAdd(&netlink.Route{Gw: closureContext.ipv4Gateway})
+	err = closureContext.netLink.RouteAdd(&netlink.Route{
+		Gw: closureContext.ipv4Gateway,
+	})
 	if err != nil {
 		return errors.Wrap(err, "setupNamespaceClosure engine: unable to add the route for the ipv4 gateway")
 	}
@@ -160,7 +162,10 @@ func (closureContext *setupNamespaceClosureContext) run(_ ns.NetNS) error {
 
 	if closureContext.ipv6Addr != nil {
 		// Setup ipv6 route for the gateway
-		err = closureContext.netLink.RouteAdd(&netlink.Route{Gw: closureContext.ipv6Gateway})
+		err = closureContext.netLink.RouteAdd(&netlink.Route{
+			LinkIndex: eniLink.Attrs().Index,
+			Gw:        closureContext.ipv6Gateway,
+		})
 		if err != nil {
 			return errors.Wrap(err, "setupNamespaceClosure engine: unable to add the route for the ipv6 gateway")
 		}
