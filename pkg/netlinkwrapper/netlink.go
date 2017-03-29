@@ -33,6 +33,8 @@ type NetLink interface {
 	LinkSetDown(link netlink.Link) error
 	// RouteList gets a list of routes in the system.
 	RouteList(link netlink.Link, family int) ([]netlink.Route, error)
+	// RouteAdd will add a route to the route table
+	RouteAdd(route *netlink.Route) error
 }
 
 type netLink struct {
@@ -73,4 +75,8 @@ func (*netLink) LinkSetDown(link netlink.Link) error {
 
 func (*netLink) RouteList(link netlink.Link, family int) ([]netlink.Route, error) {
 	return netlink.RouteList(link, family)
+}
+
+func (*netLink) RouteAdd(route *netlink.Route) error {
+	return netlink.RouteAdd(route)
 }
