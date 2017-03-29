@@ -59,7 +59,7 @@ type Engine interface {
 	GetIPV6Gateway(deviceName string) (string, error)
 	DoesMACAddressMapToIPV4Address(macAddress string, ipv4Address string) (bool, error)
 	DoesMACAddressMapToIPV6Address(macAddress string, ipv4Address string) (bool, error)
-	SetupContainerNamespace(netns string, deviceName string, ipv4Address string, ipv6Address string) error
+	SetupContainerNamespace(netns string, deviceName string, ipv4Address string, ipv6Address string, ipv4Gateway string, ipv6Gateway string) error
 	IsDHClientInPath() bool
 	TeardownContainerNamespace(netns string, macAddress string, stopDHClient6 bool) error
 }
@@ -310,7 +310,7 @@ func (engine *engine) doesMACAddressMapToIPAddress(macAddress string, addressToF
 // SetupContainerNamespace configures the network namespace of the container with
 // the ipv4 address and routes to use the ENI interface. The ipv4 address is of the
 // ipv4-address/netmask format
-func (engine *engine) SetupContainerNamespace(netns string, deviceName string, ipv4Address string, ipv6Address string) error {
+func (engine *engine) SetupContainerNamespace(netns string, deviceName string, ipv4Address string, ipv6Address string, ipv4Gateway string, ipv6Gateway string) error {
 	// Get the device link for the ENI
 	eniLink, err := engine.netLink.LinkByName(deviceName)
 	if err != nil {
@@ -333,7 +333,7 @@ func (engine *engine) SetupContainerNamespace(netns string, deviceName string, i
 	}
 
 	// Generate the closure to execute within the container's namespace
-	toRun, err := newSetupNamespaceClosure(engine.netLink, engine.exec, deviceName, ipv4Address, ipv6Address)
+	toRun, err := newSetupNamespaceClosureContext(engine.netLink, engine.exec, deviceName, ipv4Address, ipv6Address, ipv4Gateway, ipv6Gateway)
 	if err != nil {
 		return errors.Wrap(err,
 			"setupContainerNamespace engine: unable to create closure to execute in container namespace")
@@ -351,7 +351,7 @@ func (engine *engine) SetupContainerNamespace(netns string, deviceName string, i
 // TeardownContainerNamespace brings down the ENI device in the container's namespace
 func (engine *engine) TeardownContainerNamespace(netns string, macAddress string, stopDHClient6 bool) error {
 	// Generate the closure to execute within the container's namespace
-	toRun, err := newTeardownNamespaceClosure(engine.netLink, engine.ioutil, engine.os, macAddress, stopDHClient6)
+	toRun, err := newTeardownNamespaceClosureContext(engine.netLink, engine.ioutil, engine.os, macAddress, stopDHClient6)
 	if err != nil {
 		return errors.Wrap(err,
 			"teardownContainerNamespace engine: unable to create closure to execute in container namespace")

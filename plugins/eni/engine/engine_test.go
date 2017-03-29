@@ -704,7 +704,7 @@ func TestSetupContainerNamespaceFailsOnLinkByNameError(t *testing.T) {
 
 	mockNetLink.EXPECT().LinkByName(deviceName).Return(nil, errors.New("error"))
 	engine := &engine{netLink: mockNetLink}
-	err := engine.SetupContainerNamespace("ns1", deviceName, eniIPV4CIDRBlock, eniIPV6CIDRBlock)
+	err := engine.SetupContainerNamespace("ns1", deviceName, eniIPV4CIDRBlock, eniIPV6CIDRBlock, eniIPV4Gateway, eniIPV6Gateway)
 	assert.Error(t, err)
 }
 
@@ -718,7 +718,7 @@ func TestSetupContainerNamespaceFailsOnGetNSError(t *testing.T) {
 		mockNS.EXPECT().GetNS("ns1").Return(nil, errors.New("error")),
 	)
 	engine := &engine{ns: mockNS, netLink: mockNetLink}
-	err := engine.SetupContainerNamespace("ns1", deviceName, eniIPV4CIDRBlock, eniIPV6CIDRBlock)
+	err := engine.SetupContainerNamespace("ns1", deviceName, eniIPV4CIDRBlock, eniIPV6CIDRBlock, eniIPV4Gateway, eniIPV6Gateway)
 	assert.Error(t, err)
 }
 
@@ -736,7 +736,7 @@ func TestSetupContainerNamespaceFailsOnLinksetNsFdError(t *testing.T) {
 		mockNetLink.EXPECT().LinkSetNsFd(mockENILink, int(fd)).Return(errors.New("error")),
 	)
 	engine := &engine{ns: mockNS, netLink: mockNetLink}
-	err := engine.SetupContainerNamespace("ns1", deviceName, eniIPV4CIDRBlock, eniIPV6CIDRBlock)
+	err := engine.SetupContainerNamespace("ns1", deviceName, eniIPV4CIDRBlock, eniIPV6CIDRBlock, eniIPV4Gateway, eniIPV6Gateway)
 	assert.Error(t, err)
 }
 
@@ -755,7 +755,7 @@ func TestSetupContainerNamespaceFailsOnParseAddrError(t *testing.T) {
 		mockNetLink.EXPECT().ParseAddr(eniIPV4CIDRBlock).Return(nil, errors.New("error")),
 	)
 	engine := &engine{ns: mockNS, netLink: mockNetLink}
-	err := engine.SetupContainerNamespace("ns1", deviceName, eniIPV4CIDRBlock, eniIPV6CIDRBlock)
+	err := engine.SetupContainerNamespace("ns1", deviceName, eniIPV4CIDRBlock, eniIPV6CIDRBlock, eniIPV4Gateway, eniIPV6Gateway)
 	assert.Error(t, err)
 }
 
@@ -776,7 +776,7 @@ func TestSetupContainerNamespaceFailsOnWithNetNSPathError(t *testing.T) {
 		mockNS.EXPECT().WithNetNSPath("ns1", gomock.Any()).Return(errors.New("error")),
 	)
 	engine := &engine{ns: mockNS, netLink: mockNetLink}
-	err := engine.SetupContainerNamespace("ns1", deviceName, eniIPV4CIDRBlock, "")
+	err := engine.SetupContainerNamespace("ns1", deviceName, eniIPV4CIDRBlock, "", eniIPV4Gateway, "")
 	assert.Error(t, err)
 }
 
@@ -797,7 +797,7 @@ func TestSetupContainerNamespaceNoIPV6(t *testing.T) {
 		mockNS.EXPECT().WithNetNSPath("ns1", gomock.Any()).Return(nil),
 	)
 	engine := &engine{ns: mockNS, netLink: mockNetLink}
-	err := engine.SetupContainerNamespace("ns1", deviceName, eniIPV4CIDRBlock, "")
+	err := engine.SetupContainerNamespace("ns1", deviceName, eniIPV4CIDRBlock, "", eniIPV4Gateway, "")
 	assert.NoError(t, err)
 }
 
@@ -820,7 +820,7 @@ func TestSetupContainerNamespace(t *testing.T) {
 		mockNS.EXPECT().WithNetNSPath("ns1", gomock.Any()).Return(nil),
 	)
 	engine := &engine{ns: mockNS, netLink: mockNetLink}
-	err := engine.SetupContainerNamespace("ns1", deviceName, eniIPV4CIDRBlock, eniIPV6CIDRBlock)
+	err := engine.SetupContainerNamespace("ns1", deviceName, eniIPV4CIDRBlock, eniIPV6CIDRBlock, eniIPV4Gateway, eniIPV6Gateway)
 	assert.NoError(t, err)
 }
 
@@ -829,7 +829,18 @@ func TestSetupNamespaceClosureCreationFailsOnIPV4ParseAddrError(t *testing.T) {
 	defer ctrl.Finish()
 
 	mockNetLink.EXPECT().ParseAddr(eniIPV4CIDRBlock).Return(nil, errors.New("error"))
-	_, err := newSetupNamespaceClosure(mockNetLink, mockExec, deviceName, eniIPV4CIDRBlock, "")
+	_, err := newSetupNamespaceClosureContext(mockNetLink, mockExec, deviceName, eniIPV4CIDRBlock, "", eniIPV4Gateway, "")
+	assert.Error(t, err)
+}
+
+func TestSetupNamespaceClosureCreationFailsOnIPV4ParseGatewayError(t *testing.T) {
+	ctrl, _, _, _, mockNetLink, mockExec, _ := setup(t)
+	defer ctrl.Finish()
+
+	ipv4Addr := &netlink.Addr{}
+	mockNetLink.EXPECT().ParseAddr(eniIPV4CIDRBlock).Return(ipv4Addr, nil)
+	// Gateway is an empty string, so we expect this method to fail
+	_, err := newSetupNamespaceClosureContext(mockNetLink, mockExec, deviceName, eniIPV4CIDRBlock, "", "", "")
 	assert.Error(t, err)
 }
 
@@ -842,7 +853,22 @@ func TestSetupNamespaceClosureCreationFailsOnIPV6ParseAddrError(t *testing.T) {
 		mockNetLink.EXPECT().ParseAddr(eniIPV4CIDRBlock).Return(ipv4Addr, nil),
 		mockNetLink.EXPECT().ParseAddr(eniIPV6CIDRBlock).Return(nil, errors.New("error")),
 	)
-	_, err := newSetupNamespaceClosure(mockNetLink, mockExec, deviceName, eniIPV4CIDRBlock, eniIPV6CIDRBlock)
+	_, err := newSetupNamespaceClosureContext(mockNetLink, mockExec, deviceName, eniIPV4CIDRBlock, eniIPV6CIDRBlock, eniIPV4Gateway, eniIPV6Gateway)
+	assert.Error(t, err)
+}
+
+func TestSetupNamespaceClosureCreationFailsOnIPV6ParseGatewayError(t *testing.T) {
+	ctrl, _, _, _, mockNetLink, mockExec, _ := setup(t)
+	defer ctrl.Finish()
+
+	ipv4Addr := &netlink.Addr{}
+	ipv6Addr := &netlink.Addr{}
+	gomock.InOrder(
+		mockNetLink.EXPECT().ParseAddr(eniIPV4CIDRBlock).Return(ipv4Addr, nil),
+		mockNetLink.EXPECT().ParseAddr(eniIPV6CIDRBlock).Return(ipv6Addr, nil),
+	)
+	// Gateway is an empty string, so we expect this method to fail
+	_, err := newSetupNamespaceClosureContext(mockNetLink, mockExec, deviceName, eniIPV4CIDRBlock, eniIPV6CIDRBlock, eniIPV4Gateway, "")
 	assert.Error(t, err)
 }
 
@@ -856,7 +882,7 @@ func TestSetupNamespaceClosureRunFailsOnLinkByNameError(t *testing.T) {
 		mockNetLink.EXPECT().ParseAddr(eniIPV4CIDRBlock).Return(ipv4Addr, nil),
 		mockNetLink.EXPECT().LinkByName(deviceName).Return(nil, errors.New("error")),
 	)
-	closure, err := newSetupNamespaceClosure(mockNetLink, mockExec, deviceName, eniIPV4CIDRBlock, "")
+	closure, err := newSetupNamespaceClosureContext(mockNetLink, mockExec, deviceName, eniIPV4CIDRBlock, "", eniIPV4Gateway, "")
 	assert.NoError(t, err)
 	assert.NotNil(t, closure)
 	err = closure.run(mockNetNS)
@@ -875,7 +901,7 @@ func TestSetupNamespaceClosureRunFailsOnIPV4AddrAddError(t *testing.T) {
 		mockNetLink.EXPECT().LinkByName(deviceName).Return(mockENILink, nil),
 		mockNetLink.EXPECT().AddrAdd(mockENILink, ipv4Address).Return(errors.New("error")),
 	)
-	closure, err := newSetupNamespaceClosure(mockNetLink, mockExec, deviceName, eniIPV4CIDRBlock, "")
+	closure, err := newSetupNamespaceClosureContext(mockNetLink, mockExec, deviceName, eniIPV4CIDRBlock, "", eniIPV4Gateway, "")
 	assert.NoError(t, err)
 	assert.NotNil(t, closure)
 	err = closure.run(mockNetNS)
@@ -897,7 +923,7 @@ func TestSetupNamespaceClosureRunFailsOnIPV6AddrAddError(t *testing.T) {
 		mockNetLink.EXPECT().AddrAdd(mockENILink, ipv4Address).Return(nil),
 		mockNetLink.EXPECT().AddrAdd(mockENILink, ipv6Address).Return(errors.New("error")),
 	)
-	closure, err := newSetupNamespaceClosure(mockNetLink, mockExec, deviceName, eniIPV4CIDRBlock, eniIPV6CIDRBlock)
+	closure, err := newSetupNamespaceClosureContext(mockNetLink, mockExec, deviceName, eniIPV4CIDRBlock, eniIPV6CIDRBlock, eniIPV4Gateway, eniIPV6Gateway)
 	assert.NoError(t, err)
 	assert.NotNil(t, closure)
 	err = closure.run(mockNetNS)
@@ -917,7 +943,30 @@ func TestSetupNamespaceClosureRunFailsOnLinkSetupError(t *testing.T) {
 		mockNetLink.EXPECT().AddrAdd(mockENILink, ipv4Address).Return(nil),
 		mockNetLink.EXPECT().LinkSetUp(mockENILink).Return(errors.New("error")),
 	)
-	closure, err := newSetupNamespaceClosure(mockNetLink, mockExec, deviceName, eniIPV4CIDRBlock, "")
+	closure, err := newSetupNamespaceClosureContext(mockNetLink, mockExec, deviceName, eniIPV4CIDRBlock, "", eniIPV4Gateway, "")
+	assert.NoError(t, err)
+	assert.NotNil(t, closure)
+	err = closure.run(mockNetNS)
+	assert.Error(t, err)
+}
+
+func TestSetupNamespaceClosureRunFailsOnIPV4RouteAddError(t *testing.T) {
+	ctrl, _, _, _, mockNetLink, mockExec, _ := setup(t)
+	defer ctrl.Finish()
+
+	mockNetNS := mock_ns.NewMockNetNS(ctrl)
+	mockENILink := mock_netlink.NewMockLink(ctrl)
+	ipv4Address := &netlink.Addr{}
+	gomock.InOrder(
+		mockNetLink.EXPECT().ParseAddr(eniIPV4CIDRBlock).Return(ipv4Address, nil),
+		mockNetLink.EXPECT().LinkByName(deviceName).Return(mockENILink, nil),
+		mockNetLink.EXPECT().AddrAdd(mockENILink, ipv4Address).Return(nil),
+		mockNetLink.EXPECT().LinkSetUp(mockENILink).Return(nil),
+		mockNetLink.EXPECT().RouteAdd(gomock.Any()).Do(func(route *netlink.Route) {
+			assert.Equal(t, route.Gw.String(), eniIPV4Gateway)
+		}).Return(errors.New("error")),
+	)
+	closure, err := newSetupNamespaceClosureContext(mockNetLink, mockExec, deviceName, eniIPV4CIDRBlock, "", eniIPV4Gateway, "")
 	assert.NoError(t, err)
 	assert.NotNil(t, closure)
 	err = closure.run(mockNetNS)
@@ -947,6 +996,9 @@ func TestSetupNamespaceClosureRunFailsOnDHClientV4CommandCombinedOutputError(t *
 		mockNetLink.EXPECT().LinkByName(deviceName).Return(mockENILink, nil),
 		mockNetLink.EXPECT().AddrAdd(mockENILink, ipv4Address).Return(nil),
 		mockNetLink.EXPECT().LinkSetUp(mockENILink).Return(nil),
+		mockNetLink.EXPECT().RouteAdd(gomock.Any()).Do(func(route *netlink.Route) {
+			assert.Equal(t, route.Gw.String(), eniIPV4Gateway)
+		}).Return(nil),
 		mockExec.EXPECT().Command(dhclientExecutableName,
 			"-q",
 			"-lf", dhclientV4LeaseFilePathPrefix+"-"+deviceName+".leases",
@@ -954,7 +1006,43 @@ func TestSetupNamespaceClosureRunFailsOnDHClientV4CommandCombinedOutputError(t *
 			"eth1").Return(mockCmd),
 		mockCmd.EXPECT().CombinedOutput().Return([]byte{0}, errors.New("error")),
 	)
-	closure, err := newSetupNamespaceClosure(mockNetLink, mockExec, deviceName, eniIPV4CIDRBlock, "")
+	closure, err := newSetupNamespaceClosureContext(mockNetLink, mockExec, deviceName, eniIPV4CIDRBlock, "", eniIPV4Gateway, "")
+	assert.NoError(t, err)
+	assert.NotNil(t, closure)
+	err = closure.run(mockNetNS)
+	assert.Error(t, err)
+}
+
+func TestSetupNamespaceClosureRunFailsOnIPV6RouteAddError(t *testing.T) {
+	ctrl, _, _, _, mockNetLink, mockExec, _ := setup(t)
+	defer ctrl.Finish()
+
+	mockCmd := mock_execwrapper.NewMockCmd(ctrl)
+	mockNetNS := mock_ns.NewMockNetNS(ctrl)
+	mockENILink := mock_netlink.NewMockLink(ctrl)
+	ipv4Address := &netlink.Addr{}
+	ipv6Address := &netlink.Addr{}
+	gomock.InOrder(
+		mockNetLink.EXPECT().ParseAddr(eniIPV4CIDRBlock).Return(ipv4Address, nil),
+		mockNetLink.EXPECT().ParseAddr(eniIPV6CIDRBlock).Return(ipv6Address, nil),
+		mockNetLink.EXPECT().LinkByName(deviceName).Return(mockENILink, nil),
+		mockNetLink.EXPECT().AddrAdd(mockENILink, ipv4Address).Return(nil),
+		mockNetLink.EXPECT().AddrAdd(mockENILink, ipv6Address).Return(nil),
+		mockNetLink.EXPECT().LinkSetUp(mockENILink).Return(nil),
+		mockNetLink.EXPECT().RouteAdd(gomock.Any()).Do(func(route *netlink.Route) {
+			assert.Equal(t, route.Gw.String(), eniIPV4Gateway)
+		}).Return(nil),
+		mockExec.EXPECT().Command(dhclientExecutableName,
+			"-q",
+			"-lf", dhclientV4LeaseFilePathPrefix+"-"+deviceName+".leases",
+			"-pf", dhclientV4LeasePIDFilePathPrefix+"-"+deviceName+".pid",
+			"eth1").Return(mockCmd),
+		mockCmd.EXPECT().CombinedOutput().Return([]byte{0}, nil),
+		mockNetLink.EXPECT().RouteAdd(gomock.Any()).Do(func(route *netlink.Route) {
+			assert.Equal(t, route.Gw.String(), eniIPV6Gateway)
+		}).Return(errors.New("error")),
+	)
+	closure, err := newSetupNamespaceClosureContext(mockNetLink, mockExec, deviceName, eniIPV4CIDRBlock, eniIPV6CIDRBlock, eniIPV4Gateway, eniIPV6Gateway)
 	assert.NoError(t, err)
 	assert.NotNil(t, closure)
 	err = closure.run(mockNetNS)
@@ -988,12 +1076,18 @@ func TestSetupNamespaceClosureRunFailsOnDHClientV6CommandCombinedOutputError(t *
 		mockNetLink.EXPECT().AddrAdd(mockENILink, ipv4Address).Return(nil),
 		mockNetLink.EXPECT().AddrAdd(mockENILink, ipv6Address).Return(nil),
 		mockNetLink.EXPECT().LinkSetUp(mockENILink).Return(nil),
+		mockNetLink.EXPECT().RouteAdd(gomock.Any()).Do(func(route *netlink.Route) {
+			assert.Equal(t, route.Gw.String(), eniIPV4Gateway)
+		}).Return(nil),
 		mockExec.EXPECT().Command(dhclientExecutableName,
 			"-q",
 			"-lf", dhclientV4LeaseFilePathPrefix+"-"+deviceName+".leases",
 			"-pf", dhclientV4LeasePIDFilePathPrefix+"-"+deviceName+".pid",
 			"eth1").Return(mockCmd),
 		mockCmd.EXPECT().CombinedOutput().Return([]byte{0}, nil),
+		mockNetLink.EXPECT().RouteAdd(gomock.Any()).Do(func(route *netlink.Route) {
+			assert.Equal(t, route.Gw.String(), eniIPV6Gateway)
+		}).Return(nil),
 		mockExec.EXPECT().Command(dhclientExecutableName,
 			"-q",
 			"-6",
@@ -1002,7 +1096,7 @@ func TestSetupNamespaceClosureRunFailsOnDHClientV6CommandCombinedOutputError(t *
 			"eth1").Return(mockCmd),
 		mockCmd.EXPECT().CombinedOutput().Return([]byte{0}, errors.New("error")),
 	)
-	closure, err := newSetupNamespaceClosure(mockNetLink, mockExec, deviceName, eniIPV4CIDRBlock, eniIPV6CIDRBlock)
+	closure, err := newSetupNamespaceClosureContext(mockNetLink, mockExec, deviceName, eniIPV4CIDRBlock, eniIPV6CIDRBlock, eniIPV4Gateway, eniIPV6Gateway)
 	assert.NoError(t, err)
 	assert.NotNil(t, closure)
 	err = closure.run(mockNetNS)
@@ -1022,6 +1116,9 @@ func TestSetupNamespaceClosureRunNoIPV6(t *testing.T) {
 		mockNetLink.EXPECT().LinkByName(deviceName).Return(mockENILink, nil),
 		mockNetLink.EXPECT().AddrAdd(mockENILink, ipv4Address).Return(nil),
 		mockNetLink.EXPECT().LinkSetUp(mockENILink).Return(nil),
+		mockNetLink.EXPECT().RouteAdd(gomock.Any()).Do(func(route *netlink.Route) {
+			assert.Equal(t, route.Gw.String(), eniIPV4Gateway)
+		}).Return(nil),
 		mockExec.EXPECT().Command(dhclientExecutableName,
 			"-q",
 			"-lf", dhclientV4LeaseFilePathPrefix+"-"+deviceName+".leases",
@@ -1029,7 +1126,7 @@ func TestSetupNamespaceClosureRunNoIPV6(t *testing.T) {
 			"eth1").Return(mockCmd),
 		mockCmd.EXPECT().CombinedOutput().Return([]byte{0}, nil),
 	)
-	closure, err := newSetupNamespaceClosure(mockNetLink, mockExec, deviceName, eniIPV4CIDRBlock, "")
+	closure, err := newSetupNamespaceClosureContext(mockNetLink, mockExec, deviceName, eniIPV4CIDRBlock, "", eniIPV4Gateway, "")
 	assert.NoError(t, err)
 	assert.NotNil(t, closure)
 	err = closure.run(mockNetNS)
@@ -1052,12 +1149,18 @@ func TestSetupNamespaceClosureRun(t *testing.T) {
 		mockNetLink.EXPECT().AddrAdd(mockENILink, ipv4Address).Return(nil),
 		mockNetLink.EXPECT().AddrAdd(mockENILink, ipv6Address).Return(nil),
 		mockNetLink.EXPECT().LinkSetUp(mockENILink).Return(nil),
+		mockNetLink.EXPECT().RouteAdd(gomock.Any()).Do(func(route *netlink.Route) {
+			assert.Equal(t, route.Gw.String(), eniIPV4Gateway)
+		}).Return(nil),
 		mockExec.EXPECT().Command(dhclientExecutableName,
 			"-q",
 			"-lf", dhclientV4LeaseFilePathPrefix+"-"+deviceName+".leases",
 			"-pf", dhclientV4LeasePIDFilePathPrefix+"-"+deviceName+".pid",
 			"eth1").Return(mockCmd),
 		mockCmd.EXPECT().CombinedOutput().Return([]byte{0}, nil),
+		mockNetLink.EXPECT().RouteAdd(gomock.Any()).Do(func(route *netlink.Route) {
+			assert.Equal(t, route.Gw.String(), eniIPV6Gateway)
+		}).Return(nil),
 		mockExec.EXPECT().Command(dhclientExecutableName,
 			"-q",
 			"-6",
@@ -1066,7 +1169,7 @@ func TestSetupNamespaceClosureRun(t *testing.T) {
 			"eth1").Return(mockCmd),
 		mockCmd.EXPECT().CombinedOutput().Return([]byte{0}, nil),
 	)
-	closure, err := newSetupNamespaceClosure(mockNetLink, mockExec, deviceName, eniIPV4CIDRBlock, eniIPV6CIDRBlock)
+	closure, err := newSetupNamespaceClosureContext(mockNetLink, mockExec, deviceName, eniIPV4CIDRBlock, eniIPV6CIDRBlock, eniIPV4Gateway, eniIPV6Gateway)
 	assert.NoError(t, err)
 	assert.NotNil(t, closure)
 	err = closure.run(mockNetNS)
@@ -1132,7 +1235,7 @@ func TestNewTeardownNamespaceClosureFailsOnInvalidMAC(t *testing.T) {
 	ctrl, _, mockIOUtil, _, mockNetLink, _, mockOS := setup(t)
 	defer ctrl.Finish()
 
-	_, err := newTeardownNamespaceClosure(mockNetLink, mockIOUtil, mockOS, invalidMACAddress, false)
+	_, err := newTeardownNamespaceClosureContext(mockNetLink, mockIOUtil, mockOS, invalidMACAddress, false)
 	assert.Error(t, err)
 }
 
@@ -1140,7 +1243,7 @@ func TestNewTeardownNamespaceClosure(t *testing.T) {
 	ctrl, _, mockIOUtil, _, mockNetLink, _, mockOS := setup(t)
 	defer ctrl.Finish()
 
-	closure, err := newTeardownNamespaceClosure(mockNetLink, mockIOUtil, mockOS, eniMACAddress, false)
+	closure, err := newTeardownNamespaceClosureContext(mockNetLink, mockIOUtil, mockOS, eniMACAddress, false)
 	assert.NoError(t, err)
 	assert.NotNil(t, closure)
 }
@@ -1160,7 +1263,7 @@ func TestTearDownNamespaceClosureRunFailsWhenGetLinkByHardwareAddressReturnsErro
 	defer ctrl.Finish()
 
 	mockNetNS := mock_ns.NewMockNetNS(ctrl)
-	closure, err := newTeardownNamespaceClosure(mockNetLink, mockIOUtil, mockOS, eniMACAddress, false)
+	closure, err := newTeardownNamespaceClosureContext(mockNetLink, mockIOUtil, mockOS, eniMACAddress, false)
 	assert.NoError(t, err)
 	assert.NotNil(t, closure)
 
@@ -1173,7 +1276,7 @@ func TestStopDHClientFailsWhenReadFileReturnsError(t *testing.T) {
 	ctrl, _, mockIOUtil, _, mockNetLink, _, mockOS := setup(t)
 	defer ctrl.Finish()
 
-	closure, err := newTeardownNamespaceClosure(mockNetLink, mockIOUtil, mockOS, eniMACAddress, false)
+	closure, err := newTeardownNamespaceClosureContext(mockNetLink, mockIOUtil, mockOS, eniMACAddress, false)
 	assert.NoError(t, err)
 	assert.NotNil(t, closure)
 
@@ -1189,7 +1292,7 @@ func TestStopDHClientFailsWhenReadFileReturnsInvalidPID(t *testing.T) {
 	ctrl, _, mockIOUtil, _, mockNetLink, _, mockOS := setup(t)
 	defer ctrl.Finish()
 
-	closure, err := newTeardownNamespaceClosure(mockNetLink, mockIOUtil, mockOS, eniMACAddress, false)
+	closure, err := newTeardownNamespaceClosureContext(mockNetLink, mockIOUtil, mockOS, eniMACAddress, false)
 	assert.NoError(t, err)
 	assert.NotNil(t, closure)
 
@@ -1205,7 +1308,7 @@ func TestStopDHClientFailsWhenDHClientProcessNotFound(t *testing.T) {
 	ctrl, _, mockIOUtil, _, mockNetLink, _, mockOS := setup(t)
 	defer ctrl.Finish()
 
-	closure, err := newTeardownNamespaceClosure(mockNetLink, mockIOUtil, mockOS, eniMACAddress, false)
+	closure, err := newTeardownNamespaceClosureContext(mockNetLink, mockIOUtil, mockOS, eniMACAddress, false)
 	assert.NoError(t, err)
 	assert.NotNil(t, closure)
 
@@ -1223,7 +1326,7 @@ func TestStopDHClientRunFailsWhenDHClientProcessCannotBeKilled(t *testing.T) {
 	defer ctrl.Finish()
 
 	mockDHClientProcess := mock_oswrapper.NewMockOSProcess(ctrl)
-	closure, err := newTeardownNamespaceClosure(mockNetLink, mockIOUtil, mockOS, eniMACAddress, false)
+	closure, err := newTeardownNamespaceClosureContext(mockNetLink, mockIOUtil, mockOS, eniMACAddress, false)
 	assert.NoError(t, err)
 	assert.NotNil(t, closure)
 
@@ -1244,7 +1347,7 @@ func TestTearDownNamespaceClosureRunFailsWhenStopDHClientV4Fails(t *testing.T) {
 	mockNetNS := mock_ns.NewMockNetNS(ctrl)
 	eth1 := mock_netlink.NewMockLink(ctrl)
 	mockDHClientProcess := mock_oswrapper.NewMockOSProcess(ctrl)
-	closure, err := newTeardownNamespaceClosure(mockNetLink, mockIOUtil, mockOS, eniMACAddress, true)
+	closure, err := newTeardownNamespaceClosureContext(mockNetLink, mockIOUtil, mockOS, eniMACAddress, true)
 	assert.NoError(t, err)
 	assert.NotNil(t, closure)
 
@@ -1271,7 +1374,7 @@ func TestTearDownNamespaceClosureRunFailsWhenStopDHClientV6Fails(t *testing.T) {
 	eth1 := mock_netlink.NewMockLink(ctrl)
 	mockDHClientV4Process := mock_oswrapper.NewMockOSProcess(ctrl)
 	mockDHClientV6Process := mock_oswrapper.NewMockOSProcess(ctrl)
-	closure, err := newTeardownNamespaceClosure(mockNetLink, mockIOUtil, mockOS, eniMACAddress, true)
+	closure, err := newTeardownNamespaceClosureContext(mockNetLink, mockIOUtil, mockOS, eniMACAddress, true)
 	assert.NoError(t, err)
 	assert.NotNil(t, closure)
 
@@ -1300,7 +1403,7 @@ func TestTearDownNamespaceClosureRunNoIPV6(t *testing.T) {
 	mockNetNS := mock_ns.NewMockNetNS(ctrl)
 	eth1 := mock_netlink.NewMockLink(ctrl)
 	mockDHClientV4Process := mock_oswrapper.NewMockOSProcess(ctrl)
-	closure, err := newTeardownNamespaceClosure(mockNetLink, mockIOUtil, mockOS, eniMACAddress, false)
+	closure, err := newTeardownNamespaceClosureContext(mockNetLink, mockIOUtil, mockOS, eniMACAddress, false)
 	assert.NoError(t, err)
 	assert.NotNil(t, closure)
 
@@ -1327,7 +1430,7 @@ func TestTearDownNamespaceClosureRun(t *testing.T) {
 	eth1 := mock_netlink.NewMockLink(ctrl)
 	mockDHClientV4Process := mock_oswrapper.NewMockOSProcess(ctrl)
 	mockDHClientV6Process := mock_oswrapper.NewMockOSProcess(ctrl)
-	closure, err := newTeardownNamespaceClosure(mockNetLink, mockIOUtil, mockOS, eniMACAddress, true)
+	closure, err := newTeardownNamespaceClosureContext(mockNetLink, mockIOUtil, mockOS, eniMACAddress, true)
 	assert.NoError(t, err)
 	assert.NotNil(t, closure)
 
