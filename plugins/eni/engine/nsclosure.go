@@ -44,18 +44,20 @@ const (
 
 var linkWithMACNotFoundError = errors.Errorf("engine: device with mac address not found")
 
-// setupNamespaceClosure wraps the parameters and the method to configure the container's namespace
-type setupNamespaceClosure struct {
-	netLink    netlinkwrapper.NetLink
-	exec       execwrapper.Exec
-	deviceName string
-	ipv4Addr   *netlink.Addr
-	ipv6Addr   *netlink.Addr
+// setupNamespaceClosureContext wraps the parameters and the method to configure the container's namespace
+type setupNamespaceClosureContext struct {
+	netLink     netlinkwrapper.NetLink
+	exec        execwrapper.Exec
+	deviceName  string
+	ipv4Addr    *netlink.Addr
+	ipv6Addr    *netlink.Addr
+	ipv4Gateway net.IP
+	ipv6Gateway net.IP
 }
 
-// teardownNamespaceClosure wraps the parameters and the method to teardown the
+// teardownNamespaceClosureContext wraps the parameters and the method to teardown the
 // container's namespace
-type teardownNamespaceClosure struct {
+type teardownNamespaceClosureContext struct {
 	netLink       netlinkwrapper.NetLink
 	ioutil        ioutilwrapper.IOUtil
 	os            oswrapper.OS
@@ -63,38 +65,49 @@ type teardownNamespaceClosure struct {
 	stopDHClient6 bool
 }
 
-// newSetupNamespaceClosure creates a new setupNamespaceClosure object
-func newSetupNamespaceClosure(netLink netlinkwrapper.NetLink, exec execwrapper.Exec, deviceName string, ipv4Address string, ipv6Address string) (*setupNamespaceClosure, error) {
+// newSetupNamespaceClosureContext creates a new setupNamespaceClosure object
+func newSetupNamespaceClosureContext(netLink netlinkwrapper.NetLink, exec execwrapper.Exec, deviceName string, ipv4Address string, ipv6Address string, ipv4Gateway string, ipv6Gateway string) (*setupNamespaceClosureContext, error) {
 	nlIPV4Addr, err := netLink.ParseAddr(ipv4Address)
 	if err != nil {
 		return nil, errors.Wrap(err, "setupNamespaceClosure engine: unable to parse ipv4 address for the interface")
 	}
 
-	nsClosure := &setupNamespaceClosure{
-		netLink:    netLink,
-		exec:       exec,
-		deviceName: deviceName,
-		ipv4Addr:   nlIPV4Addr,
+	ipv4GatewayIP := net.ParseIP(ipv4Gateway)
+	if ipv4GatewayIP == nil {
+		return nil, errors.New("setupNamespaceClosure engine: unable to parse address of the ipv4 gateway")
+	}
+
+	nsClosure := &setupNamespaceClosureContext{
+		netLink:     netLink,
+		exec:        exec,
+		deviceName:  deviceName,
+		ipv4Addr:    nlIPV4Addr,
+		ipv4Gateway: ipv4GatewayIP,
 	}
 	if ipv6Address != "" {
 		nlIPV6Addr, err := netLink.ParseAddr(ipv6Address)
 		if err != nil {
 			return nil, errors.Wrap(err, "setupNamespaceClosure engine: unable to parse ipv6 address for the interface")
 		}
+		ipv6GatewayIP := net.ParseIP(ipv6Gateway)
+		if ipv6GatewayIP == nil {
+			return nil, errors.New("setupNamespaceClosure engine: unable to parse address of the ipv6 gateway")
+		}
 		nsClosure.ipv6Addr = nlIPV6Addr
+		nsClosure.ipv6Gateway = ipv6GatewayIP
 	}
 
 	return nsClosure, nil
 }
 
-// newTeardownNamespaceClosure creates a new teardownNamespaceClosure object
-func newTeardownNamespaceClosure(netLink netlinkwrapper.NetLink, ioutil ioutilwrapper.IOUtil, os oswrapper.OS, mac string, stopDHClient6 bool) (*teardownNamespaceClosure, error) {
+// newTeardownNamespaceClosureContext creates a new teardownNamespaceClosure object
+func newTeardownNamespaceClosureContext(netLink netlinkwrapper.NetLink, ioutil ioutilwrapper.IOUtil, os oswrapper.OS, mac string, stopDHClient6 bool) (*teardownNamespaceClosureContext, error) {
 	hardwareAddr, err := net.ParseMAC(mac)
 	if err != nil {
 		return nil, errors.Wrapf(err, "newTeardownNamespaceClosure engine: malformatted mac address specified")
 	}
 
-	return &teardownNamespaceClosure{
+	return &teardownNamespaceClosureContext{
 		netLink:       netLink,
 		ioutil:        ioutil,
 		os:            os,
@@ -105,43 +118,55 @@ func newTeardownNamespaceClosure(netLink netlinkwrapper.NetLink, ioutil ioutilwr
 
 // run defines the closure to execute within the container's namespace to configure it
 // appropriately
-func (closure *setupNamespaceClosure) run(_ ns.NetNS) error {
+func (closureContext *setupNamespaceClosureContext) run(_ ns.NetNS) error {
 	// Get the link for the ENI device
-	eniLink, err := closure.netLink.LinkByName(closure.deviceName)
+	eniLink, err := closureContext.netLink.LinkByName(closureContext.deviceName)
 	if err != nil {
 		return errors.Wrapf(err,
-			"setupNamespaceClosure engine: unable to get link for device '%s'", closure.deviceName)
+			"setupNamespaceClosure engine: unable to get link for device '%s'", closureContext.deviceName)
 	}
 
 	// Add the IPV4 Address to the link
-	err = closure.netLink.AddrAdd(eniLink, closure.ipv4Addr)
+	err = closureContext.netLink.AddrAdd(eniLink, closureContext.ipv4Addr)
 	if err != nil {
 		return errors.Wrap(err, "setupNamespaceClosure engine: unable to add ipv4 address to the interface")
 	}
 
-	if closure.ipv6Addr != nil {
+	if closureContext.ipv6Addr != nil {
 		// Add the IPV6 Address to the link
-		err = closure.netLink.AddrAdd(eniLink, closure.ipv6Addr)
+		err = closureContext.netLink.AddrAdd(eniLink, closureContext.ipv6Addr)
 		if err != nil {
 			return errors.Wrap(err, "setupNamespaceClosure engine: unable to add ipv6 address to the interface")
 		}
 	}
 
 	// Bring it up
-	err = closure.netLink.LinkSetUp(eniLink)
+	err = closureContext.netLink.LinkSetUp(eniLink)
 	if err != nil {
 		return errors.Wrap(err, "setupNamespaceClosure engine: unable to bring up the device")
 	}
 
+	// Setup ipv4 route for the gateway
+	err = closureContext.netLink.RouteAdd(&netlink.Route{Gw: closureContext.ipv4Gateway})
+	if err != nil {
+		return errors.Wrap(err, "setupNamespaceClosure engine: unable to add the route for the ipv4 gateway")
+	}
+
 	// Start dhclient for IPV4 address
-	err = closure.startDHClientV4()
+	err = closureContext.startDHClientV4()
 	if err != nil {
 		return err
 	}
 
-	if closure.ipv6Addr != nil {
+	if closureContext.ipv6Addr != nil {
+		// Setup ipv6 route for the gateway
+		err = closureContext.netLink.RouteAdd(&netlink.Route{Gw: closureContext.ipv6Gateway})
+		if err != nil {
+			return errors.Wrap(err, "setupNamespaceClosure engine: unable to add the route for the ipv6 gateway")
+		}
+
 		// Start dhclient for IPV6 address
-		err = closure.startDHClientV6()
+		err = closureContext.startDHClientV6()
 		if err != nil {
 			return err
 		}
@@ -152,9 +177,9 @@ func (closure *setupNamespaceClosure) run(_ ns.NetNS) error {
 
 // startDHClientV4 starts the dhclient with arguments to renew the lease on the IPV4 address
 // of the ENI
-func (closure *setupNamespaceClosure) startDHClientV4() error {
-	args := constructDHClientV4Args(closure.deviceName)
-	cmd := closure.exec.Command(dhclientExecutableName, args...)
+func (closureContext *setupNamespaceClosureContext) startDHClientV4() error {
+	args := constructDHClientV4Args(closureContext.deviceName)
+	cmd := closureContext.exec.Command(dhclientExecutableName, args...)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		log.Errorf("Error executing '%s' with args '%v': raw output: %s",
@@ -186,9 +211,9 @@ func constructDHClientLeasePIDFilePathIPV4(deviceName string) string {
 
 // startDHClientV6 starts the dhclient with arguments to renew the lease on the IPV6 address
 // of the ENI
-func (closure *setupNamespaceClosure) startDHClientV6() error {
-	args := constructDHClientV6Args(closure.deviceName)
-	cmd := closure.exec.Command(dhclientExecutableName, args...)
+func (closureContext *setupNamespaceClosureContext) startDHClientV6() error {
+	args := constructDHClientV6Args(closureContext.deviceName)
+	cmd := closureContext.exec.Command(dhclientExecutableName, args...)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		log.Errorf("Error executing '%s' with args '%v': raw output: %s",
@@ -220,8 +245,8 @@ func constructDHClientLeasePIDFilePathIPV6(deviceName string) string {
 }
 
 // run defines the closure to execute within the container's namespace to tear it down
-func (closure *teardownNamespaceClosure) run(_ ns.NetNS) error {
-	link, err := getLinkByHardwareAddress(closure.netLink, closure.hardwareAddr)
+func (closureContext *teardownNamespaceClosureContext) run(_ ns.NetNS) error {
+	link, err := getLinkByHardwareAddress(closureContext.netLink, closureContext.hardwareAddr)
 	if err != nil {
 		return errors.Wrapf(err,
 			"teardownNamespaceClosure engine: unable to get device with hardware address '%s'", closure.hardwareAddr.String())
@@ -231,14 +256,14 @@ func (closure *teardownNamespaceClosure) run(_ ns.NetNS) error {
 	log.Debugf("Found link device as: %s", deviceName)
 
 	// Stop the dhclient process for IPV4 address
-	err = closure.stopDHClient(constructDHClientLeasePIDFilePathIPV4(deviceName))
+	err = closureContext.stopDHClient(constructDHClientLeasePIDFilePathIPV4(deviceName))
 	if err != nil {
 		return err
 	}
 
-	if closure.stopDHClient6 {
+	if closureContext.stopDHClient6 {
 		// Stop the dhclient process for IPV6 address
-		err = closure.stopDHClient(constructDHClientLeasePIDFilePathIPV6(deviceName))
+		err = closureContext.stopDHClient(constructDHClientLeasePIDFilePathIPV6(deviceName))
 		if err != nil {
 			return err
 		}
@@ -265,9 +290,9 @@ func getLinkByHardwareAddress(netLink netlinkwrapper.NetLink, hardwareAddr net.H
 	return nil, linkWithMACNotFoundError
 }
 
-func (closure *teardownNamespaceClosure) stopDHClient(pidFilePath string) error {
+func (closureContext *teardownNamespaceClosureContext) stopDHClient(pidFilePath string) error {
 	// Extract the PID of the dhclient process
-	contents, err := closure.ioutil.ReadFile(pidFilePath)
+	contents, err := closureContext.ioutil.ReadFile(pidFilePath)
 	if err != nil {
 		return errors.Wrapf(err,
 			"teardownNamespaceClosure engine: error reading dhclient pid from '%s'", pidFilePath)
@@ -277,7 +302,7 @@ func (closure *teardownNamespaceClosure) stopDHClient(pidFilePath string) error 
 		return errors.Wrapf(err,
 			"teardownNamespaceClosure engine: error parsing dhclient pid from '%s'", pidFilePath)
 	}
-	process, err := closure.os.FindProcess(pid)
+	process, err := closureContext.os.FindProcess(pid)
 	if err != nil {
 		return errors.Wrapf(err,
 			"teardownNamespaceClosure engine: error getting process handle for dhclient, pid file: '%s'", pidFilePath)

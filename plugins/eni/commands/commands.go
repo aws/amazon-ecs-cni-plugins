@@ -79,6 +79,7 @@ func add(args *skel.CmdArgs, engine engine.Engine) error {
 	log.Debugf("Found ipv4 gateway and netmask for ENI: %s %s", ipv4Gateway, ipv4Netmask)
 
 	ipv6Address := ""
+	ipv6Gateway := ""
 	if conf.IPV6Address != "" {
 		// Config contains an ipv6 address, figure out the subnet mask
 		ipv6Netmask, err := engine.GetIPV6Netmask(macAddressOfENI)
@@ -89,7 +90,7 @@ func add(args *skel.CmdArgs, engine engine.Engine) error {
 		ipv6Address = fmt.Sprintf("%s/%s", conf.IPV6Address, ipv6Netmask)
 
 		// Next, figure out the gateway ip
-		ipv6Gateway, err := engine.GetIPV6Gateway(networkDeviceName)
+		ipv6Gateway, err = engine.GetIPV6Gateway(networkDeviceName)
 		if err != nil {
 			log.Errorf("Unable to get ipv6 gateway for ENI: %v", err)
 			return err
@@ -97,11 +98,11 @@ func add(args *skel.CmdArgs, engine engine.Engine) error {
 		log.Debugf("IPV6 Gateway IP: %v", ipv6Gateway)
 	}
 
-	// Everything's setup. We have all the parameters needed to configure
+	// Everything's prepped. We have all the parameters needed to configure
 	// the network namespace of the ENI. Invoke SetupContainerNamespace to
 	// do the same
 	err = engine.SetupContainerNamespace(args.Netns, networkDeviceName,
-		fmt.Sprintf("%s/%s", conf.IPV4Address, ipv4Netmask), ipv6Address)
+		fmt.Sprintf("%s/%s", conf.IPV4Address, ipv4Netmask), ipv6Address, ipv4Gateway, ipv6Gateway)
 	if err != nil {
 		log.Errorf("Unable to setup container's namespace: %v", err)
 		return err
