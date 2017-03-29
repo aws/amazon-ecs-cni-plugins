@@ -17,6 +17,7 @@ import (
 	"errors"
 	"net"
 	"testing"
+	"time"
 
 	"github.com/aws/amazon-ecs-cni-plugins/pkg/cninswrapper/mocks"
 	"github.com/aws/amazon-ecs-cni-plugins/pkg/cninswrapper/mocks_netns"
@@ -42,6 +43,7 @@ const (
 	eniIPV4Address                = "10.11.12.13"
 	eniIPV6Address                = "2001:db8::68"
 	eniIPV4Gateway                = "10.10.10.10"
+	eniIPV6Gateway                = "2001:db9::68"
 	eniSubnetMask                 = "20"
 	eniIPV4CIDRBlock              = "10.10.10.10/20"
 	eniIPV6CIDRBlock              = "2001:db8::68/32"
@@ -382,6 +384,224 @@ func TestGetIPV6NetMask(t *testing.T) {
 	netmask, err := engine.GetIPV6Netmask(firstMACAddressSanitized)
 	assert.NoError(t, err)
 	assert.Equal(t, "32", netmask)
+}
+
+func TestGetIPV6GatewayIPFromRoutesOnceRouteListReturnsError(t *testing.T) {
+	ctrl, _, _, _, mockNetLink, _, _ := setup(t)
+	defer ctrl.Finish()
+
+	mockLink := mock_netlink.NewMockLink(ctrl)
+	mockNetLink.EXPECT().RouteList(mockLink, netlink.FAMILY_V6).Return(nil, errors.New(""))
+	engine := &engine{netLink: mockNetLink}
+
+	_, _, err := engine.getIPV6GatewayIPFromRoutesOnce(mockLink, deviceName)
+	assert.Error(t, err)
+}
+
+func TestGetIPV6GatewayIPFromRoutesOnceRouteListReturnsFalseWhenNotFound(t *testing.T) {
+	ctrl, _, _, _, mockNetLink, _, _ := setup(t)
+	defer ctrl.Finish()
+
+	mockLink := mock_netlink.NewMockLink(ctrl)
+	ipv6Addr := net.ParseIP(eniIPV6Address)
+	ipNet := &net.IPNet{
+		IP: ipv6Addr,
+	}
+	ipv6Gw := net.ParseIP(eniIPV6Gateway)
+	routes := []netlink.Route{
+		// Dst is set, nothing else is
+		netlink.Route{
+			Dst: ipNet,
+		},
+		// Dst is not set, but other fields are
+		netlink.Route{
+			Dst: &net.IPNet{},
+			Src: ipv6Addr,
+			Gw:  ipv6Gw,
+		},
+		// Dst, Src and Gw are all set
+		netlink.Route{
+			Dst: ipNet,
+			Src: ipv6Addr,
+			Gw:  ipv6Gw,
+		},
+	}
+	mockNetLink.EXPECT().RouteList(mockLink, netlink.FAMILY_V6).Return(routes, nil)
+	engine := &engine{netLink: mockNetLink}
+
+	_, ok, err := engine.getIPV6GatewayIPFromRoutesOnce(mockLink, deviceName)
+	assert.NoError(t, err)
+	assert.False(t, ok)
+}
+
+func TestGetIPV6GatewayIPFromRoutesOnceRouteListReturnsTrueWhenFound(t *testing.T) {
+	ctrl, _, _, _, mockNetLink, _, _ := setup(t)
+	defer ctrl.Finish()
+
+	mockLink := mock_netlink.NewMockLink(ctrl)
+	ipv6Addr := net.ParseIP(eniIPV6Address)
+	ipv6Gw := net.ParseIP(eniIPV6Gateway)
+	ipNet := &net.IPNet{
+		IP: ipv6Addr,
+	}
+	routes := []netlink.Route{
+		// Dst is set, nothing else is
+		netlink.Route{
+			Dst: ipNet,
+		},
+		// Dst is not set, but other fields are
+		netlink.Route{
+			Dst: &net.IPNet{},
+			Src: ipv6Addr,
+			Gw:  ipv6Gw,
+		},
+		// Dst, Src and Gw are all set
+		netlink.Route{
+			Dst: ipNet,
+			Src: ipv6Addr,
+			Gw:  ipv6Gw,
+		},
+		// Only Gw is set, this is what we're looking for
+		netlink.Route{
+			Gw: ipv6Gw,
+		},
+	}
+	mockNetLink.EXPECT().RouteList(mockLink, netlink.FAMILY_V6).Return(routes, nil)
+	engine := &engine{netLink: mockNetLink}
+
+	gateway, ok, err := engine.getIPV6GatewayIPFromRoutesOnce(mockLink, deviceName)
+	assert.NoError(t, err)
+	assert.True(t, ok)
+	assert.Equal(t, gateway, eniIPV6Gateway)
+}
+
+func TestGetIPV6GatewayIPFromRoutesDoesNotRetryOnError(t *testing.T) {
+	ctrl, _, _, _, mockNetLink, _, _ := setup(t)
+	defer ctrl.Finish()
+
+	mockLink := mock_netlink.NewMockLink(ctrl)
+	// Expect only one invocation of route list
+	mockNetLink.EXPECT().RouteList(mockLink, netlink.FAMILY_V6).Return(nil, errors.New("error"))
+	engine := &engine{netLink: mockNetLink}
+
+	_, err := engine.getIPV6GatewayIPFromRoutes(mockLink, deviceName,
+		maxTicksForRetrievingIPV6Gateway, ipv6GatewayTickDuration)
+	assert.Error(t, err)
+}
+
+func TestGetIPV6GatewayIPFromRoutesRetriesWhenNotFound(t *testing.T) {
+	ctrl, _, _, _, mockNetLink, _, _ := setup(t)
+	defer ctrl.Finish()
+
+	mockLink := mock_netlink.NewMockLink(ctrl)
+	// Expect only 2 invocation of route list
+	mockNetLink.EXPECT().RouteList(mockLink, netlink.FAMILY_V6).Return(nil, nil).Times(2)
+	engine := &engine{netLink: mockNetLink}
+
+	_, err := engine.getIPV6GatewayIPFromRoutes(mockLink, deviceName, 2, time.Microsecond)
+	assert.Error(t, err)
+}
+
+func TestGetIPV6GatewayIPFromRoutes(t *testing.T) {
+	ctrl, _, _, _, mockNetLink, _, _ := setup(t)
+	defer ctrl.Finish()
+
+	mockLink := mock_netlink.NewMockLink(ctrl)
+	ipv6Gw := net.ParseIP(eniIPV6Gateway)
+	routes := []netlink.Route{
+		netlink.Route{
+			Gw: ipv6Gw,
+		},
+	}
+
+	gomock.InOrder(
+		mockNetLink.EXPECT().RouteList(mockLink, netlink.FAMILY_V6).Return(nil, nil),
+		mockNetLink.EXPECT().RouteList(mockLink, netlink.FAMILY_V6).Return(routes, nil),
+	)
+	engine := &engine{netLink: mockNetLink}
+
+	gateway, err := engine.getIPV6GatewayIPFromRoutes(mockLink, deviceName, 2, time.Microsecond)
+	assert.NoError(t, err)
+	assert.Equal(t, gateway, eniIPV6Gateway)
+}
+
+func TestGetIPV6GatewayOnLinkByNameError(t *testing.T) {
+	ctrl, _, _, _, mockNetLink, _, _ := setup(t)
+	defer ctrl.Finish()
+
+	mockNetLink.EXPECT().LinkByName(deviceName).Return(nil, errors.New("error"))
+	engine := &engine{
+		netLink:                          mockNetLink,
+		ipv6GatewayTickDuration:          time.Microsecond,
+		maxTicksForRetrievingIPV6Gateway: 2,
+	}
+
+	_, err := engine.GetIPV6Gateway(deviceName)
+	assert.Error(t, err)
+}
+
+func TestGetIPV6GatewayOnGetIPV6GatewayIPFromRoutesError(t *testing.T) {
+	ctrl, _, _, _, mockNetLink, _, _ := setup(t)
+	defer ctrl.Finish()
+
+	mockLink := mock_netlink.NewMockLink(ctrl)
+	gomock.InOrder(
+		mockNetLink.EXPECT().LinkByName(deviceName).Return(mockLink, nil),
+		mockNetLink.EXPECT().RouteList(mockLink, netlink.FAMILY_V6).Return(nil, errors.New("error")),
+	)
+	engine := &engine{
+		netLink:                          mockNetLink,
+		ipv6GatewayTickDuration:          time.Microsecond,
+		maxTicksForRetrievingIPV6Gateway: 2,
+	}
+
+	_, err := engine.GetIPV6Gateway(deviceName)
+	assert.Error(t, err)
+}
+
+func TestGetIPV6GatewayOnGetIPV6GatewayIPFromRoutesNotFound(t *testing.T) {
+	ctrl, _, _, _, mockNetLink, _, _ := setup(t)
+	defer ctrl.Finish()
+
+	mockLink := mock_netlink.NewMockLink(ctrl)
+	gomock.InOrder(
+		mockNetLink.EXPECT().LinkByName(deviceName).Return(mockLink, nil),
+		mockNetLink.EXPECT().RouteList(mockLink, netlink.FAMILY_V6).Return(nil, nil).Times(2),
+	)
+	engine := &engine{
+		netLink:                          mockNetLink,
+		ipv6GatewayTickDuration:          time.Microsecond,
+		maxTicksForRetrievingIPV6Gateway: 2,
+	}
+
+	_, err := engine.GetIPV6Gateway(deviceName)
+	assert.Error(t, err)
+}
+
+func TestGetIPV6GatewayOnGetIPV6GatewayIPFromRoutesFound(t *testing.T) {
+	ctrl, _, _, _, mockNetLink, _, _ := setup(t)
+	defer ctrl.Finish()
+
+	mockLink := mock_netlink.NewMockLink(ctrl)
+	ipv6Gw := net.ParseIP(eniIPV6Gateway)
+	routes := []netlink.Route{
+		netlink.Route{
+			Gw: ipv6Gw,
+		},
+	}
+	gomock.InOrder(
+		mockNetLink.EXPECT().LinkByName(deviceName).Return(mockLink, nil),
+		mockNetLink.EXPECT().RouteList(mockLink, netlink.FAMILY_V6).Return(routes, nil),
+	)
+	engine := &engine{
+		netLink:                          mockNetLink,
+		ipv6GatewayTickDuration:          time.Microsecond,
+		maxTicksForRetrievingIPV6Gateway: 2,
+	}
+
+	gateway, err := engine.GetIPV6Gateway(deviceName)
+	assert.NoError(t, err)
+	assert.Equal(t, gateway, eniIPV6Gateway)
 }
 
 func TestIsValidGetIPAddressReturnsErrorOnGetMetadataError(t *testing.T) {
