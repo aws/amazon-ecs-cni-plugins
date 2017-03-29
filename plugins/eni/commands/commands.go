@@ -87,6 +87,14 @@ func add(args *skel.CmdArgs, engine engine.Engine) error {
 			return err
 		}
 		ipv6Address = fmt.Sprintf("%s/%s", conf.IPV6Address, ipv6Netmask)
+
+		// Next, figure out the gateway ip
+		ipv6Gateway, err := engine.GetIPV6Gateway(networkDeviceName)
+		if err != nil {
+			log.Errorf("Unable to get ipv6 gateway for ENI: %v", err)
+			return err
+		}
+		log.Debugf("IPV6 Gateway IP: %v", ipv6Gateway)
 	}
 
 	// Everything's setup. We have all the parameters needed to configure

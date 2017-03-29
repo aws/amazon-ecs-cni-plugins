@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"net"
 	"strings"
+	"time"
 
 	"github.com/aws/amazon-ecs-cni-plugins/pkg/cninswrapper"
 	"github.com/aws/amazon-ecs-cni-plugins/pkg/ec2metadata"
@@ -26,6 +27,7 @@ import (
 	"github.com/aws/amazon-ecs-cni-plugins/pkg/oswrapper"
 	log "github.com/cihub/seelog"
 	"github.com/pkg/errors"
+	"github.com/vishvananda/netlink"
 )
 
 const (
@@ -35,6 +37,15 @@ const (
 	metadataNetworkInterfaceIPV4AddressesSuffix = "/local-ipv4s"
 	metadataNetworkInterfaceIPV6AddressesSuffix = "/ipv6s"
 	metadataNetworkInterfaceIPV6CIDRPathSuffix  = "/subnet-ipv6-cidr-blocks"
+	ipv6GatewayTickDuration                     = 1 * time.Second
+	// zeroLengthIPString is what we expect net.IP.String() to return if the
+	// ip has length 0. We use this to determing if an IP is empty.
+	// Refer https://golang.org/pkg/net/#IP.String
+	zeroLengthIPString = "<nil>"
+	// maxTicksForRetrievingIPV6Gateway is the maximum number of ticks to wait
+	// for retrieving the ipv6 gateway ip from the routing table. We give up
+	// after 10 ticks, which corresponds to 10 seconds
+	maxTicksForRetrievingIPV6Gateway = 10
 )
 
 // Engine represents the execution engine for the ENI plugin. It defines all the
@@ -45,6 +56,7 @@ type Engine interface {
 	GetInterfaceDeviceName(macAddress string) (string, error)
 	GetIPV4GatewayNetmask(macAddress string) (string, string, error)
 	GetIPV6Netmask(macAddress string) (string, error)
+	GetIPV6Gateway(deviceName string) (string, error)
 	DoesMACAddressMapToIPV4Address(macAddress string, ipv4Address string) (bool, error)
 	DoesMACAddressMapToIPV6Address(macAddress string, ipv4Address string) (bool, error)
 	SetupContainerNamespace(netns string, deviceName string, ipv4Address string, ipv6Address string) error
@@ -53,12 +65,14 @@ type Engine interface {
 }
 
 type engine struct {
-	metadata ec2metadata.EC2Metadata
-	ioutil   ioutilwrapper.IOUtil
-	netLink  netlinkwrapper.NetLink
-	ns       cninswrapper.NS
-	exec     execwrapper.Exec
-	os       oswrapper.OS
+	metadata                         ec2metadata.EC2Metadata
+	ioutil                           ioutilwrapper.IOUtil
+	netLink                          netlinkwrapper.NetLink
+	ns                               cninswrapper.NS
+	exec                             execwrapper.Exec
+	os                               oswrapper.OS
+	ipv6GatewayTickDuration          time.Duration
+	maxTicksForRetrievingIPV6Gateway int
 }
 
 // New creates a new Engine object
@@ -75,6 +89,8 @@ func create(metadata ec2metadata.EC2Metadata, ioutil ioutilwrapper.IOUtil, netLi
 		ns:       ns,
 		exec:     exec,
 		os:       os,
+		ipv6GatewayTickDuration:          ipv6GatewayTickDuration,
+		maxTicksForRetrievingIPV6Gateway: maxTicksForRetrievingIPV6Gateway,
 	}
 }
 
@@ -193,6 +209,64 @@ func getIPV6Netmask(cidrBlock string) (string, error) {
 
 	maskOnes, _ := ipNet.Mask.Size()
 	return fmt.Sprintf("%d", maskOnes), nil
+}
+
+// GetIPV6Gateway gets the ipv6 address of the subnet gateway
+func (engine *engine) GetIPV6Gateway(deviceName string) (string, error) {
+	// Get the device link for the ENI
+	eniLink, err := engine.netLink.LinkByName(deviceName)
+	if err != nil {
+		return "", errors.Wrapf(err,
+			"getIPV6Gateway engine: unable to get link for device '%s'", deviceName)
+	}
+
+	return engine.getIPV6GatewayIPFromRoutes(eniLink, deviceName,
+		engine.maxTicksForRetrievingIPV6Gateway, engine.ipv6GatewayTickDuration)
+}
+
+func (engine *engine) getIPV6GatewayIPFromRoutes(link netlink.Link, deviceName string, maxTicks int, durationBetweenTicks time.Duration) (string, error) {
+	// In rare cases, it is possible that there's a delay in the kernel updating
+	// its routing table for non-primary ENIs attached to the instance. Retry querying
+	// the routing table for such scenarios.
+	for numTicks := 0; numTicks < maxTicks; numTicks++ {
+		log.Infof("Trying to get IPV6 Gateway from route table, attempt: %d/%d", numTicks+1, maxTicks)
+		gateway, ok, err := engine.getIPV6GatewayIPFromRoutesOnce(link, deviceName)
+		if err != nil {
+			return "", err
+		}
+		if ok {
+			return gateway, nil
+		}
+
+		time.Sleep(durationBetweenTicks)
+	}
+
+	return "", errors.Errorf(
+		"getIPV6Gateway engine: unable to get gateway from route table for '%s'", deviceName)
+}
+
+func (engine *engine) getIPV6GatewayIPFromRoutesOnce(link netlink.Link, deviceName string) (string, bool, error) {
+	routes, err := engine.netLink.RouteList(link, netlink.FAMILY_V6)
+	if err != nil {
+		return "", false, errors.Wrapf(err,
+			"getIPV6Gateway engine: unable to get ipv6 routes for device '%s'", deviceName)
+	}
+
+	for _, route := range routes {
+		// Search for "default" route. A "default" route has no source and
+		// destination ip addresses, but has the gateway set to a non-emtpty string
+		if route.Dst != nil {
+			continue
+		}
+
+		if (route.Dst == nil || route.Dst.String() == zeroLengthIPString) && // Dst is not set
+			route.Src.String() == zeroLengthIPString && // Src is not set
+			route.Gw.String() != zeroLengthIPString { // Gw is set
+			return route.Gw.String(), true, nil
+		}
+	}
+
+	return "", false, nil
 }
 
 // DoesMACAddressMapToIPV4Address validates in the MAC Address for the ENI maps to the
