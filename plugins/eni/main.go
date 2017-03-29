@@ -34,35 +34,6 @@ func init() {
 	runtime.LockOSThread()
 }
 
-func setupLogger(loglevel string) {
-	seelogLevel, ok := log.LogLevelFromString(loglevel)
-	if !ok {
-		seelogLevel = log.InfoLvl
-	}
-	fileWriter, err := log.NewFileWriter("/tmp/eni.log")
-	if err != nil {
-		log.Error(err)
-		return
-	}
-	formatter, err := log.NewFormatter("%UTCDate(2006-01-02T15:04:05Z07:00) [%LEVEL] %Msg%n")
-	if err != nil {
-		log.Error(err)
-		return
-	}
-	root, err := log.NewSplitDispatcher(formatter, []interface{}{fileWriter})
-	if err != nil {
-		log.Error(err)
-		return
-	}
-	constraints, err := log.NewMinMaxConstraints(seelogLevel, log.CriticalLvl)
-	if err != nil {
-		log.Error(err)
-		return
-	}
-	logger := log.NewAsyncLoopLogger(log.NewLoggerConfig(constraints, nil, root))
-	log.ReplaceLogger(logger)
-}
-
 func main() {
 	defer log.Flush()
 	logger.SetupLogger(logger.GetLogFileLocation(defaultLogFilePath))
@@ -75,8 +46,6 @@ func main() {
 		printVersionInfo()
 		return
 	}
-
-	setupLogger("debug")
 
 	skel.PluginMain(commands.Add, commands.Del, cnispec.GetSpecVersionSupported())
 }
