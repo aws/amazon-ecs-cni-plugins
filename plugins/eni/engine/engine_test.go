@@ -1022,6 +1022,7 @@ func TestSetupNamespaceClosureRunFailsOnIPV6RouteAddError(t *testing.T) {
 	mockENILink := mock_netlink.NewMockLink(ctrl)
 	ipv4Address := &netlink.Addr{}
 	ipv6Address := &netlink.Addr{}
+	eniLinkIndex := 1
 	gomock.InOrder(
 		mockNetLink.EXPECT().ParseAddr(eniIPV4CIDRBlock).Return(ipv4Address, nil),
 		mockNetLink.EXPECT().ParseAddr(eniIPV6CIDRBlock).Return(ipv6Address, nil),
@@ -1038,8 +1039,10 @@ func TestSetupNamespaceClosureRunFailsOnIPV6RouteAddError(t *testing.T) {
 			"-pf", dhclientV4LeasePIDFilePathPrefix+"-"+deviceName+".pid",
 			"eth1").Return(mockCmd),
 		mockCmd.EXPECT().CombinedOutput().Return([]byte{0}, nil),
+		mockENILink.EXPECT().Attrs().Return(&netlink.LinkAttrs{Index: eniLinkIndex}),
 		mockNetLink.EXPECT().RouteAdd(gomock.Any()).Do(func(route *netlink.Route) {
 			assert.Equal(t, route.Gw.String(), eniIPV6Gateway)
+			assert.Equal(t, route.LinkIndex, eniLinkIndex)
 		}).Return(errors.New("error")),
 	)
 	closure, err := newSetupNamespaceClosureContext(mockNetLink, mockExec, deviceName, eniIPV4CIDRBlock, eniIPV6CIDRBlock, eniIPV4Gateway, eniIPV6Gateway)
@@ -1069,6 +1072,7 @@ func TestSetupNamespaceClosureRunFailsOnDHClientV6CommandCombinedOutputError(t *
 	mockENILink := mock_netlink.NewMockLink(ctrl)
 	ipv4Address := &netlink.Addr{}
 	ipv6Address := &netlink.Addr{}
+	eniLinkIndex := 1
 	gomock.InOrder(
 		mockNetLink.EXPECT().ParseAddr(eniIPV4CIDRBlock).Return(ipv4Address, nil),
 		mockNetLink.EXPECT().ParseAddr(eniIPV6CIDRBlock).Return(ipv6Address, nil),
@@ -1085,8 +1089,10 @@ func TestSetupNamespaceClosureRunFailsOnDHClientV6CommandCombinedOutputError(t *
 			"-pf", dhclientV4LeasePIDFilePathPrefix+"-"+deviceName+".pid",
 			"eth1").Return(mockCmd),
 		mockCmd.EXPECT().CombinedOutput().Return([]byte{0}, nil),
+		mockENILink.EXPECT().Attrs().Return(&netlink.LinkAttrs{Index: eniLinkIndex}),
 		mockNetLink.EXPECT().RouteAdd(gomock.Any()).Do(func(route *netlink.Route) {
 			assert.Equal(t, route.Gw.String(), eniIPV6Gateway)
+			assert.Equal(t, route.LinkIndex, eniLinkIndex)
 		}).Return(nil),
 		mockExec.EXPECT().Command(dhclientExecutableName,
 			"-q",
@@ -1142,6 +1148,7 @@ func TestSetupNamespaceClosureRun(t *testing.T) {
 	mockENILink := mock_netlink.NewMockLink(ctrl)
 	ipv4Address := &netlink.Addr{}
 	ipv6Address := &netlink.Addr{}
+	eniLinkIndex := 1
 	gomock.InOrder(
 		mockNetLink.EXPECT().ParseAddr(eniIPV4CIDRBlock).Return(ipv4Address, nil),
 		mockNetLink.EXPECT().ParseAddr(eniIPV6CIDRBlock).Return(ipv6Address, nil),
@@ -1158,8 +1165,10 @@ func TestSetupNamespaceClosureRun(t *testing.T) {
 			"-pf", dhclientV4LeasePIDFilePathPrefix+"-"+deviceName+".pid",
 			"eth1").Return(mockCmd),
 		mockCmd.EXPECT().CombinedOutput().Return([]byte{0}, nil),
+		mockENILink.EXPECT().Attrs().Return(&netlink.LinkAttrs{Index: eniLinkIndex}),
 		mockNetLink.EXPECT().RouteAdd(gomock.Any()).Do(func(route *netlink.Route) {
 			assert.Equal(t, route.Gw.String(), eniIPV6Gateway)
+			assert.Equal(t, route.LinkIndex, eniLinkIndex)
 		}).Return(nil),
 		mockExec.EXPECT().Command(dhclientExecutableName,
 			"-q",
