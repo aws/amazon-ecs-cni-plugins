@@ -31,6 +31,8 @@ type NetLink interface {
 	LinkList() ([]netlink.Link, error)
 	// LinkSetDown is equivalent to: `ip link set $link down`
 	LinkSetDown(link netlink.Link) error
+	// RouteList gets a list of routes in the system.
+	RouteList(link netlink.Link, family int) ([]netlink.Route, error)
 }
 
 type netLink struct {
@@ -67,4 +69,8 @@ func (*netLink) LinkList() ([]netlink.Link, error) {
 
 func (*netLink) LinkSetDown(link netlink.Link) error {
 	return netlink.LinkSetDown(link)
+}
+
+func (*netLink) RouteList(link netlink.Link, family int) ([]netlink.Route, error) {
+	return netlink.RouteList(link, family)
 }
