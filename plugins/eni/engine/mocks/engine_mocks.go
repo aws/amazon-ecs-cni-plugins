@@ -140,14 +140,14 @@ func (_mr *_MockEngineRecorder) IsDHClientInPath() *gomock.Call {
 	return _mr.mock.ctrl.RecordCall(_mr.mock, "IsDHClientInPath")
 }
 
-func (_m *MockEngine) SetupContainerNamespace(_param0 string, _param1 string, _param2 string, _param3 string) error {
-	ret := _m.ctrl.Call(_m, "SetupContainerNamespace", _param0, _param1, _param2, _param3)
+func (_m *MockEngine) SetupContainerNamespace(_param0 string, _param1 string, _param2 string, _param3 string, _param4 string, _param5 string) error {
+	ret := _m.ctrl.Call(_m, "SetupContainerNamespace", _param0, _param1, _param2, _param3, _param4, _param5)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
-func (_mr *_MockEngineRecorder) SetupContainerNamespace(arg0, arg1, arg2, arg3 interface{}) *gomock.Call {
-	return _mr.mock.ctrl.RecordCall(_mr.mock, "SetupContainerNamespace", arg0, arg1, arg2, arg3)
+func (_mr *_MockEngineRecorder) SetupContainerNamespace(arg0, arg1, arg2, arg3, arg4, arg5 interface{}) *gomock.Call {
+	return _mr.mock.ctrl.RecordCall(_mr.mock, "SetupContainerNamespace", arg0, arg1, arg2, arg3, arg4, arg5)
 }
 
 func (_m *MockEngine) TeardownContainerNamespace(_param0 string, _param1 string, _param2 bool) error {
