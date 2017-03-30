@@ -16,14 +16,12 @@ package engine
 import (
 	"errors"
 	"net"
-	"os"
 	"testing"
 
 	"github.com/aws/amazon-ecs-cni-plugins/pkg/cninswrapper/mocks"
 	"github.com/aws/amazon-ecs-cni-plugins/pkg/cninswrapper/mocks_netns"
 	"github.com/aws/amazon-ecs-cni-plugins/pkg/ec2metadata/mocks"
 	"github.com/aws/amazon-ecs-cni-plugins/pkg/execwrapper/mocks"
-	"github.com/aws/amazon-ecs-cni-plugins/pkg/ioutilwrapper/mocks_fileinfo"
 	"github.com/aws/amazon-ecs-cni-plugins/pkg/ioutilwrapper/mocks_ioutilwrapper"
 	"github.com/aws/amazon-ecs-cni-plugins/pkg/netlinkwrapper/mocks"
 	"github.com/aws/amazon-ecs-cni-plugins/pkg/netlinkwrapper/mocks_link"
@@ -166,78 +164,76 @@ func TestGetMACAddressOfENI(t *testing.T) {
 	assert.Equal(t, addr, secondMACAddressSanitized)
 }
 
-func TestGetInterfaceDeviceNameReturnsErrorOnReadDirError(t *testing.T) {
-	ctrl, _, mockIOUtil, _, _, _, _ := setup(t)
+func TestGetInterfaceDeviceNameReturnsErrorOnInvalidMACAddress(t *testing.T) {
+	ctrl, _, _, _, _, _, _ := setup(t)
 	defer ctrl.Finish()
 
-	mockIOUtil.EXPECT().ReadDir(sysfsPathForNetworkDevices).Return(nil, errors.New("error"))
-	engine := &engine{ioutil: mockIOUtil}
+	engine := &engine{}
 
-	_, err := engine.GetInterfaceDeviceName(firstMACAddressSanitized)
+	_, err := engine.GetInterfaceDeviceName("")
 	assert.Error(t, err)
-	_, ok := err.(*unmappedDeviceNameError)
-	assert.False(t, ok)
 }
 
-func TestGetInterfaceDeviceNameReturnsErrorOnReadFileError(t *testing.T) {
-	ctrl, _, mockIOUtil, _, _, _, _ := setup(t)
+func TestGetInterfaceDeviceNameReturnsErrorOnLinkListErrort(t *testing.T) {
+	ctrl, _, _, _, mockNetLink, _, _ := setup(t)
 	defer ctrl.Finish()
 
-	mockFileInfo := mock_os.NewMockFileInfo(ctrl)
-	gomock.InOrder(
-		mockIOUtil.EXPECT().ReadDir(sysfsPathForNetworkDevices).Return([]os.FileInfo{mockFileInfo}, nil),
-		mockFileInfo.EXPECT().Name().Return(deviceName),
-		mockIOUtil.EXPECT().ReadFile(sysfsPathForNetworkDevices+deviceName+sysfsPathForNetworkDeviceAddressSuffix).Return(nil, errors.New("error")),
-		mockFileInfo.EXPECT().Name().Return(deviceName),
-	)
-	engine := &engine{ioutil: mockIOUtil}
+	mockNetLink.EXPECT().LinkList().Return(nil, errors.New("error"))
+	engine := &engine{netLink: mockNetLink}
 
-	_, err := engine.GetInterfaceDeviceName(firstMACAddressSanitized)
+	_, err := engine.GetInterfaceDeviceName(eniMACAddress)
 	assert.Error(t, err)
-	_, ok := err.(*unmappedDeviceNameError)
-	assert.True(t, ok)
 }
 
 func TestGetInterfaceDeviceNameReturnsErrorWhenDeviceNotFound(t *testing.T) {
-	ctrl, _, mockIOUtil, _, _, _, _ := setup(t)
+	ctrl, _, _, _, mockNetLink, _, _ := setup(t)
 	defer ctrl.Finish()
 
-	mockFileInfo := mock_os.NewMockFileInfo(ctrl)
-	gomock.InOrder(
-		mockIOUtil.EXPECT().ReadDir(sysfsPathForNetworkDevices).Return([]os.FileInfo{mockFileInfo}, nil),
-		mockFileInfo.EXPECT().Name().Return(deviceName),
-		mockIOUtil.EXPECT().ReadFile(
-			sysfsPathForNetworkDevices+deviceName+sysfsPathForNetworkDeviceAddressSuffix).Return([]byte(secondMACAddressSanitized), nil),
-	)
-	engine := &engine{ioutil: mockIOUtil}
+	lo := mock_netlink.NewMockLink(ctrl)
+	eth1 := mock_netlink.NewMockLink(ctrl)
 
-	_, err := engine.GetInterfaceDeviceName(firstMACAddressSanitized)
+	loAddress, err := net.ParseMAC(loMACAddress)
+	assert.NoError(t, err)
+	eth1Address, err := net.ParseMAC(eniMACAddress)
+	assert.NoError(t, err)
+
+	gomock.InOrder(
+		mockNetLink.EXPECT().LinkList().Return([]netlink.Link{lo, eth1}, nil),
+		lo.EXPECT().Attrs().Return(&netlink.LinkAttrs{HardwareAddr: loAddress}),
+		eth1.EXPECT().Attrs().Return(&netlink.LinkAttrs{HardwareAddr: eth1Address}),
+	)
+
+	engine := &engine{netLink: mockNetLink}
+	_, err = engine.GetInterfaceDeviceName(unknownMACAddress)
 	assert.Error(t, err)
-	_, ok := err.(*unmappedDeviceNameError)
-	assert.True(t, ok)
 }
 
 func TestGetInterfaceDeviceNameReturnsDeviceWhenFound(t *testing.T) {
-	ctrl, _, mockIOUtil, _, _, _, _ := setup(t)
+	ctrl, _, _, _, mockNetLink, _, _ := setup(t)
 	defer ctrl.Finish()
 
-	mockFileInfoEth1 := mock_os.NewMockFileInfo(ctrl)
-	mockFileInfoEth2 := mock_os.NewMockFileInfo(ctrl)
-	gomock.InOrder(
-		mockIOUtil.EXPECT().ReadDir(sysfsPathForNetworkDevices).Return([]os.FileInfo{mockFileInfoEth1, mockFileInfoEth2}, nil),
-		mockFileInfoEth1.EXPECT().Name().Return(deviceName),
-		mockIOUtil.EXPECT().ReadFile(
-			sysfsPathForNetworkDevices+deviceName+sysfsPathForNetworkDeviceAddressSuffix).Return([]byte(firstMACAddressSanitized), nil),
-		mockFileInfoEth2.EXPECT().Name().Return("eth2"),
-		mockIOUtil.EXPECT().ReadFile(
-			sysfsPathForNetworkDevices+"eth2"+sysfsPathForNetworkDeviceAddressSuffix).Return([]byte(secondMACAddressSanitized), nil),
-		mockFileInfoEth2.EXPECT().Name().Return("eth2"),
-	)
-	engine := &engine{ioutil: mockIOUtil}
+	lo := mock_netlink.NewMockLink(ctrl)
+	eth1 := mock_netlink.NewMockLink(ctrl)
 
-	deviceName, err := engine.GetInterfaceDeviceName(secondMACAddressSanitized)
+	loAddress, err := net.ParseMAC(loMACAddress)
 	assert.NoError(t, err)
-	assert.Equal(t, deviceName, "eth2")
+	eth1Address, err := net.ParseMAC(eniMACAddress)
+	assert.NoError(t, err)
+
+	gomock.InOrder(
+		mockNetLink.EXPECT().LinkList().Return([]netlink.Link{lo, eth1}, nil),
+		lo.EXPECT().Attrs().Return(&netlink.LinkAttrs{HardwareAddr: loAddress}),
+		eth1.EXPECT().Attrs().Return(&netlink.LinkAttrs{HardwareAddr: eth1Address}),
+		eth1.EXPECT().Attrs().Return(&netlink.LinkAttrs{
+			HardwareAddr: eth1Address,
+			Name:         deviceName,
+		}),
+	)
+
+	engine := &engine{netLink: mockNetLink}
+	eniDeviceName, err := engine.GetInterfaceDeviceName(eniMACAddress)
+	assert.NoError(t, err)
+	assert.Equal(t, eniDeviceName, deviceName)
 }
 
 func TestGetIPV4GatewayNetMaskLocalReturnsErrorOnMalformedCIDR(t *testing.T) {

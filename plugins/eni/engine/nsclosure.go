@@ -152,7 +152,8 @@ func constructDHClientLeasePIDFilePath(deviceName string) string {
 func (closure *teardownNamespaceClosure) run(_ ns.NetNS) error {
 	link, err := getLinkByHardwareAddress(closure.netLink, closure.hardwareAddr)
 	if err != nil {
-		return err
+		return errors.Wrapf(err,
+			"teardownNamespaceClosure engine: unable to get device with hardware address '%s'", closure.hardwareAddr.String())
 	}
 
 	deviceName := link.Attrs().Name
@@ -190,8 +191,7 @@ func (closure *teardownNamespaceClosure) run(_ ns.NetNS) error {
 func getLinkByHardwareAddress(netLink netlinkwrapper.NetLink, hardwareAddr net.HardwareAddr) (netlink.Link, error) {
 	links, err := netLink.LinkList()
 	if err != nil {
-		errors.Wrapf(err,
-			"teardownNamespaceClosure engine: unable to list device and attributes")
+		return nil, err
 	}
 
 	for _, link := range links {
