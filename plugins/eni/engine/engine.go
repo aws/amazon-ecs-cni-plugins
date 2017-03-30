@@ -31,8 +31,6 @@ import (
 const (
 	metadataNetworkInterfacesPath               = "network/interfaces/macs/"
 	metadataNetworkInterfaceIDPathSuffix        = "interface-id"
-	sysfsPathForNetworkDevices                  = "/sys/class/net/"
-	sysfsPathForNetworkDeviceAddressSuffix      = "/address"
 	metadataNetworkInterfaceIPV4CIDRPathSuffix  = "/subnet-ipv4-cidr-block"
 	metadataNetworkInterfaceIPV4AddressesSuffix = "/local-ipv4s"
 )
@@ -121,29 +119,18 @@ func (engine *engine) GetMACAddressOfENI(macAddresses []string, eniID string) (s
 
 // GetInterfaceDeviceName gets the device name on the host, given a mac address
 func (engine *engine) GetInterfaceDeviceName(macAddress string) (string, error) {
-	// TODO: Use LinkList for this
-	files, err := engine.ioutil.ReadDir(sysfsPathForNetworkDevices)
+	hardwareAddr, err := net.ParseMAC(macAddress)
 	if err != nil {
-		return "", errors.Wrap(err,
-			"getInterfaceDeviceName engine: error listing network devices from sys fs")
-	}
-	for _, file := range files {
-		// Read the 'address' file in sys for the device. An example here is: if reading for device
-		// 'eth1', read the '/sys/class/net/eth1/address' file to get the address of the device
-		// TODO Use fmt.Sprintf and wrap that in a method
-		addressFile := sysfsPathForNetworkDevices + file.Name() + sysfsPathForNetworkDeviceAddressSuffix
-		contents, err := engine.ioutil.ReadFile(addressFile)
-		if err != nil {
-			log.Warnf("Error reading contents of the address file for device '%s': %v", file.Name(), err)
-			continue
-		}
-		if strings.Contains(string(contents), macAddress) {
-			return file.Name(), nil
-		}
+		return "", errors.Wrapf(err, "getInterfaceDeviceName engine: malformatted mac address specified")
 	}
 
-	return "", newUnmappedDeviceNameError("getInterfaceDeviceName", "engine",
-		fmt.Sprintf("network device name not found for mac address '%s'", macAddress))
+	link, err := getLinkByHardwareAddress(engine.netLink, hardwareAddr)
+	if err != nil {
+		return "", errors.Wrapf(err,
+			"getInterfaceDeviceName engine: unable to get device with hardware address '%s'", macAddress)
+	}
+
+	return link.Attrs().Name, nil
 }
 
 // GetIPV4GatewayNetmask gets the ipv4 gateway and the netmask from the instance

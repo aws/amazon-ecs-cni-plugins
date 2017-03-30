@@ -46,26 +46,6 @@ func newUnmappedMACAddressError(operation string, origin string, message string)
 	}
 }
 
-// unmappedDeviceNameError is used to indicate that the the MAC address of the
-// ENI cannot be mapped to any of the network devices available on the host
-type unmappedDeviceNameError struct {
-	err *_error
-}
-
-func (devNameErr *unmappedDeviceNameError) Error() string {
-	return devNameErr.err.Error()
-}
-
-func newUnmappedDeviceNameError(operation string, origin string, message string) error {
-	return &unmappedDeviceNameError{
-		err: &_error{
-			operation: operation,
-			origin:    origin,
-			message:   message,
-		},
-	}
-}
-
 // parseIPV4GatewayNetmaskError is used to indicate any error with parsing the
 // IPV4 address and the netmask of the ENI
 type parseIPV4GatewayNetmaskError struct {
