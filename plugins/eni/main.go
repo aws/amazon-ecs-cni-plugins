@@ -14,8 +14,11 @@
 package main
 
 import (
+	"flag"
+	"fmt"
 	"runtime"
 
+	"github.com/aws/amazon-ecs-cni-plugins/pkg/version"
 	"github.com/aws/amazon-ecs-cni-plugins/plugins/eni/commands"
 	"github.com/aws/amazon-ecs-cni-plugins/plugins/eni/version/cnispec"
 	log "github.com/cihub/seelog"
@@ -30,5 +33,23 @@ func main() {
 	// TODO logging config
 	defer log.Flush()
 
+	var printVersion bool
+	flag.BoolVar(&printVersion, "version", false, "prints version and exits")
+	flag.Parse()
+
+	if printVersion {
+		printVersionInfo()
+		return
+	}
+
 	skel.PluginMain(commands.Add, commands.Del, cnispec.GetSpecVersionSupported())
+}
+
+func printVersionInfo() {
+	versionInfo, err := version.String()
+	if err != nil {
+		fmt.Println("Error getting version string: ", err)
+		return
+	}
+	fmt.Println(versionInfo)
 }
