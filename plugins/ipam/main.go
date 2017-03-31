@@ -14,11 +14,33 @@
 package main
 
 import (
+	"flag"
+	"fmt"
+
 	"github.com/aws/amazon-ecs-cni-plugins/plugins/ipam/commands"
+	"github.com/aws/amazon-ecs-cni-plugins/plugins/ipam/version"
 	"github.com/aws/amazon-ecs-cni-plugins/plugins/ipam/version/cnispec"
 	"github.com/containernetworking/cni/pkg/skel"
 )
 
 func main() {
+	var printVersion bool
+	flag.BoolVar(&printVersion, "version", false, "prints version and exits")
+	flag.Parse()
+
+	if printVersion {
+		printVersionInfo()
+		return
+	}
+
 	skel.PluginMain(commands.Add, commands.Del, cnispec.GetSpecVersionSupported())
+}
+
+func printVersionInfo() {
+	versionInfo, err := version.String()
+	if err != nil {
+		fmt.Println("Error getting version string: ", err)
+		return
+	}
+	fmt.Println(versionInfo)
 }
