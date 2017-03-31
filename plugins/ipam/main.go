@@ -17,6 +17,7 @@ import (
 	"flag"
 	"fmt"
 
+	"github.com/aws/amazon-ecs-cni-plugins/pkg/logger"
 	"github.com/aws/amazon-ecs-cni-plugins/pkg/version"
 	"github.com/aws/amazon-ecs-cni-plugins/plugins/ipam/commands"
 	"github.com/aws/amazon-ecs-cni-plugins/plugins/ipam/version/cnispec"
@@ -24,9 +25,13 @@ import (
 	"github.com/containernetworking/cni/pkg/skel"
 )
 
+const (
+	defaultLogFilePath = "/var/log/ecs/ecs-cni-ipam-plugin.log"
+)
+
 func main() {
-	// TODO logging config
 	defer log.Flush()
+	logger.SetupLogger(logger.GetLogFileLocation(defaultLogFilePath))
 
 	var printVersion bool
 	flag.BoolVar(&printVersion, "version", false, "prints version and exits")
@@ -43,7 +48,7 @@ func main() {
 func printVersionInfo() {
 	versionInfo, err := version.String()
 	if err != nil {
-		fmt.Println("Error getting version string: ", err)
+		log.Errorf("Error getting version string: %v", err)
 		return
 	}
 	fmt.Println(versionInfo)
