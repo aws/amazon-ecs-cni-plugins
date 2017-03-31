@@ -1,7 +1,7 @@
 {
 	"ImportPath": "github.com/aws/amazon-ecs-cni-plugins",
 	"GoVersion": "go1.6",
-	"GodepVersion": "v74",
+	"GodepVersion": "v79",
 	"Packages": [
 		"./..."
 	],
@@ -117,6 +117,11 @@
 			"Rev": "08762661fb8f2c081b434de78a363daf6e8615a0"
 		},
 		{
+			"ImportPath": "github.com/boltdb/bolt",
+			"Comment": "v1.3.0-58-ge9cf4fa",
+			"Rev": "e9cf4fae01b5a8ff89d0ec6b32f0d9c9f79aefdd"
+		},
+		{
 			"ImportPath": "github.com/cihub/seelog",
 			"Comment": "v2.6-31-gf561c5e",
 			"Rev": "f561c5e57575bb1e0a2167028b7339b3a8d16fb4"
@@ -190,6 +195,21 @@
 			"ImportPath": "github.com/davecgh/go-spew/spew",
 			"Comment": "v1.1.0",
 			"Rev": "346938d642f2ec3594ed81d874461961cd0faa76"
+		},
+		{
+			"ImportPath": "github.com/docker/libkv",
+			"Comment": "v0.2.1-5-g1d84310",
+			"Rev": "1d8431073ae03cdaedb198a89722f3aab6d418ef"
+		},
+		{
+			"ImportPath": "github.com/docker/libkv/store",
+			"Comment": "v0.2.1-5-g1d84310",
+			"Rev": "1d8431073ae03cdaedb198a89722f3aab6d418ef"
+		},
+		{
+			"ImportPath": "github.com/docker/libkv/store/boltdb",
+			"Comment": "v0.2.1-5-g1d84310",
+			"Rev": "1d8431073ae03cdaedb198a89722f3aab6d418ef"
 		},
 		{
 			"ImportPath": "github.com/go-ini/ini",
