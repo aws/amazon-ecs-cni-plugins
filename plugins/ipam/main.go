@@ -17,13 +17,17 @@ import (
 	"flag"
 	"fmt"
 
+	"github.com/aws/amazon-ecs-cni-plugins/pkg/version"
 	"github.com/aws/amazon-ecs-cni-plugins/plugins/ipam/commands"
-	"github.com/aws/amazon-ecs-cni-plugins/plugins/ipam/version"
 	"github.com/aws/amazon-ecs-cni-plugins/plugins/ipam/version/cnispec"
+	log "github.com/cihub/seelog"
 	"github.com/containernetworking/cni/pkg/skel"
 )
 
 func main() {
+	// TODO logging config
+	defer log.Flush()
+
 	var printVersion bool
 	flag.BoolVar(&printVersion, "version", false, "prints version and exits")
 	flag.Parse()

@@ -19,7 +19,7 @@ import (
 )
 
 // Version is the version number of the plugin
-const Version = "0.1.1"
+var Version string
 
 // GitPorcelain indicates the output of the git status --porcelain command to
 // determine the cleanliness of the git repo when this plugin was built
