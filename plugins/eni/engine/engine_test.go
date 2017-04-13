@@ -267,6 +267,11 @@ func TestGetIPV4GatewayNetMaskInternalReturnsErrorOnInvalidRouterInCIDR(t *testi
 	assert.Error(t, err)
 }
 
+func TestGetIPV4GatewayNetMaskInternalReturnsErrorOnInvalidCIDRBlock(t *testing.T) {
+	_, _, err := getIPV4GatewayNetmask("10.0.64.254/26")
+	assert.Error(t, err)
+}
+
 func TestGetIPV4GatewayNetMaskInternal(t *testing.T) {
 	gateway, netmask, err := getIPV4GatewayNetmask("10.0.1.64/26")
 	assert.NoError(t, err)
@@ -330,22 +335,22 @@ func TestGetIPV4GatewayNetMask(t *testing.T) {
 }
 
 func TestGetIPV6NetmaskInternalReturnsErrorOnMalformedCIDR(t *testing.T) {
-	_, err := getIPV6Netmask("2001:db8::")
+	_, err := getIPV6PrefixLength("2001:db8::")
 	assert.Error(t, err)
 }
 
 func TestGetIPV6NetmaskInternalReturnsErrorOnMalformedNetmaskInCIDR(t *testing.T) {
-	_, err := getIPV6Netmask("2001:db8::/")
+	_, err := getIPV6PrefixLength("2001:db8::/")
 	assert.Error(t, err)
 }
 
 func TestGetIPV6NetmaskInternalReturnsErrorOnMalformedCIDRBlockInCIDR(t *testing.T) {
-	_, err := getIPV6Netmask("2001:::/32")
+	_, err := getIPV6PrefixLength("2001:::/32")
 	assert.Error(t, err)
 }
 
 func TestGetIPV6NetMaskInternal(t *testing.T) {
-	netmask, err := getIPV6Netmask("2001:db8::/32")
+	netmask, err := getIPV6PrefixLength("2001:db8::/32")
 	assert.NoError(t, err)
 	assert.Equal(t, netmask, "32")
 }
@@ -358,7 +363,7 @@ func TestGetIPV6NetMaskReturnsErrorOnGetMetadataError(t *testing.T) {
 		metadataNetworkInterfacesPath+firstMACAddressSanitized+metadataNetworkInterfaceIPV6CIDRPathSuffix).Return("", errors.New("error"))
 	engine := &engine{metadata: mockMetadata}
 
-	_, err := engine.GetIPV6Netmask(firstMACAddressSanitized)
+	_, err := engine.GetIPV6PrefixLength(firstMACAddressSanitized)
 	assert.Error(t, err)
 }
 
@@ -369,7 +374,7 @@ func TestGetIPV6NetMaskReturnsErrorWhenUnableToParseCIDRNetmaskResponse(t *testi
 	engine := &engine{metadata: mockMetadata}
 	mockMetadata.EXPECT().GetMetadata(
 		metadataNetworkInterfacesPath+firstMACAddressSanitized+metadataNetworkInterfaceIPV6CIDRPathSuffix).Return("2001:db8::", nil)
-	_, err := engine.GetIPV6Netmask(firstMACAddressSanitized)
+	_, err := engine.GetIPV6PrefixLength(firstMACAddressSanitized)
 	assert.Error(t, err)
 }
 
@@ -381,7 +386,7 @@ func TestGetIPV6NetMask(t *testing.T) {
 		metadataNetworkInterfacesPath+firstMACAddressSanitized+metadataNetworkInterfaceIPV6CIDRPathSuffix).Return("2001:db8::/32", nil)
 	engine := &engine{metadata: mockMetadata}
 
-	netmask, err := engine.GetIPV6Netmask(firstMACAddressSanitized)
+	netmask, err := engine.GetIPV6PrefixLength(firstMACAddressSanitized)
 	assert.NoError(t, err)
 	assert.Equal(t, "32", netmask)
 }

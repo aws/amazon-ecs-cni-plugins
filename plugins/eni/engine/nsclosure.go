@@ -42,7 +42,7 @@ const (
 	dhclientV6LeasePIDFilePathPrefix = "/var/run/ns-dhclient6"
 )
 
-var linkWithMACNotFoundError = errors.Errorf("engine: device with mac address not found")
+var linkWithMACNotFoundError = errors.New("engine: device with mac address not found")
 
 // setupNamespaceClosureContext wraps the parameters and the method to configure the container's namespace
 type setupNamespaceClosureContext struct {
@@ -201,9 +201,9 @@ func (closureContext *setupNamespaceClosureContext) startDHClientV4() error {
 // renew the lease on the IPV4 address
 func constructDHClientV4Args(deviceName string) []string {
 	return []string{
-		"-q",
-		"-lf", dhclientV4LeaseFilePathPrefix + "-" + deviceName + ".leases",
-		"-pf", constructDHClientLeasePIDFilePathIPV4(deviceName),
+		"-q",                                                                // Suppress all messages to terminal
+		"-lf", dhclientV4LeaseFilePathPrefix + "-" + deviceName + ".leases", // The path to the leases file
+		"-pf", constructDHClientLeasePIDFilePathIPV4(deviceName), // The path to the pid file
 		deviceName,
 	}
 }
@@ -235,10 +235,10 @@ func (closureContext *setupNamespaceClosureContext) startDHClientV6() error {
 // renew the lease on the IPV6 address
 func constructDHClientV6Args(deviceName string) []string {
 	return []string{
-		"-q",
-		"-6",
-		"-lf", dhclientV6LeaseFilePathPrefix + "-" + deviceName + ".leases",
-		"-pf", constructDHClientLeasePIDFilePathIPV6(deviceName),
+		"-q",                                                                // Suppress all messages to terminal
+		"-6",                                                                // Use DHCPv6 protocol
+		"-lf", dhclientV6LeaseFilePathPrefix + "-" + deviceName + ".leases", // The path to the leases file
+		"-pf", constructDHClientLeasePIDFilePathIPV6(deviceName), // The path to the pid file
 		deviceName,
 	}
 }
