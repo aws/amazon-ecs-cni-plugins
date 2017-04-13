@@ -55,7 +55,7 @@ type Engine interface {
 	GetMACAddressOfENI(macAddresses []string, eniID string) (string, error)
 	GetInterfaceDeviceName(macAddress string) (string, error)
 	GetIPV4GatewayNetmask(macAddress string) (string, string, error)
-	GetIPV6Netmask(macAddress string) (string, error)
+	GetIPV6PrefixLength(macAddress string) (string, error)
 	GetIPV6Gateway(deviceName string) (string, error)
 	DoesMACAddressMapToIPV4Address(macAddress string, ipv4Address string) (bool, error)
 	DoesMACAddressMapToIPV6Address(macAddress string, ipv4Address string) (bool, error)
@@ -180,15 +180,18 @@ func getIPV4GatewayNetmask(cidrBlock string) (string, string, error) {
 			fmt.Sprintf("unable to parse ipv4 gateway from cidr block '%s'", cidrBlock))
 	}
 
+	if ip4[3] >= 254 {
+		return "", "", errors.New("eni ipv4 netmask: invalid ipv4 cidr block")
+	}
 	// ipv4 gateway is the first available IP address in the subnet
 	ip4[3] = ip4[3] + 1
 	maskOnes, _ := ipNet.Mask.Size()
 	return ip4.String(), fmt.Sprintf("%d", maskOnes), nil
 }
 
-// GetIPV6GatewayNetmask gets the ipv6 subnet mask from the instance
+// GetIPV6PrefixLength gets the ipv6 subnet mask from the instance
 // metadata, given a mac address
-func (engine *engine) GetIPV6Netmask(macAddress string) (string, error) {
+func (engine *engine) GetIPV6PrefixLength(macAddress string) (string, error) {
 	// TODO Use fmt.Sprintf and wrap that in a method
 	cidrBlock, err := engine.metadata.GetMetadata(metadataNetworkInterfacesPath + macAddress + metadataNetworkInterfaceIPV6CIDRPathSuffix)
 	if err != nil {
@@ -196,10 +199,10 @@ func (engine *engine) GetIPV6Netmask(macAddress string) (string, error) {
 			"getIPV6Netmask engine: unable to get ipv6 subnet and cidr block for '%s' from instance metadata", macAddress)
 	}
 
-	return getIPV6Netmask(cidrBlock)
+	return getIPV6PrefixLength(cidrBlock)
 }
 
-func getIPV6Netmask(cidrBlock string) (string, error) {
+func getIPV6PrefixLength(cidrBlock string) (string, error) {
 	// The IPV6 CIDR block is of the format ip-addr/netmask
 	_, ipNet, err := net.ParseCIDR(cidrBlock)
 	if err != nil {
