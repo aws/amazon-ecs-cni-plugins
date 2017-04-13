@@ -296,6 +296,7 @@ func getLinkByHardwareAddress(netLink netlinkwrapper.NetLink, hardwareAddr net.H
 }
 
 func (closureContext *teardownNamespaceClosureContext) stopDHClient(pidFilePath string) error {
+	log.Debugf("Stopping DHClient process by reading file: %s", pidFilePath)
 	// Extract the PID of the dhclient process
 	contents, err := closureContext.ioutil.ReadFile(pidFilePath)
 	if err != nil {
@@ -310,14 +311,14 @@ func (closureContext *teardownNamespaceClosureContext) stopDHClient(pidFilePath 
 	process, err := closureContext.os.FindProcess(pid)
 	if err != nil {
 		return errors.Wrapf(err,
-			"teardownNamespaceClosure engine: error getting process handle for dhclient, pid file: '%s'", pidFilePath)
+			"teardownNamespaceClosure engine: error getting process handle for dhclient, pid: '%d'", pid)
 	}
 
 	// Stop the dhclient process
 	err = process.Kill()
 	if err != nil {
 		return errors.Wrapf(err,
-			"teardownNamespaceClosure engine: error stopping the dhclient process, pid file: '%s'", pidFilePath)
+			"teardownNamespaceClosure engine: error stopping the dhclient process, pid: '%d'", pid)
 	}
 
 	return nil
