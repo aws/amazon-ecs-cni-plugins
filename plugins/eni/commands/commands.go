@@ -108,7 +108,7 @@ func add(args *skel.CmdArgs, engine engine.Engine) error {
 		log.Errorf("Unable to setup container's namespace: %v", err)
 		return err
 	}
-	log.Debug("ENI has been assigned to the container's namespace")
+	log.Infof("ENI %s has been assigned to the container's namespace", conf.MACAddress)
 
 	return nil
 }
