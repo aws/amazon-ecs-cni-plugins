@@ -97,15 +97,15 @@ func (_mr *_MockEngineRecorder) GetIPV6Gateway(arg0 interface{}) *gomock.Call {
 	return _mr.mock.ctrl.RecordCall(_mr.mock, "GetIPV6Gateway", arg0)
 }
 
-func (_m *MockEngine) GetIPV6Netmask(_param0 string) (string, error) {
-	ret := _m.ctrl.Call(_m, "GetIPV6Netmask", _param0)
+func (_m *MockEngine) GetIPV6PrefixLength(_param0 string) (string, error) {
+	ret := _m.ctrl.Call(_m, "GetIPV6PrefixLength", _param0)
 	ret0, _ := ret[0].(string)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-func (_mr *_MockEngineRecorder) GetIPV6Netmask(arg0 interface{}) *gomock.Call {
-	return _mr.mock.ctrl.RecordCall(_mr.mock, "GetIPV6Netmask", arg0)
+func (_mr *_MockEngineRecorder) GetIPV6PrefixLength(arg0 interface{}) *gomock.Call {
+	return _mr.mock.ctrl.RecordCall(_mr.mock, "GetIPV6PrefixLength", arg0)
 }
 
 func (_m *MockEngine) GetInterfaceDeviceName(_param0 string) (string, error) {

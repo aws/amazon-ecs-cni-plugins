@@ -82,7 +82,7 @@ func add(args *skel.CmdArgs, engine engine.Engine) error {
 	ipv6Gateway := ""
 	if conf.IPV6Address != "" {
 		// Config contains an ipv6 address, figure out the subnet mask
-		ipv6Netmask, err := engine.GetIPV6Netmask(macAddressOfENI)
+		ipv6Netmask, err := engine.GetIPV6PrefixLength(macAddressOfENI)
 		if err != nil {
 			log.Errorf("Unable to get ipv6 netmask for ENI: %v", err)
 			return err
@@ -136,7 +136,7 @@ func getMACAddressOfENI(conf *types.NetConf, engine engine.Engine) (string, erro
 	// Validation to ensure that we've been given the correct parameters.
 	// Check if the ipv4 address of the ENI maps to the mac address of the
 	// ENI.
-	err = doesMACAddressMapToIPV4Address(engine, macAddressOfENI, conf.IPV4Address)
+	err = validateMACMapsToIPV4Address(engine, macAddressOfENI, conf.IPV4Address)
 	if err != nil {
 		return "", err
 	}
@@ -145,7 +145,7 @@ func getMACAddressOfENI(conf *types.NetConf, engine engine.Engine) (string, erro
 	// Check if the ipv6 address of the ENI maps to the mac address of the
 	// ENI.
 	if conf.IPV6Address != "" {
-		err = doesMACAddressMapToIPV6Address(engine, macAddressOfENI, conf.IPV6Address)
+		err = validateMACMapsToIPV6Address(engine, macAddressOfENI, conf.IPV6Address)
 		if err != nil {
 			return "", err
 		}
@@ -155,7 +155,7 @@ func getMACAddressOfENI(conf *types.NetConf, engine engine.Engine) (string, erro
 	return macAddressOfENI, nil
 }
 
-func doesMACAddressMapToIPV4Address(engine engine.Engine, macAddressOfENI string, ipv4Address string) error {
+func validateMACMapsToIPV4Address(engine engine.Engine, macAddressOfENI string, ipv4Address string) error {
 	ok, err := engine.DoesMACAddressMapToIPV4Address(macAddressOfENI, ipv4Address)
 	if err != nil {
 		log.Errorf("Error validating ipv4 addresses for ENI: %v", err)
@@ -169,7 +169,7 @@ func doesMACAddressMapToIPV4Address(engine engine.Engine, macAddressOfENI string
 	return nil
 }
 
-func doesMACAddressMapToIPV6Address(engine engine.Engine, macAddressOfENI string, ipv6Address string) error {
+func validateMACMapsToIPV6Address(engine engine.Engine, macAddressOfENI string, ipv6Address string) error {
 	ok, err := engine.DoesMACAddressMapToIPV6Address(macAddressOfENI, ipv6Address)
 	if err != nil {
 		log.Errorf("Error validating ipv6 addresses for ENI: %v", err)
