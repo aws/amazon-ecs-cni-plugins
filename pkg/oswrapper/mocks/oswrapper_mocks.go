@@ -17,6 +17,8 @@
 package mock_oswrapper
 
 import (
+	os "os"
+
 	oswrapper "github.com/aws/amazon-ecs-cni-plugins/pkg/oswrapper"
 	gomock "github.com/golang/mock/gomock"
 )
@@ -74,12 +76,12 @@ func (_m *MockOSProcess) EXPECT() *_MockOSProcessRecorder {
 	return _m.recorder
 }
 
-func (_m *MockOSProcess) Kill() error {
-	ret := _m.ctrl.Call(_m, "Kill")
+func (_m *MockOSProcess) Signal(_param0 os.Signal) error {
+	ret := _m.ctrl.Call(_m, "Signal", _param0)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
-func (_mr *_MockOSProcessRecorder) Kill() *gomock.Call {
-	return _mr.mock.ctrl.RecordCall(_mr.mock, "Kill")
+func (_mr *_MockOSProcessRecorder) Signal(arg0 interface{}) *gomock.Call {
+	return _mr.mock.ctrl.RecordCall(_mr.mock, "Signal", arg0)
 }
