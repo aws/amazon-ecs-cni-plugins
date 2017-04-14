@@ -14,8 +14,10 @@
 package engine
 
 import (
+	"context"
 	"errors"
 	"net"
+	"syscall"
 	"testing"
 	"time"
 
@@ -268,7 +270,9 @@ func TestGetIPV4GatewayNetMaskInternalReturnsErrorOnInvalidRouterInCIDR(t *testi
 }
 
 func TestGetIPV4GatewayNetMaskInternalReturnsErrorOnInvalidCIDRBlock(t *testing.T) {
-	_, _, err := getIPV4GatewayNetmask("10.0.64.254/26")
+	_, _, err := getIPV4GatewayNetmask("10.0.64.0/29")
+	assert.Error(t, err)
+	_, _, err = getIPV4GatewayNetmask("10.0.64.0/15")
 	assert.Error(t, err)
 }
 
@@ -1249,7 +1253,8 @@ func TestNewTeardownNamespaceClosureFailsOnInvalidMAC(t *testing.T) {
 	ctrl, _, mockIOUtil, _, mockNetLink, _, mockOS := setup(t)
 	defer ctrl.Finish()
 
-	_, err := newTeardownNamespaceClosureContext(mockNetLink, mockIOUtil, mockOS, invalidMACAddress, false)
+	_, err := newTeardownNamespaceClosureContext(mockNetLink, mockIOUtil, mockOS, invalidMACAddress, false,
+		checkProcessStateInterval, maxProcessStopWaitDuration)
 	assert.Error(t, err)
 }
 
@@ -1257,7 +1262,8 @@ func TestNewTeardownNamespaceClosure(t *testing.T) {
 	ctrl, _, mockIOUtil, _, mockNetLink, _, mockOS := setup(t)
 	defer ctrl.Finish()
 
-	closure, err := newTeardownNamespaceClosureContext(mockNetLink, mockIOUtil, mockOS, eniMACAddress, false)
+	closure, err := newTeardownNamespaceClosureContext(mockNetLink, mockIOUtil, mockOS, eniMACAddress, false,
+		checkProcessStateInterval, maxProcessStopWaitDuration)
 	assert.NoError(t, err)
 	assert.NotNil(t, closure)
 }
@@ -1277,7 +1283,8 @@ func TestTearDownNamespaceClosureRunFailsWhenGetLinkByHardwareAddressReturnsErro
 	defer ctrl.Finish()
 
 	mockNetNS := mock_ns.NewMockNetNS(ctrl)
-	closure, err := newTeardownNamespaceClosureContext(mockNetLink, mockIOUtil, mockOS, eniMACAddress, false)
+	closure, err := newTeardownNamespaceClosureContext(mockNetLink, mockIOUtil, mockOS, eniMACAddress, false,
+		checkProcessStateInterval, maxProcessStopWaitDuration)
 	assert.NoError(t, err)
 	assert.NotNil(t, closure)
 
@@ -1286,11 +1293,174 @@ func TestTearDownNamespaceClosureRunFailsWhenGetLinkByHardwareAddressReturnsErro
 	assert.Error(t, err)
 }
 
+func TestIsProcessFinishedReturnsErrorWhenSignalProcessFails(t *testing.T) {
+	ctrl, _, _, _, _, _, mockOS := setup(t)
+	defer ctrl.Finish()
+
+	mockDHClientProcess := mock_oswrapper.NewMockOSProcess(ctrl)
+	gomock.InOrder(
+		// Ensure that isProcessFinished errors out by failing the
+		// Signal(0) call
+		mockOS.EXPECT().FindProcess(dhclientV4PID).Return(mockDHClientProcess, nil),
+		mockDHClientProcess.EXPECT().Signal(syscall.Signal(0)).Return(errors.New("error")),
+	)
+
+	ok, err := isProcessFinished(mockOS, dhclientV4PID)
+	assert.Error(t, err)
+	assert.False(t, ok)
+}
+
+func TestIsProcessFinishedReturnsFalseWhenSignalProcessSucceeds(t *testing.T) {
+	ctrl, _, _, _, _, _, mockOS := setup(t)
+	defer ctrl.Finish()
+
+	mockDHClientProcess := mock_oswrapper.NewMockOSProcess(ctrl)
+	gomock.InOrder(
+		// Mock a successful execution of the Signal(0) call, thus mocking
+		// that the process is executing
+		mockOS.EXPECT().FindProcess(dhclientV4PID).Return(mockDHClientProcess, nil),
+		mockDHClientProcess.EXPECT().Signal(syscall.Signal(0)).Return(nil),
+	)
+
+	ok, err := isProcessFinished(mockOS, dhclientV4PID)
+	assert.NoError(t, err)
+	assert.False(t, ok)
+}
+
+func TestIsProcessFinishedReturnsTrueWhenSignalProcessFailsWithProcessFinishedError(t *testing.T) {
+	ctrl, _, _, _, _, _, mockOS := setup(t)
+	defer ctrl.Finish()
+
+	mockDHClientProcess := mock_oswrapper.NewMockOSProcess(ctrl)
+	gomock.InOrder(
+		// Signal(0) fails with the error message that inidcates that the
+		// process has finished it's execution
+		mockOS.EXPECT().FindProcess(dhclientV4PID).Return(mockDHClientProcess, nil),
+		mockDHClientProcess.EXPECT().Signal(syscall.Signal(0)).Return(errors.New(processFinishedErrorMessage)),
+	)
+
+	ok, err := isProcessFinished(mockOS, dhclientV4PID)
+	assert.NoError(t, err)
+	assert.True(t, ok)
+}
+
+func TestWaitForStopReturnsNoErrorWhenProcessIsFinished(t *testing.T) {
+	ctrl, _, _, _, _, _, mockOS := setup(t)
+	defer ctrl.Finish()
+
+	ctx, cancel := context.WithCancel(context.TODO())
+	mockDHClientProcess := mock_oswrapper.NewMockOSProcess(ctrl)
+	gomock.InOrder(
+		mockOS.EXPECT().FindProcess(dhclientV4PID).Return(mockDHClientProcess, nil),
+		mockDHClientProcess.EXPECT().Signal(syscall.Signal(0)).Return(errors.New(processFinishedErrorMessage)),
+	)
+	err := waitForProcesToFinish(ctx, cancel, mockOS, time.Microsecond, dhclientV4PID)
+	assert.NoError(t, err)
+}
+
+func TestWaitForStopWaitsForDurationWhenSignallingProcessFails(t *testing.T) {
+	ctrl, _, _, _, _, _, mockOS := setup(t)
+	defer ctrl.Finish()
+
+	ctx, cancel := context.WithCancel(context.TODO())
+	mockDHClientProcess := mock_oswrapper.NewMockOSProcess(ctrl)
+	gomock.InOrder(
+		// Both invocations of isProcessFinished return error, however the
+		// second invocation causes the context being cancelled, thus
+		// simulating a context timing out
+		mockOS.EXPECT().FindProcess(dhclientV4PID).Return(mockDHClientProcess, nil),
+		mockDHClientProcess.EXPECT().Signal(syscall.Signal(0)).Return(errors.New("error")),
+		mockOS.EXPECT().FindProcess(dhclientV4PID).Return(mockDHClientProcess, nil),
+		mockDHClientProcess.EXPECT().Signal(syscall.Signal(0)).Do(func(_ syscall.Signal) {
+			cancel()
+		}).Return(nil),
+	)
+	err := waitForProcesToFinish(ctx, cancel, mockOS, time.Microsecond, dhclientV4PID)
+	assert.Error(t, err)
+}
+
+func TestWaitForStopWaitsForDuration(t *testing.T) {
+	ctrl, _, _, _, _, _, mockOS := setup(t)
+	defer ctrl.Finish()
+
+	ctx, cancel := context.WithCancel(context.TODO())
+	mockDHClientProcess := mock_oswrapper.NewMockOSProcess(ctrl)
+	gomock.InOrder(
+		// Both invocations of isProcessFinished return no error, however the
+		// second invocation causes the context being cancelled, thus
+		// simulating a context timing out
+		mockOS.EXPECT().FindProcess(dhclientV4PID).Return(mockDHClientProcess, nil),
+		mockDHClientProcess.EXPECT().Signal(syscall.Signal(0)).Return(nil),
+		mockOS.EXPECT().FindProcess(dhclientV4PID).Return(mockDHClientProcess, nil),
+		mockDHClientProcess.EXPECT().Signal(syscall.Signal(0)).Do(func(_ syscall.Signal) {
+			cancel()
+		}).Return(nil),
+	)
+	err := waitForProcesToFinish(ctx, cancel, mockOS, time.Microsecond, dhclientV4PID)
+	assert.Error(t, err)
+}
+
+func TestStopProcessFailsWhenUnableToSendSIGTERM(t *testing.T) {
+	ctrl, _, _, _, _, _, mockOS := setup(t)
+	defer ctrl.Finish()
+
+	mockDHClientProcess := mock_oswrapper.NewMockOSProcess(ctrl)
+	gomock.InOrder(
+		mockOS.EXPECT().FindProcess(dhclientV4PID).Return(mockDHClientProcess, nil),
+		mockDHClientProcess.EXPECT().Signal(syscall.SIGTERM).Return(errors.New("error")),
+	)
+	err := stopProcess(mockOS, dhclientV4PID, time.Microsecond, 10*time.Minute)
+	assert.Error(t, err)
+}
+
+func TestStopProcessKillsProcessWhenWaitTimesout(t *testing.T) {
+	ctrl, _, _, _, _, _, mockOS := setup(t)
+	defer ctrl.Finish()
+
+	mockDHClientProcess := mock_oswrapper.NewMockOSProcess(ctrl)
+	gomock.InOrder(
+		mockOS.EXPECT().FindProcess(dhclientV4PID).Return(mockDHClientProcess, nil),
+		mockDHClientProcess.EXPECT().Signal(syscall.SIGTERM).Return(nil),
+	)
+
+	// These are unordered because the ticker might or might not kick in
+	// during test execution. We have that code path covered in previous
+	// tests anyway. The important thing is that Signal(SIGKILL) is invoked
+	mockOS.EXPECT().FindProcess(dhclientV4PID).Return(mockDHClientProcess, nil).AnyTimes()
+	mockDHClientProcess.EXPECT().Signal(syscall.Signal(0)).Return(nil).AnyTimes()
+
+	mockDHClientProcess.EXPECT().Signal(syscall.SIGKILL).Return(nil)
+	err := stopProcess(mockOS, dhclientV4PID, time.Microsecond, 10*time.Microsecond)
+	assert.NoError(t, err)
+}
+
+func TestStopProcessReturnsErrorWhenSIGKILLSignalFails(t *testing.T) {
+	ctrl, _, _, _, _, _, mockOS := setup(t)
+	defer ctrl.Finish()
+
+	mockDHClientProcess := mock_oswrapper.NewMockOSProcess(ctrl)
+	gomock.InOrder(
+		mockOS.EXPECT().FindProcess(dhclientV4PID).Return(mockDHClientProcess, nil),
+		mockDHClientProcess.EXPECT().Signal(syscall.SIGTERM).Return(nil),
+	)
+
+	// These are unordered because the ticker might or might not kick in
+	// during test execution. We have that code path covered in previous
+	// tests anyway. The important thing is that Signal(SIGKILL) is invoked
+	mockOS.EXPECT().FindProcess(dhclientV4PID).Return(mockDHClientProcess, nil).AnyTimes()
+	mockDHClientProcess.EXPECT().Signal(syscall.Signal(0)).Return(nil).AnyTimes()
+
+	mockDHClientProcess.EXPECT().Signal(syscall.SIGKILL).Return(errors.New("error"))
+	err := stopProcess(mockOS, dhclientV4PID, time.Microsecond, 10*time.Microsecond)
+	assert.Error(t, err)
+}
+
 func TestStopDHClientFailsWhenReadFileReturnsError(t *testing.T) {
 	ctrl, _, mockIOUtil, _, mockNetLink, _, mockOS := setup(t)
 	defer ctrl.Finish()
 
-	closure, err := newTeardownNamespaceClosureContext(mockNetLink, mockIOUtil, mockOS, eniMACAddress, false)
+	closure, err := newTeardownNamespaceClosureContext(mockNetLink, mockIOUtil, mockOS, eniMACAddress, false,
+		checkProcessStateInterval, maxProcessStopWaitDuration)
 	assert.NoError(t, err)
 	assert.NotNil(t, closure)
 
@@ -1306,7 +1476,8 @@ func TestStopDHClientFailsWhenReadFileReturnsInvalidPID(t *testing.T) {
 	ctrl, _, mockIOUtil, _, mockNetLink, _, mockOS := setup(t)
 	defer ctrl.Finish()
 
-	closure, err := newTeardownNamespaceClosureContext(mockNetLink, mockIOUtil, mockOS, eniMACAddress, false)
+	closure, err := newTeardownNamespaceClosureContext(mockNetLink, mockIOUtil, mockOS, eniMACAddress, false,
+		checkProcessStateInterval, maxProcessStopWaitDuration)
 	assert.NoError(t, err)
 	assert.NotNil(t, closure)
 
@@ -1322,7 +1493,8 @@ func TestStopDHClientFailsWhenDHClientProcessNotFound(t *testing.T) {
 	ctrl, _, mockIOUtil, _, mockNetLink, _, mockOS := setup(t)
 	defer ctrl.Finish()
 
-	closure, err := newTeardownNamespaceClosureContext(mockNetLink, mockIOUtil, mockOS, eniMACAddress, false)
+	closure, err := newTeardownNamespaceClosureContext(mockNetLink, mockIOUtil, mockOS, eniMACAddress, false,
+		checkProcessStateInterval, maxProcessStopWaitDuration)
 	assert.NoError(t, err)
 	assert.NotNil(t, closure)
 
@@ -1340,7 +1512,8 @@ func TestStopDHClientRunFailsWhenDHClientProcessCannotBeKilled(t *testing.T) {
 	defer ctrl.Finish()
 
 	mockDHClientProcess := mock_oswrapper.NewMockOSProcess(ctrl)
-	closure, err := newTeardownNamespaceClosureContext(mockNetLink, mockIOUtil, mockOS, eniMACAddress, false)
+	closure, err := newTeardownNamespaceClosureContext(mockNetLink, mockIOUtil, mockOS, eniMACAddress, false,
+		time.Microsecond, 10*time.Microsecond)
 	assert.NoError(t, err)
 	assert.NotNil(t, closure)
 
@@ -1348,8 +1521,15 @@ func TestStopDHClientRunFailsWhenDHClientProcessCannotBeKilled(t *testing.T) {
 	gomock.InOrder(
 		mockIOUtil.EXPECT().ReadFile(pidFilePath).Return([]byte(dhclientV4PIDFileContents), nil),
 		mockOS.EXPECT().FindProcess(dhclientV4PID).Return(mockDHClientProcess, nil),
-		mockDHClientProcess.EXPECT().Kill().Return(errors.New("error")),
+		mockDHClientProcess.EXPECT().Signal(syscall.SIGTERM).Return(nil),
 	)
+
+	// These are unordered because TODO
+	mockOS.EXPECT().FindProcess(dhclientV4PID).Return(mockDHClientProcess, nil).AnyTimes()
+	mockDHClientProcess.EXPECT().Signal(syscall.Signal(0)).Return(nil).AnyTimes()
+
+	mockDHClientProcess.EXPECT().Signal(syscall.SIGKILL).Return(errors.New("error"))
+	// These are unordered because TODO
 	err = closure.stopDHClient(pidFilePath)
 	assert.Error(t, err)
 }
@@ -1361,7 +1541,8 @@ func TestTearDownNamespaceClosureRunFailsWhenStopDHClientV4Fails(t *testing.T) {
 	mockNetNS := mock_ns.NewMockNetNS(ctrl)
 	eth1 := mock_netlink.NewMockLink(ctrl)
 	mockDHClientProcess := mock_oswrapper.NewMockOSProcess(ctrl)
-	closure, err := newTeardownNamespaceClosureContext(mockNetLink, mockIOUtil, mockOS, eniMACAddress, true)
+	closure, err := newTeardownNamespaceClosureContext(mockNetLink, mockIOUtil, mockOS, eniMACAddress, true,
+		checkProcessStateInterval, maxProcessStopWaitDuration)
 	assert.NoError(t, err)
 	assert.NotNil(t, closure)
 
@@ -1374,7 +1555,7 @@ func TestTearDownNamespaceClosureRunFailsWhenStopDHClientV4Fails(t *testing.T) {
 		eth1.EXPECT().Attrs().Return(&netlink.LinkAttrs{Name: deviceName}),
 		mockIOUtil.EXPECT().ReadFile(dhclientV4LeasePIDFilePathPrefix+"-"+deviceName+".pid").Return([]byte(dhclientV4PIDFileContents), nil),
 		mockOS.EXPECT().FindProcess(dhclientV4PID).Return(mockDHClientProcess, nil),
-		mockDHClientProcess.EXPECT().Kill().Return(errors.New("error")),
+		mockDHClientProcess.EXPECT().Signal(syscall.SIGTERM).Return(errors.New("")),
 	)
 	err = closure.run(mockNetNS)
 	assert.Error(t, err)
@@ -1388,7 +1569,8 @@ func TestTearDownNamespaceClosureRunFailsWhenStopDHClientV6Fails(t *testing.T) {
 	eth1 := mock_netlink.NewMockLink(ctrl)
 	mockDHClientV4Process := mock_oswrapper.NewMockOSProcess(ctrl)
 	mockDHClientV6Process := mock_oswrapper.NewMockOSProcess(ctrl)
-	closure, err := newTeardownNamespaceClosureContext(mockNetLink, mockIOUtil, mockOS, eniMACAddress, true)
+	closure, err := newTeardownNamespaceClosureContext(mockNetLink, mockIOUtil, mockOS, eniMACAddress, true,
+		checkProcessStateInterval, maxProcessStopWaitDuration)
 	assert.NoError(t, err)
 	assert.NotNil(t, closure)
 
@@ -1399,12 +1581,21 @@ func TestTearDownNamespaceClosureRunFailsWhenStopDHClientV6Fails(t *testing.T) {
 		mockNetLink.EXPECT().LinkList().Return([]netlink.Link{eth1}, nil),
 		eth1.EXPECT().Attrs().Return(&netlink.LinkAttrs{HardwareAddr: eth1Address}),
 		eth1.EXPECT().Attrs().Return(&netlink.LinkAttrs{Name: deviceName}),
+		// Read dhclient4 pid
 		mockIOUtil.EXPECT().ReadFile(dhclientV4LeasePIDFilePathPrefix+"-"+deviceName+".pid").Return([]byte(dhclientV4PIDFileContents), nil),
+		// Find process and send SIGTERM
 		mockOS.EXPECT().FindProcess(dhclientV4PID).Return(mockDHClientV4Process, nil),
-		mockDHClientV4Process.EXPECT().Kill().Return(nil),
+		mockDHClientV4Process.EXPECT().Signal(syscall.SIGTERM).Return(nil),
+		// Sending it SIGNAL(0) returns the error that indicates that the
+		// process has finished its execution
+		mockOS.EXPECT().FindProcess(dhclientV4PID).Return(mockDHClientV4Process, nil),
+		mockDHClientV4Process.EXPECT().Signal(syscall.Signal(0)).Return(errors.New(processFinishedErrorMessage)),
+		// Read dhclient6 pid
 		mockIOUtil.EXPECT().ReadFile(dhclientV6LeasePIDFilePathPrefix+"-"+deviceName+".pid").Return([]byte(dhclientV6PIDFileContents), nil),
+		// Find process and send SIGTERM, and simulate an error for
+		// the same
 		mockOS.EXPECT().FindProcess(dhclientV6PID).Return(mockDHClientV6Process, nil),
-		mockDHClientV6Process.EXPECT().Kill().Return(errors.New("error")),
+		mockDHClientV6Process.EXPECT().Signal(syscall.SIGTERM).Return(errors.New("error")),
 	)
 	err = closure.run(mockNetNS)
 	assert.Error(t, err)
@@ -1417,7 +1608,8 @@ func TestTearDownNamespaceClosureRunNoIPV6(t *testing.T) {
 	mockNetNS := mock_ns.NewMockNetNS(ctrl)
 	eth1 := mock_netlink.NewMockLink(ctrl)
 	mockDHClientV4Process := mock_oswrapper.NewMockOSProcess(ctrl)
-	closure, err := newTeardownNamespaceClosureContext(mockNetLink, mockIOUtil, mockOS, eniMACAddress, false)
+	closure, err := newTeardownNamespaceClosureContext(mockNetLink, mockIOUtil, mockOS, eniMACAddress, false,
+		checkProcessStateInterval, maxProcessStopWaitDuration)
 	assert.NoError(t, err)
 	assert.NotNil(t, closure)
 
@@ -1428,9 +1620,15 @@ func TestTearDownNamespaceClosureRunNoIPV6(t *testing.T) {
 		mockNetLink.EXPECT().LinkList().Return([]netlink.Link{eth1}, nil),
 		eth1.EXPECT().Attrs().Return(&netlink.LinkAttrs{HardwareAddr: eth1Address}),
 		eth1.EXPECT().Attrs().Return(&netlink.LinkAttrs{Name: deviceName}),
+		// Read dhclient4 pid
 		mockIOUtil.EXPECT().ReadFile(dhclientV4LeasePIDFilePathPrefix+"-"+deviceName+".pid").Return([]byte(dhclientV4PIDFileContents), nil),
+		// Find process and send SIGTERM
 		mockOS.EXPECT().FindProcess(dhclientV4PID).Return(mockDHClientV4Process, nil),
-		mockDHClientV4Process.EXPECT().Kill().Return(nil),
+		mockDHClientV4Process.EXPECT().Signal(syscall.SIGTERM).Return(nil),
+		// Sending it SIGNAL(0) returns the error that indicates that the
+		// process has finished its execution
+		mockOS.EXPECT().FindProcess(dhclientV4PID).Return(mockDHClientV4Process, nil),
+		mockDHClientV4Process.EXPECT().Signal(syscall.Signal(0)).Return(errors.New(processFinishedErrorMessage)),
 	)
 	err = closure.run(mockNetNS)
 	assert.NoError(t, err)
@@ -1444,7 +1642,8 @@ func TestTearDownNamespaceClosureRun(t *testing.T) {
 	eth1 := mock_netlink.NewMockLink(ctrl)
 	mockDHClientV4Process := mock_oswrapper.NewMockOSProcess(ctrl)
 	mockDHClientV6Process := mock_oswrapper.NewMockOSProcess(ctrl)
-	closure, err := newTeardownNamespaceClosureContext(mockNetLink, mockIOUtil, mockOS, eniMACAddress, true)
+	closure, err := newTeardownNamespaceClosureContext(mockNetLink, mockIOUtil, mockOS, eniMACAddress, true,
+		checkProcessStateInterval, maxProcessStopWaitDuration)
 	assert.NoError(t, err)
 	assert.NotNil(t, closure)
 
@@ -1455,12 +1654,24 @@ func TestTearDownNamespaceClosureRun(t *testing.T) {
 		mockNetLink.EXPECT().LinkList().Return([]netlink.Link{eth1}, nil),
 		eth1.EXPECT().Attrs().Return(&netlink.LinkAttrs{HardwareAddr: eth1Address}),
 		eth1.EXPECT().Attrs().Return(&netlink.LinkAttrs{Name: deviceName}),
+		// Read dhclient4 pid
 		mockIOUtil.EXPECT().ReadFile(dhclientV4LeasePIDFilePathPrefix+"-"+deviceName+".pid").Return([]byte(dhclientV4PIDFileContents), nil),
+		// Find process and send SIGTERM
 		mockOS.EXPECT().FindProcess(dhclientV4PID).Return(mockDHClientV4Process, nil),
-		mockDHClientV4Process.EXPECT().Kill().Return(nil),
+		mockDHClientV4Process.EXPECT().Signal(syscall.SIGTERM).Return(nil),
+		// Sending it SIGNAL(0) returns the error that indicates that the
+		// process has finished its execution
+		mockOS.EXPECT().FindProcess(dhclientV4PID).Return(mockDHClientV4Process, nil),
+		mockDHClientV4Process.EXPECT().Signal(syscall.Signal(0)).Return(errors.New(processFinishedErrorMessage)),
+		// Read dhclient6 pid
 		mockIOUtil.EXPECT().ReadFile(dhclientV6LeasePIDFilePathPrefix+"-"+deviceName+".pid").Return([]byte(dhclientV6PIDFileContents), nil),
+		// Find process and send SIGTERM
 		mockOS.EXPECT().FindProcess(dhclientV6PID).Return(mockDHClientV6Process, nil),
-		mockDHClientV6Process.EXPECT().Kill().Return(nil),
+		mockDHClientV6Process.EXPECT().Signal(syscall.SIGTERM).Return(nil),
+		// Sending it SIGNAL(0) returns the error that indicates that the
+		// process has finished its execution
+		mockOS.EXPECT().FindProcess(dhclientV6PID).Return(mockDHClientV6Process, nil),
+		mockDHClientV6Process.EXPECT().Signal(syscall.Signal(0)).Return(errors.New(processFinishedErrorMessage)),
 	)
 	err = closure.run(mockNetNS)
 	assert.NoError(t, err)
