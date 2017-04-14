@@ -22,7 +22,7 @@ type OS interface {
 
 // OSProcess wraps methods from the 'os.Process' struct
 type OSProcess interface {
-	Kill() error
+	Signal(sig os.Signal) error
 }
 
 type _os struct {

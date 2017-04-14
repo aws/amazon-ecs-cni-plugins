@@ -14,9 +14,12 @@
 package engine
 
 import (
+	"context"
 	"net"
 	"strconv"
 	"strings"
+	"syscall"
+	"time"
 
 	"github.com/aws/amazon-ecs-cni-plugins/pkg/execwrapper"
 	"github.com/aws/amazon-ecs-cni-plugins/pkg/ioutilwrapper"
@@ -40,6 +43,12 @@ const (
 	dhclientV4LeasePIDFilePathPrefix = "/var/run/ns-dhclient4"
 	dhclientV6LeaseFilePathPrefix    = "/var/lib/dhclient/ns-dhclient6"
 	dhclientV6LeasePIDFilePathPrefix = "/var/run/ns-dhclient6"
+	// processFinishedErrorMessage reflects the corresponding error message
+	// emitted by the os package when it finds that a process has finished
+	// its execution. Unfortunately, this is local variable in the os
+	// package and is not exposed anywhere. Hence, we declare this string to
+	// match the error message returned by the os package
+	processFinishedErrorMessage = "os: process already finished"
 )
 
 var linkWithMACNotFoundError = errors.New("engine: device with mac address not found")
@@ -58,11 +67,13 @@ type setupNamespaceClosureContext struct {
 // teardownNamespaceClosureContext wraps the parameters and the method to teardown the
 // container's namespace
 type teardownNamespaceClosureContext struct {
-	netLink       netlinkwrapper.NetLink
-	ioutil        ioutilwrapper.IOUtil
-	os            oswrapper.OS
-	hardwareAddr  net.HardwareAddr
-	stopDHClient6 bool
+	netLink                    netlinkwrapper.NetLink
+	ioutil                     ioutilwrapper.IOUtil
+	os                         oswrapper.OS
+	hardwareAddr               net.HardwareAddr
+	stopDHClient6              bool
+	checkProcessStateInterval  time.Duration
+	maxProcessStopWaitDuration time.Duration
 }
 
 // newSetupNamespaceClosureContext creates a new setupNamespaceClosure object
@@ -101,18 +112,21 @@ func newSetupNamespaceClosureContext(netLink netlinkwrapper.NetLink, exec execwr
 }
 
 // newTeardownNamespaceClosureContext creates a new teardownNamespaceClosure object
-func newTeardownNamespaceClosureContext(netLink netlinkwrapper.NetLink, ioutil ioutilwrapper.IOUtil, os oswrapper.OS, mac string, stopDHClient6 bool) (*teardownNamespaceClosureContext, error) {
+func newTeardownNamespaceClosureContext(netLink netlinkwrapper.NetLink, ioutil ioutilwrapper.IOUtil, os oswrapper.OS,
+	mac string, stopDHClient6 bool, checkProcessStateInterval time.Duration, maxProcessStopWaitDuration time.Duration) (*teardownNamespaceClosureContext, error) {
 	hardwareAddr, err := net.ParseMAC(mac)
 	if err != nil {
 		return nil, errors.Wrapf(err, "newTeardownNamespaceClosure engine: malformatted mac address specified")
 	}
 
 	return &teardownNamespaceClosureContext{
-		netLink:       netLink,
-		ioutil:        ioutil,
-		os:            os,
-		hardwareAddr:  hardwareAddr,
-		stopDHClient6: stopDHClient6,
+		netLink:                    netLink,
+		ioutil:                     ioutil,
+		os:                         os,
+		hardwareAddr:               hardwareAddr,
+		stopDHClient6:              stopDHClient6,
+		checkProcessStateInterval:  checkProcessStateInterval,
+		maxProcessStopWaitDuration: maxProcessStopWaitDuration,
 	}, nil
 }
 
@@ -254,7 +268,7 @@ func (closureContext *teardownNamespaceClosureContext) run(_ ns.NetNS) error {
 	link, err := getLinkByHardwareAddress(closureContext.netLink, closureContext.hardwareAddr)
 	if err != nil {
 		return errors.Wrapf(err,
-			"teardownNamespaceClosure engine: unable to get device with hardware address '%s'", closure.hardwareAddr.String())
+			"teardownNamespaceClosure engine: unable to get device with hardware address '%s'", closureContext.hardwareAddr.String())
 	}
 
 	deviceName := link.Attrs().Name
@@ -308,18 +322,80 @@ func (closureContext *teardownNamespaceClosureContext) stopDHClient(pidFilePath 
 		return errors.Wrapf(err,
 			"teardownNamespaceClosure engine: error parsing dhclient pid from '%s'", pidFilePath)
 	}
-	process, err := closureContext.os.FindProcess(pid)
-	if err != nil {
-		return errors.Wrapf(err,
-			"teardownNamespaceClosure engine: error getting process handle for dhclient, pid: '%d'", pid)
-	}
+
+	// TODO: Verify that pid is actually associated with dhclient
 
 	// Stop the dhclient process
-	err = process.Kill()
+	err = stopProcess(closureContext.os, pid,
+		closureContext.checkProcessStateInterval, closureContext.maxProcessStopWaitDuration)
 	if err != nil {
 		return errors.Wrapf(err,
 			"teardownNamespaceClosure engine: error stopping the dhclient process, pid: '%d'", pid)
 	}
 
 	return nil
+}
+
+func stopProcess(os oswrapper.OS, pid int, checkProcessStateInterval time.Duration, maxProcessStopWaitDuration time.Duration) error {
+	err := sendSignalToProcess(os, pid, syscall.SIGTERM)
+	if err != nil {
+		return err
+	}
+	ctx, cancel := context.WithTimeout(context.TODO(), maxProcessStopWaitDuration)
+	err = waitForProcesToFinish(ctx, cancel, os, checkProcessStateInterval, pid)
+	if err != nil {
+		log.Warnf("Error terminating the dhclient process, pid: '%d'", pid)
+		return sendSignalToProcess(os, pid, syscall.SIGKILL)
+	}
+
+	return nil
+}
+
+func sendSignalToProcess(os oswrapper.OS, pid int, signal syscall.Signal) error {
+	process, err := os.FindProcess(pid)
+	if err != nil {
+		// As per https://golang.org/pkg/os/#FindProcess, on linux, this
+		// is a noop and should never return an error
+		return errors.Wrapf(err,
+			"engine: error getting process handle for dhclient, pid: '%d'", pid)
+	}
+	return process.Signal(signal)
+}
+
+func waitForProcesToFinish(ctx context.Context, cancel context.CancelFunc, os oswrapper.OS, checkProcessStateInterval time.Duration, pid int) error {
+	ticker := time.NewTicker(checkProcessStateInterval)
+	for {
+		select {
+		case <-ticker.C:
+			ok, err := isProcessFinished(os, pid)
+			if err != nil {
+				log.Errorf("Error determining if dhclient process is finished: %v", err)
+				continue
+			}
+			if ok {
+				cancel()
+				return nil
+			}
+		case <-ctx.Done():
+			ticker.Stop()
+			return errors.Errorf("engine: timed out waiting for process to finish, pid: '%d'", pid)
+		}
+	}
+}
+
+func isProcessFinished(os oswrapper.OS, pid int) (bool, error) {
+	// As per `man 2 kill`, if the signal is '0', no signal is sent, but the
+	// error checking is still performed. This is the most reliable way that
+	// I (aaithal) have found to check if a process with a given pid is
+	// running via golang libraries.
+	err := sendSignalToProcess(os, pid, syscall.Signal(0))
+	if err != nil {
+		if err.Error() == processFinishedErrorMessage {
+			return true, nil
+		}
+		return false, errors.Wrapf(err,
+			"engine: unable to send signal to the dhclient process, pid: '%d'", pid)
+	}
+
+	return false, nil
 }
