@@ -44,6 +44,7 @@ type IPAMConfig struct {
 	IPV4Address types.IPNet    `json:"ipv4-address,omitempty"`
 	IPV4Gateway net.IP         `json:"ipv4-gateway,omitempty"`
 	IPV4Routes  []*types.Route `json:"ipv4-routes,omitempty"`
+	ID          string         `json:id,omitempty`
 }
 
 // Conf stores the option from configuration file
@@ -60,7 +61,7 @@ func LoadIPAMConfig(bytes []byte, args string) (*IPAMConfig, string, error) {
 	ipamConf := &Conf{}
 
 	if err := json.Unmarshal(bytes, &ipamConf); err != nil {
-		return nil, "", errors.Wrapf(err, "loadIPAMConfig config: 'failed to load netconf")
+		return nil, "", errors.Wrapf(err, "loadIPAMConfig config: failed to load netconf, %s", string(bytes))
 	}
 	if ipamConf.IPAM == nil {
 		return nil, "", errors.New("loadIPAMConfig config: 'IPAM' field missing in configuration")

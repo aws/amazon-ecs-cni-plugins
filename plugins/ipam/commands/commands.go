@@ -15,7 +15,6 @@ package commands
 
 import (
 	"net"
-	"time"
 
 	"github.com/aws/amazon-ecs-cni-plugins/plugins/ipam/config"
 	"github.com/aws/amazon-ecs-cni-plugins/plugins/ipam/ipstore"
@@ -131,7 +130,7 @@ func getIPV4Address(ipManager ipstore.IPAllocator, conf *config.IPAMConfig) (*ne
 	if assignedAddress.IP != nil {
 		// IP was specifed in the configuration, try to assign this ip as used
 		// if this ip has already been used, it will return an error
-		err := ipManager.Assign(assignedAddress.IP.String(), time.Now().UTC().String())
+		err := ipManager.Assign(assignedAddress.IP.String(), conf.ID)
 		if err != nil {
 			return nil, errors.Wrapf(err, "getIPV4Address commands: failed to mark this ip %v as used", assignedAddress)
 		}
@@ -163,7 +162,7 @@ func getIPV4AddressFromDB(ipManager ipstore.IPAllocator, conf *config.IPAMConfig
 	}
 
 	ipManager.SetLastKnownIP(startIP)
-	nextIP, err := ipManager.GetAvailableIP(time.Now().UTC().String())
+	nextIP, err := ipManager.GetAvailableIP(conf.ID)
 	if err != nil {
 		return "", errors.Wrap(err, "getIPV4AddressFromDB commands: failed to get available ip from the db")
 	}

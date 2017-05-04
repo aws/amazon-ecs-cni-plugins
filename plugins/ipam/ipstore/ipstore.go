@@ -90,7 +90,7 @@ func (manager *IPManager) GetAvailableIP(id string) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		err = manager.Assign(nextIP.String(), time.Now().UTC().String())
+		err = manager.Assign(nextIP.String(), id)
 		if err != nil && err != store.ErrKeyExists {
 			log.Debugf("query to the db failed, err: %v", err)
 			return "", err
