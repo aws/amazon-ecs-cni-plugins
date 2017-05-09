@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"net"
 	"strings"
+	"time"
 
 	"github.com/aws/amazon-ecs-cni-plugins/pkg/cninswrapper"
 	"github.com/aws/amazon-ecs-cni-plugins/pkg/ec2metadata"
@@ -26,6 +27,7 @@ import (
 	"github.com/aws/amazon-ecs-cni-plugins/pkg/oswrapper"
 	log "github.com/cihub/seelog"
 	"github.com/pkg/errors"
+	"github.com/vishvananda/netlink"
 )
 
 const (
@@ -33,6 +35,22 @@ const (
 	metadataNetworkInterfaceIDPathSuffix        = "interface-id"
 	metadataNetworkInterfaceIPV4CIDRPathSuffix  = "/subnet-ipv4-cidr-block"
 	metadataNetworkInterfaceIPV4AddressesSuffix = "/local-ipv4s"
+	metadataNetworkInterfaceIPV6AddressesSuffix = "/ipv6s"
+	metadataNetworkInterfaceIPV6CIDRPathSuffix  = "/subnet-ipv6-cidr-blocks"
+	ipv6GatewayTickDuration                     = 1 * time.Second
+	// zeroLengthIPString is what we expect net.IP.String() to return if the
+	// ip has length 0. We use this to determing if an IP is empty.
+	// Refer https://golang.org/pkg/net/#IP.String
+	zeroLengthIPString = "<nil>"
+	// maxTicksForRetrievingIPV6Gateway is the maximum number of ticks to wait
+	// for retrieving the ipv6 gateway ip from the routing table. We give up
+	// after 10 ticks, which corresponds to 10 seconds
+	maxTicksForRetrievingIPV6Gateway = 10
+
+	checkProcessStateInterval  = 50 * time.Millisecond
+	maxProcessStopWaitDuration = 1 * time.Second
+	minIPV4CIDRBlockSize       = 28
+	maxIPV4CIDRBlockSize       = 16
 )
 
 // Engine represents the execution engine for the ENI plugin. It defines all the
@@ -42,19 +60,24 @@ type Engine interface {
 	GetMACAddressOfENI(macAddresses []string, eniID string) (string, error)
 	GetInterfaceDeviceName(macAddress string) (string, error)
 	GetIPV4GatewayNetmask(macAddress string) (string, string, error)
+	GetIPV6PrefixLength(macAddress string) (string, error)
+	GetIPV6Gateway(deviceName string) (string, error)
 	DoesMACAddressMapToIPV4Address(macAddress string, ipv4Address string) (bool, error)
-	SetupContainerNamespace(netns string, deviceName string, ipv4Address string, netmask string) error
+	DoesMACAddressMapToIPV6Address(macAddress string, ipv4Address string) (bool, error)
+	SetupContainerNamespace(netns string, deviceName string, ipv4Address string, ipv6Address string, ipv4Gateway string, ipv6Gateway string) error
 	IsDHClientInPath() bool
-	TeardownContainerNamespace(netns string, macAddress string) error
+	TeardownContainerNamespace(netns string, macAddress string, stopDHClient6 bool) error
 }
 
 type engine struct {
-	metadata ec2metadata.EC2Metadata
-	ioutil   ioutilwrapper.IOUtil
-	netLink  netlinkwrapper.NetLink
-	ns       cninswrapper.NS
-	exec     execwrapper.Exec
-	os       oswrapper.OS
+	metadata                         ec2metadata.EC2Metadata
+	ioutil                           ioutilwrapper.IOUtil
+	netLink                          netlinkwrapper.NetLink
+	ns                               cninswrapper.NS
+	exec                             execwrapper.Exec
+	os                               oswrapper.OS
+	ipv6GatewayTickDuration          time.Duration
+	maxTicksForRetrievingIPV6Gateway int
 }
 
 // New creates a new Engine object
@@ -71,6 +94,8 @@ func create(metadata ec2metadata.EC2Metadata, ioutil ioutilwrapper.IOUtil, netLi
 		ns:       ns,
 		exec:     exec,
 		os:       os,
+		ipv6GatewayTickDuration:          ipv6GatewayTickDuration,
+		maxTicksForRetrievingIPV6Gateway: maxTicksForRetrievingIPV6Gateway,
 	}
 }
 
@@ -160,22 +185,139 @@ func getIPV4GatewayNetmask(cidrBlock string) (string, string, error) {
 			fmt.Sprintf("unable to parse ipv4 gateway from cidr block '%s'", cidrBlock))
 	}
 
-	ip4[3] = ip4[3] + 1
 	maskOnes, _ := ipNet.Mask.Size()
+	// As per
+	// http://docs.aws.amazon.com/AmazonVPC/latest/UserGuide/VPC_Subnets.html#VPC_Sizing
+	// You can assign a single CIDR block to a VPC. The allowed block size
+	// is between a /16 netmask and /28 netmask. Verify that
+	if maskOnes > minIPV4CIDRBlockSize {
+		return "", "", errors.Errorf("eni ipv4 netmask: invalid ipv4 cidr block, %d > 28", maskOnes)
+	}
+	if maskOnes < maxIPV4CIDRBlockSize {
+		return "", "", errors.Errorf("eni ipv4 netmask: invalid ipv4 cidr block, %d <= 16", maskOnes)
+	}
+
+	// ipv4 gateway is the first available IP address in the subnet
+	ip4[3] = ip4[3] + 1
 	return ip4.String(), fmt.Sprintf("%d", maskOnes), nil
+}
+
+// GetIPV6PrefixLength gets the ipv6 subnet mask from the instance
+// metadata, given a mac address
+func (engine *engine) GetIPV6PrefixLength(macAddress string) (string, error) {
+	// TODO Use fmt.Sprintf and wrap that in a method
+	cidrBlock, err := engine.metadata.GetMetadata(metadataNetworkInterfacesPath + macAddress + metadataNetworkInterfaceIPV6CIDRPathSuffix)
+	if err != nil {
+		return "", errors.Wrapf(err,
+			"getIPV6Netmask engine: unable to get ipv6 subnet and cidr block for '%s' from instance metadata", macAddress)
+	}
+
+	return getIPV6PrefixLength(cidrBlock)
+}
+
+func getIPV6PrefixLength(cidrBlock string) (string, error) {
+	// The IPV6 CIDR block is of the format ip-addr/netmask
+	_, ipNet, err := net.ParseCIDR(cidrBlock)
+	if err != nil {
+		return "", errors.Wrapf(err,
+			"getIPV6Netmask engine: unable to parse response for ipv6 cidr: '%s' from instance metadata", cidrBlock)
+	}
+
+	maskOnes, _ := ipNet.Mask.Size()
+	return fmt.Sprintf("%d", maskOnes), nil
+}
+
+// GetIPV6Gateway gets the ipv6 address of the subnet gateway
+func (engine *engine) GetIPV6Gateway(deviceName string) (string, error) {
+	// Get the device link for the ENI
+	eniLink, err := engine.netLink.LinkByName(deviceName)
+	if err != nil {
+		return "", errors.Wrapf(err,
+			"getIPV6Gateway engine: unable to get link for device '%s'", deviceName)
+	}
+
+	return engine.getIPV6GatewayIPFromRoutes(eniLink, deviceName,
+		engine.maxTicksForRetrievingIPV6Gateway, engine.ipv6GatewayTickDuration)
+}
+
+func (engine *engine) getIPV6GatewayIPFromRoutes(link netlink.Link, deviceName string, maxTicks int, durationBetweenTicks time.Duration) (string, error) {
+	// In rare cases, it is possible that there's a delay in the kernel updating
+	// its routing table for non-primary ENIs attached to the instance. Retry querying
+	// the routing table for such scenarios.
+	for numTicks := 0; numTicks < maxTicks; numTicks++ {
+		log.Infof("Trying to get IPV6 Gateway from route table, attempt: %d/%d", numTicks+1, maxTicks)
+		gateway, ok, err := engine.getIPV6GatewayIPFromRoutesOnce(link, deviceName)
+		if err != nil {
+			return "", err
+		}
+		if ok {
+			return gateway, nil
+		}
+
+		time.Sleep(durationBetweenTicks)
+	}
+
+	return "", errors.Errorf(
+		"getIPV6Gateway engine: unable to get gateway from route table for '%s'", deviceName)
+}
+
+func (engine *engine) getIPV6GatewayIPFromRoutesOnce(link netlink.Link, deviceName string) (string, bool, error) {
+	routes, err := engine.netLink.RouteList(link, netlink.FAMILY_V6)
+	if err != nil {
+		return "", false, errors.Wrapf(err,
+			"getIPV6Gateway engine: unable to get ipv6 routes for device '%s'", deviceName)
+	}
+
+	for _, route := range routes {
+		// Search for "default" route. A "default" route has no source and
+		// destination ip addresses, but has the gateway set to a non-emtpty string
+		if route.Dst != nil {
+			continue
+		}
+
+		if (route.Dst == nil || route.Dst.String() == zeroLengthIPString) && // Dst is not set
+			route.Src.String() == zeroLengthIPString && // Src is not set
+			route.Gw.String() != zeroLengthIPString { // Gw is set
+			log.Debugf("Found ipv6 gateway: %s", route.Gw.String())
+			return route.Gw.String(), true, nil
+		}
+	}
+
+	return "", false, nil
 }
 
 // DoesMACAddressMapToIPV4Address validates in the MAC Address for the ENI maps to the
 // IPV4 Address specified
 func (engine *engine) DoesMACAddressMapToIPV4Address(macAddress string, ipv4Address string) (bool, error) {
-	// TODO Use fmt.Sprintf and wrap that in a method
-	addressesResponse, err := engine.metadata.GetMetadata(metadataNetworkInterfacesPath + macAddress + metadataNetworkInterfaceIPV4AddressesSuffix)
+	ok, err := engine.doesMACAddressMapToIPAddress(macAddress, ipv4Address, metadataNetworkInterfaceIPV4AddressesSuffix)
 	if err != nil {
 		return false, errors.Wrap(err,
 			"doesMACAddressMapToIPV4Address engine: unable to get ipv4 addresses from instance metadata")
 	}
+
+	return ok, nil
+}
+
+// DoesMACAddressMapToIPV6Address validates in the MAC Address for the ENI maps to the
+// IPV6 Address specified
+func (engine *engine) DoesMACAddressMapToIPV6Address(macAddress string, ipv6Address string) (bool, error) {
+	ok, err := engine.doesMACAddressMapToIPAddress(macAddress, ipv6Address, metadataNetworkInterfaceIPV6AddressesSuffix)
+	if err != nil {
+		return false, errors.Wrap(err,
+			"doesMACAddressMapToIPv6Address engine: unable to get ipv6 addresses from instance metadata")
+	}
+
+	return ok, nil
+}
+
+func (engine *engine) doesMACAddressMapToIPAddress(macAddress string, addressToFind string, metatdataPathSuffix string) (bool, error) {
+	// TODO Use fmt.Sprintf and wrap that in a method
+	addressesResponse, err := engine.metadata.GetMetadata(metadataNetworkInterfacesPath + macAddress + metatdataPathSuffix)
+	if err != nil {
+		return false, err
+	}
 	for _, address := range strings.Split(addressesResponse, "\n") {
-		if address == ipv4Address {
+		if address == addressToFind {
 			return true, nil
 		}
 	}
@@ -183,8 +325,9 @@ func (engine *engine) DoesMACAddressMapToIPV4Address(macAddress string, ipv4Addr
 }
 
 // SetupContainerNamespace configures the network namespace of the container with
-// the ipv4 address and routes to use the ENI interface
-func (engine *engine) SetupContainerNamespace(netns string, deviceName string, ipv4Address string, netmask string) error {
+// the ipv4 address and routes to use the ENI interface. The ipv4 address is of the
+// ipv4-address/netmask format
+func (engine *engine) SetupContainerNamespace(netns string, deviceName string, ipv4Address string, ipv6Address string, ipv4Gateway string, ipv6Gateway string) error {
 	// Get the device link for the ENI
 	eniLink, err := engine.netLink.LinkByName(deviceName)
 	if err != nil {
@@ -207,7 +350,7 @@ func (engine *engine) SetupContainerNamespace(netns string, deviceName string, i
 	}
 
 	// Generate the closure to execute within the container's namespace
-	toRun, err := newSetupNamespaceClosure(engine.netLink, engine.exec, deviceName, ipv4Address, netmask)
+	toRun, err := newSetupNamespaceClosureContext(engine.netLink, engine.exec, deviceName, ipv4Address, ipv6Address, ipv4Gateway, ipv6Gateway)
 	if err != nil {
 		return errors.Wrap(err,
 			"setupContainerNamespace engine: unable to create closure to execute in container namespace")
@@ -223,9 +366,10 @@ func (engine *engine) SetupContainerNamespace(netns string, deviceName string, i
 }
 
 // TeardownContainerNamespace brings down the ENI device in the container's namespace
-func (engine *engine) TeardownContainerNamespace(netns string, macAddress string) error {
+func (engine *engine) TeardownContainerNamespace(netns string, macAddress string, stopDHClient6 bool) error {
 	// Generate the closure to execute within the container's namespace
-	toRun, err := newTeardownNamespaceClosure(engine.netLink, engine.ioutil, engine.os, macAddress)
+	toRun, err := newTeardownNamespaceClosureContext(engine.netLink, engine.ioutil, engine.os,
+		macAddress, stopDHClient6, checkProcessStateInterval, maxProcessStopWaitDuration)
 	if err != nil {
 		return errors.Wrap(err,
 			"teardownContainerNamespace engine: unable to create closure to execute in container namespace")

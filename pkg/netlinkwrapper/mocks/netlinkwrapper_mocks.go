@@ -114,3 +114,24 @@ func (_m *MockNetLink) ParseAddr(_param0 string) (*netlink.Addr, error) {
 func (_mr *_MockNetLinkRecorder) ParseAddr(arg0 interface{}) *gomock.Call {
 	return _mr.mock.ctrl.RecordCall(_mr.mock, "ParseAddr", arg0)
 }
+
+func (_m *MockNetLink) RouteAdd(_param0 *netlink.Route) error {
+	ret := _m.ctrl.Call(_m, "RouteAdd", _param0)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+func (_mr *_MockNetLinkRecorder) RouteAdd(arg0 interface{}) *gomock.Call {
+	return _mr.mock.ctrl.RecordCall(_mr.mock, "RouteAdd", arg0)
+}
+
+func (_m *MockNetLink) RouteList(_param0 netlink.Link, _param1 int) ([]netlink.Route, error) {
+	ret := _m.ctrl.Call(_m, "RouteList", _param0, _param1)
+	ret0, _ := ret[0].([]netlink.Route)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+func (_mr *_MockNetLinkRecorder) RouteList(arg0, arg1 interface{}) *gomock.Call {
+	return _mr.mock.ctrl.RecordCall(_mr.mock, "RouteList", arg0, arg1)
+}

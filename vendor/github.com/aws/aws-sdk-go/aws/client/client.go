@@ -11,24 +11,15 @@ import (
 
 // A Config provides configuration to a service client instance.
 type Config struct {
-	Config        *aws.Config
-	Handlers      request.Handlers
-	Endpoint      string
-	SigningRegion string
-	SigningName   string
+	Config                  *aws.Config
+	Handlers                request.Handlers
+	Endpoint, SigningRegion string
 }
 
 // ConfigProvider provides a generic way for a service client to receive
 // the ClientConfig without circular dependencies.
 type ConfigProvider interface {
 	ClientConfig(serviceName string, cfgs ...*aws.Config) Config
-}
-
-// ConfigNoResolveEndpointProvider same as ConfigProvider except it will not
-// resolve the endpoint automatically. The service client's endpoint must be
-// provided via the aws.Config.Endpoint field.
-type ConfigNoResolveEndpointProvider interface {
-	ClientConfigNoResolveEndpoint(cfgs ...*aws.Config) Config
 }
 
 // A Client implements the base client request and response handling

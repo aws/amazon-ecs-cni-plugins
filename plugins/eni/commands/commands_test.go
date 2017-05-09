@@ -24,19 +24,36 @@ import (
 )
 
 const (
-	eniIPV4Address      = "10.11.12.13"
-	eniID               = "eni1"
-	deviceName          = "eth1"
-	nsName              = "ns1"
-	macAddressSanitized = "mac1"
-	eniIPV4Gateway      = "10.10.10.10"
-	eniSubnetMask       = "20"
-	mac                 = "01:23:45:67:89:ab"
+	eniIPV4Address               = "10.11.12.13"
+	eniIPV6Address               = "2001:db8::68"
+	eniID                        = "eni1"
+	deviceName                   = "eth1"
+	nsName                       = "ns1"
+	macAddressSanitized          = "mac1"
+	eniIPV4Gateway               = "10.10.10.10"
+	eniIPV6Gateway               = "2001:db9::68"
+	eniIPV4SubnetMask            = "20"
+	eniIPV6SubnetMask            = "32"
+	mac                          = "01:23:45:67:89:ab"
+	eniIPV4AddressWithSubnetMask = "10.11.12.13/20"
+	eniIPV6AddressWithSubnetMask = "2001:db8::68/32"
 )
 
 var eniArgs = &skel.CmdArgs{
-	StdinData: []byte(`{"eni":"` + eniID + `", "ipv4-address":"` + eniIPV4Address + `", "mac":"` + mac + `"}`),
-	Netns:     nsName,
+	StdinData: []byte(`{"eni":"` + eniID +
+		`", "ipv4-address":"` + eniIPV4Address +
+		`", "mac":"` + mac +
+		`", "ipv6-address":"` + eniIPV6Address +
+		`"}`),
+	Netns: nsName,
+}
+
+var eniArgsNoIPV6 = &skel.CmdArgs{
+	StdinData: []byte(`{"eni":"` + eniID +
+		`", "ipv4-address":"` + eniIPV4Address +
+		`", "mac":"` + mac +
+		`"}`),
+	Netns: nsName,
 }
 
 // TODO: Add integration tests for command.Add commands.Del
@@ -130,6 +147,45 @@ func TestAddDoesMACAddressMapToIPV4AddressReturnsFalse(t *testing.T) {
 	assert.Equal(t, err, unmappedIPV4AddressError)
 }
 
+func TestAddDoesMACAddressMapToIPV6AddressFails(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockEngine := mock_engine.NewMockEngine(ctrl)
+	macAddress := macAddressSanitized
+	macAddresses := []string{macAddress}
+	gomock.InOrder(
+		mockEngine.EXPECT().IsDHClientInPath().Return(true),
+		mockEngine.EXPECT().GetAllMACAddresses().Return(macAddresses, nil),
+		mockEngine.EXPECT().GetMACAddressOfENI(macAddresses, eniID).Return(macAddress, nil),
+		mockEngine.EXPECT().DoesMACAddressMapToIPV4Address(macAddress, eniIPV4Address).Return(true, nil),
+		mockEngine.EXPECT().DoesMACAddressMapToIPV6Address(macAddress, eniIPV6Address).Return(false, errors.New("error")),
+	)
+
+	err := add(eniArgs, mockEngine)
+	assert.Error(t, err)
+}
+
+func TestAddDoesMACAddressMapToIPV6AddressReturnsFalse(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockEngine := mock_engine.NewMockEngine(ctrl)
+	macAddress := macAddressSanitized
+	macAddresses := []string{macAddress}
+	gomock.InOrder(
+		mockEngine.EXPECT().IsDHClientInPath().Return(true),
+		mockEngine.EXPECT().GetAllMACAddresses().Return(macAddresses, nil),
+		mockEngine.EXPECT().GetMACAddressOfENI(macAddresses, eniID).Return(macAddress, nil),
+		mockEngine.EXPECT().DoesMACAddressMapToIPV4Address(macAddress, eniIPV4Address).Return(true, nil),
+		mockEngine.EXPECT().DoesMACAddressMapToIPV6Address(macAddress, eniIPV6Address).Return(false, nil),
+	)
+
+	err := add(eniArgs, mockEngine)
+	assert.Error(t, err)
+	assert.Equal(t, err, unmappedIPV6AddressError)
+}
+
 func TestAddGetInterfaceDeviceNameFails(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -142,6 +198,7 @@ func TestAddGetInterfaceDeviceNameFails(t *testing.T) {
 		mockEngine.EXPECT().GetAllMACAddresses().Return(macAddresses, nil),
 		mockEngine.EXPECT().GetMACAddressOfENI(macAddresses, eniID).Return(macAddress, nil),
 		mockEngine.EXPECT().DoesMACAddressMapToIPV4Address(macAddress, eniIPV4Address).Return(true, nil),
+		mockEngine.EXPECT().DoesMACAddressMapToIPV6Address(macAddress, eniIPV6Address).Return(true, nil),
 		mockEngine.EXPECT().GetInterfaceDeviceName(macAddress).Return("", errors.New("error")),
 	)
 
@@ -161,8 +218,74 @@ func TestAddGetIPV4GatewayNetmaskFails(t *testing.T) {
 		mockEngine.EXPECT().GetAllMACAddresses().Return(macAddresses, nil),
 		mockEngine.EXPECT().GetMACAddressOfENI(macAddresses, eniID).Return(macAddress, nil),
 		mockEngine.EXPECT().DoesMACAddressMapToIPV4Address(macAddress, eniIPV4Address).Return(true, nil),
+		mockEngine.EXPECT().DoesMACAddressMapToIPV6Address(macAddress, eniIPV6Address).Return(true, nil),
 		mockEngine.EXPECT().GetInterfaceDeviceName(macAddress).Return(deviceName, nil),
 		mockEngine.EXPECT().GetIPV4GatewayNetmask(macAddress).Return("", "", errors.New("error")),
+	)
+
+	err := add(eniArgs, mockEngine)
+	assert.Error(t, err)
+}
+
+func TestAddGetIPV4GatewayNetmaskFailsNoIPV6(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockEngine := mock_engine.NewMockEngine(ctrl)
+	macAddress := macAddressSanitized
+	macAddresses := []string{macAddress}
+	gomock.InOrder(
+		mockEngine.EXPECT().IsDHClientInPath().Return(true),
+		mockEngine.EXPECT().GetAllMACAddresses().Return(macAddresses, nil),
+		mockEngine.EXPECT().GetMACAddressOfENI(macAddresses, eniID).Return(macAddress, nil),
+		mockEngine.EXPECT().DoesMACAddressMapToIPV4Address(macAddress, eniIPV4Address).Return(true, nil),
+		mockEngine.EXPECT().GetInterfaceDeviceName(macAddress).Return(deviceName, nil),
+		mockEngine.EXPECT().GetIPV4GatewayNetmask(macAddress).Return("", "", errors.New("error")),
+	)
+
+	err := add(eniArgsNoIPV6, mockEngine)
+	assert.Error(t, err)
+}
+
+func TestAddGetIPV6SubnetMaskFails(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockEngine := mock_engine.NewMockEngine(ctrl)
+	macAddress := macAddressSanitized
+	macAddresses := []string{macAddress}
+	gomock.InOrder(
+		mockEngine.EXPECT().IsDHClientInPath().Return(true),
+		mockEngine.EXPECT().GetAllMACAddresses().Return(macAddresses, nil),
+		mockEngine.EXPECT().GetMACAddressOfENI(macAddresses, eniID).Return(macAddress, nil),
+		mockEngine.EXPECT().DoesMACAddressMapToIPV4Address(macAddress, eniIPV4Address).Return(true, nil),
+		mockEngine.EXPECT().DoesMACAddressMapToIPV6Address(macAddress, eniIPV6Address).Return(true, nil),
+		mockEngine.EXPECT().GetInterfaceDeviceName(macAddress).Return(deviceName, nil),
+		mockEngine.EXPECT().GetIPV4GatewayNetmask(macAddress).Return(eniIPV4Gateway, eniIPV4SubnetMask, nil),
+		mockEngine.EXPECT().GetIPV6PrefixLength(macAddress).Return("", errors.New("error")),
+	)
+
+	err := add(eniArgs, mockEngine)
+	assert.Error(t, err)
+}
+
+func TestAddGetIPV6GatewayFails(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockEngine := mock_engine.NewMockEngine(ctrl)
+	macAddress := macAddressSanitized
+	macAddresses := []string{macAddress}
+	gomock.InOrder(
+		mockEngine.EXPECT().IsDHClientInPath().Return(true),
+		mockEngine.EXPECT().GetAllMACAddresses().Return(macAddresses, nil),
+		mockEngine.EXPECT().GetMACAddressOfENI(macAddresses, eniID).Return(macAddress, nil),
+		mockEngine.EXPECT().DoesMACAddressMapToIPV4Address(macAddress, eniIPV4Address).Return(true, nil),
+		mockEngine.EXPECT().DoesMACAddressMapToIPV6Address(macAddress, eniIPV6Address).Return(true, nil),
+		mockEngine.EXPECT().GetInterfaceDeviceName(macAddress).Return(deviceName, nil),
+		mockEngine.EXPECT().GetIPV4GatewayNetmask(macAddress).Return(eniIPV4Gateway, eniIPV4SubnetMask, nil),
+		mockEngine.EXPECT().GetIPV6PrefixLength(macAddress).Return(eniIPV6SubnetMask, nil),
+		mockEngine.EXPECT().GetIPV6Gateway(deviceName).Return("", errors.New("error")),
 	)
 
 	err := add(eniArgs, mockEngine)
@@ -181,12 +304,36 @@ func TestAddSetupContainerNamespaceFails(t *testing.T) {
 		mockEngine.EXPECT().GetAllMACAddresses().Return(macAddresses, nil),
 		mockEngine.EXPECT().GetMACAddressOfENI(macAddresses, eniID).Return(macAddress, nil),
 		mockEngine.EXPECT().DoesMACAddressMapToIPV4Address(macAddress, eniIPV4Address).Return(true, nil),
+		mockEngine.EXPECT().DoesMACAddressMapToIPV6Address(macAddress, eniIPV6Address).Return(true, nil),
 		mockEngine.EXPECT().GetInterfaceDeviceName(macAddress).Return(deviceName, nil),
-		mockEngine.EXPECT().GetIPV4GatewayNetmask(macAddress).Return(eniIPV4Gateway, eniSubnetMask, nil),
-		mockEngine.EXPECT().SetupContainerNamespace(nsName, deviceName, eniIPV4Address, eniSubnetMask).Return(errors.New("error")),
+		mockEngine.EXPECT().GetIPV4GatewayNetmask(macAddress).Return(eniIPV4Gateway, eniIPV4SubnetMask, nil),
+		mockEngine.EXPECT().GetIPV6PrefixLength(macAddress).Return(eniIPV6SubnetMask, nil),
+		mockEngine.EXPECT().GetIPV6Gateway(deviceName).Return(eniIPV6Gateway, nil),
+		mockEngine.EXPECT().SetupContainerNamespace(nsName, deviceName, eniIPV4AddressWithSubnetMask, eniIPV6AddressWithSubnetMask, eniIPV4Gateway, eniIPV6Gateway).Return(errors.New("error")),
 	)
 
 	err := add(eniArgs, mockEngine)
+	assert.Error(t, err)
+}
+
+func TestAddSetupContainerNamespaceFailsNoIPV6(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockEngine := mock_engine.NewMockEngine(ctrl)
+	macAddress := macAddressSanitized
+	macAddresses := []string{macAddress}
+	gomock.InOrder(
+		mockEngine.EXPECT().IsDHClientInPath().Return(true),
+		mockEngine.EXPECT().GetAllMACAddresses().Return(macAddresses, nil),
+		mockEngine.EXPECT().GetMACAddressOfENI(macAddresses, eniID).Return(macAddress, nil),
+		mockEngine.EXPECT().DoesMACAddressMapToIPV4Address(macAddress, eniIPV4Address).Return(true, nil),
+		mockEngine.EXPECT().GetInterfaceDeviceName(macAddress).Return(deviceName, nil),
+		mockEngine.EXPECT().GetIPV4GatewayNetmask(macAddress).Return(eniIPV4Gateway, eniIPV4SubnetMask, nil),
+		mockEngine.EXPECT().SetupContainerNamespace(nsName, deviceName, eniIPV4AddressWithSubnetMask, "", eniIPV4Gateway, "").Return(errors.New("error")),
+	)
+
+	err := add(eniArgsNoIPV6, mockEngine)
 	assert.Error(t, err)
 }
 
@@ -202,12 +349,36 @@ func TestAddNoError(t *testing.T) {
 		mockEngine.EXPECT().GetAllMACAddresses().Return(macAddresses, nil),
 		mockEngine.EXPECT().GetMACAddressOfENI(macAddresses, eniID).Return(macAddress, nil),
 		mockEngine.EXPECT().DoesMACAddressMapToIPV4Address(macAddress, eniIPV4Address).Return(true, nil),
+		mockEngine.EXPECT().DoesMACAddressMapToIPV6Address(macAddress, eniIPV6Address).Return(true, nil),
 		mockEngine.EXPECT().GetInterfaceDeviceName(macAddress).Return(deviceName, nil),
-		mockEngine.EXPECT().GetIPV4GatewayNetmask(macAddress).Return(eniIPV4Gateway, eniSubnetMask, nil),
-		mockEngine.EXPECT().SetupContainerNamespace(nsName, deviceName, eniIPV4Address, eniSubnetMask).Return(nil),
+		mockEngine.EXPECT().GetIPV4GatewayNetmask(macAddress).Return(eniIPV4Gateway, eniIPV4SubnetMask, nil),
+		mockEngine.EXPECT().GetIPV6PrefixLength(macAddress).Return(eniIPV6SubnetMask, nil),
+		mockEngine.EXPECT().GetIPV6Gateway(deviceName).Return(eniIPV6Gateway, nil),
+		mockEngine.EXPECT().SetupContainerNamespace(nsName, deviceName, eniIPV4AddressWithSubnetMask, eniIPV6AddressWithSubnetMask, eniIPV4Gateway, eniIPV6Gateway).Return(nil),
 	)
 
 	err := add(eniArgs, mockEngine)
+	assert.NoError(t, err)
+}
+
+func TestAddNoErrorWhenIPV6AddressNotSpecifiedInConfig(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockEngine := mock_engine.NewMockEngine(ctrl)
+	macAddress := macAddressSanitized
+	macAddresses := []string{macAddress}
+	gomock.InOrder(
+		mockEngine.EXPECT().IsDHClientInPath().Return(true),
+		mockEngine.EXPECT().GetAllMACAddresses().Return(macAddresses, nil),
+		mockEngine.EXPECT().GetMACAddressOfENI(macAddresses, eniID).Return(macAddress, nil),
+		mockEngine.EXPECT().DoesMACAddressMapToIPV4Address(macAddress, eniIPV4Address).Return(true, nil),
+		mockEngine.EXPECT().GetInterfaceDeviceName(macAddress).Return(deviceName, nil),
+		mockEngine.EXPECT().GetIPV4GatewayNetmask(macAddress).Return(eniIPV4Gateway, eniIPV4SubnetMask, nil),
+		mockEngine.EXPECT().SetupContainerNamespace(nsName, deviceName, eniIPV4AddressWithSubnetMask, "", eniIPV4Gateway, "").Return(nil),
+	)
+
+	err := add(eniArgsNoIPV6, mockEngine)
 	assert.NoError(t, err)
 }
 
@@ -225,7 +396,7 @@ func TestDelFailsWhenTearDownContainerNamespaceFails(t *testing.T) {
 	defer ctrl.Finish()
 
 	mockEngine := mock_engine.NewMockEngine(ctrl)
-	mockEngine.EXPECT().TeardownContainerNamespace(nsName, mac).Return(errors.New("error"))
+	mockEngine.EXPECT().TeardownContainerNamespace(nsName, mac, true).Return(errors.New("error"))
 	err := del(eniArgs, mockEngine)
 	assert.Error(t, err)
 }
@@ -235,7 +406,17 @@ func TestDel(t *testing.T) {
 	defer ctrl.Finish()
 
 	mockEngine := mock_engine.NewMockEngine(ctrl)
-	mockEngine.EXPECT().TeardownContainerNamespace(nsName, mac).Return(nil)
+	mockEngine.EXPECT().TeardownContainerNamespace(nsName, mac, true).Return(nil)
 	err := del(eniArgs, mockEngine)
+	assert.NoError(t, err)
+}
+
+func TestDelNoIPV6(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockEngine := mock_engine.NewMockEngine(ctrl)
+	mockEngine.EXPECT().TeardownContainerNamespace(nsName, mac, false).Return(nil)
+	err := del(eniArgsNoIPV6, mockEngine)
 	assert.NoError(t, err)
 }

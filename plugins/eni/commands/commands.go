@@ -14,6 +14,8 @@
 package commands
 
 import (
+	"fmt"
+
 	"github.com/aws/amazon-ecs-cni-plugins/plugins/eni/engine"
 	"github.com/aws/amazon-ecs-cni-plugins/plugins/eni/types"
 	log "github.com/cihub/seelog"
@@ -22,9 +24,11 @@ import (
 )
 
 var (
-	unmappedIPV4AddressError = errors.Errorf(
+	unmappedIPV4AddressError = errors.New(
 		"add commands: unable to map ipv4 address of ENI to a mac address")
-	dhclientNotFoundError = errors.Errorf(
+	unmappedIPV6AddressError = errors.New(
+		"add commands: unable to map ipv6 address of ENI to a mac address")
+	dhclientNotFoundError = errors.New(
 		"add commands: unable to find the dhclient executable in PATH")
 )
 
@@ -35,7 +39,6 @@ func Add(args *skel.CmdArgs) error {
 
 // Del invokes the command to remove ENI from a container's namespace
 func Del(args *skel.CmdArgs) error {
-	// TODO take down the device
 	return del(args, engine.New())
 }
 
@@ -53,39 +56,10 @@ func add(args *skel.CmdArgs, engine engine.Engine) error {
 		return dhclientNotFoundError
 	}
 
-	// TODO: If we can get this information from the config, we can optimize
-	// the workflow by getting rid of this, or by making this optional (only
-	// in cases where mac address hasn't been specified)
-	allMACAddresses, err := engine.GetAllMACAddresses()
+	macAddressOfENI, err := getMACAddressOfENI(conf, engine)
 	if err != nil {
-		log.Errorf("Unable to get the list of mac addresses on the host: %v", err)
 		return err
 	}
-	log.Debugf("Found mac addresses: %v", allMACAddresses)
-
-	// Get the mac address of the ENI based on the ENIID by matching it
-	// against the list of all mac addresses obtained in the previous step.
-	macAddressOfENI, err := engine.GetMACAddressOfENI(allMACAddresses, conf.ENIID)
-	if err != nil {
-		log.Errorf("Unable to find the mac address for the ENI: %v", err)
-		return err
-	}
-	log.Debugf("Found mac address for the ENI: %v", macAddressOfENI)
-
-	// Validation to ensure that we've been given the correct parameters.
-	// Check if the ipv4 address of the ENI maps to the mac address of the
-	// ENI.
-	ok, err := engine.DoesMACAddressMapToIPV4Address(macAddressOfENI, conf.IPV4Address)
-	if err != nil {
-		log.Errorf("Error validating ipv4 addresses for ENI: %v", err)
-		return err
-	}
-	if !ok {
-		log.Error("Unable to validate ipv4 address for ENI: %v", unmappedIPV4AddressError)
-		return unmappedIPV4AddressError
-	}
-
-	log.Debugf("Found ipv4Addresses: %v", ok)
 
 	// Get the interface name of the device by scanning sysfs
 	networkDeviceName, err := engine.GetInterfaceDeviceName(macAddressOfENI)
@@ -97,22 +71,114 @@ func add(args *skel.CmdArgs, engine engine.Engine) error {
 
 	// Get the ipv4 gateway and subnet mask for the ENI. This will be
 	// required for adding routes in the container's namespace
-	ipv4Gateway, netmask, err := engine.GetIPV4GatewayNetmask(macAddressOfENI)
+	ipv4Gateway, ipv4Netmask, err := engine.GetIPV4GatewayNetmask(macAddressOfENI)
 	if err != nil {
 		log.Errorf("Unable to get ipv4 gateway and netmask for ENI: %v", err)
 		return err
 	}
-	log.Debugf("Found ipv4 gateway and netmask for ENI: %s %s", ipv4Gateway, netmask)
+	log.Debugf("Found ipv4 gateway and netmask for ENI: %s %s", ipv4Gateway, ipv4Netmask)
 
-	// Everything's setup. We have all the parameters needed to configure
+	ipv6Address := ""
+	ipv6Gateway := ""
+	if conf.IPV6Address != "" {
+		// Config contains an ipv6 address, figure out the subnet mask
+		ipv6Netmask, err := engine.GetIPV6PrefixLength(macAddressOfENI)
+		if err != nil {
+			log.Errorf("Unable to get ipv6 netmask for ENI: %v", err)
+			return err
+		}
+		ipv6Address = fmt.Sprintf("%s/%s", conf.IPV6Address, ipv6Netmask)
+		log.Debugf("IPV6 address: %v", ipv6Address)
+
+		// Next, figure out the gateway ip
+		ipv6Gateway, err = engine.GetIPV6Gateway(networkDeviceName)
+		if err != nil {
+			log.Errorf("Unable to get ipv6 gateway for ENI: %v", err)
+			return err
+		}
+		log.Debugf("IPV6 Gateway IP: %v", ipv6Gateway)
+	}
+
+	// Everything's prepped. We have all the parameters needed to configure
 	// the network namespace of the ENI. Invoke SetupContainerNamespace to
 	// do the same
-	err = engine.SetupContainerNamespace(args.Netns, networkDeviceName, conf.IPV4Address, netmask)
+	err = engine.SetupContainerNamespace(args.Netns, networkDeviceName,
+		fmt.Sprintf("%s/%s", conf.IPV4Address, ipv4Netmask), ipv6Address, ipv4Gateway, ipv6Gateway)
 	if err != nil {
 		log.Errorf("Unable to setup container's namespace: %v", err)
 		return err
 	}
-	log.Debug("ENI has been assigned to the container's namespace")
+	log.Infof("ENI %s has been assigned to the container's namespace", conf.MACAddress)
+
+	return nil
+}
+
+func getMACAddressOfENI(conf *types.NetConf, engine engine.Engine) (string, error) {
+	// TODO: If we can get this information from the config, we can optimize
+	// the workflow by getting rid of this, or by making this optional (only
+	// in cases where mac address hasn't been specified)
+	allMACAddresses, err := engine.GetAllMACAddresses()
+	if err != nil {
+		log.Errorf("Unable to get the list of mac addresses on the host: %v", err)
+		return "", err
+	}
+	log.Debugf("Found mac addresses: %v", allMACAddresses)
+
+	// Get the mac address of the ENI based on the ENIID by matching it
+	// against the list of all mac addresses obtained in the previous step.
+	macAddressOfENI, err := engine.GetMACAddressOfENI(allMACAddresses, conf.ENIID)
+	if err != nil {
+		log.Errorf("Unable to find the mac address for the ENI: %v", err)
+		return "", err
+	}
+	log.Debugf("Found mac address for the ENI: %v", macAddressOfENI)
+
+	// Validation to ensure that we've been given the correct parameters.
+	// Check if the ipv4 address of the ENI maps to the mac address of the
+	// ENI.
+	err = validateMACMapsToIPV4Address(engine, macAddressOfENI, conf.IPV4Address)
+	if err != nil {
+		return "", err
+	}
+	log.Debugf("Found ipv4Address for the ENI: %v", macAddressOfENI)
+
+	// Check if the ipv6 address of the ENI maps to the mac address of the
+	// ENI.
+	if conf.IPV6Address != "" {
+		err = validateMACMapsToIPV6Address(engine, macAddressOfENI, conf.IPV6Address)
+		if err != nil {
+			return "", err
+		}
+	}
+	log.Debugf("Found ipv6Address for the ENI: %v", macAddressOfENI)
+
+	return macAddressOfENI, nil
+}
+
+func validateMACMapsToIPV4Address(engine engine.Engine, macAddressOfENI string, ipv4Address string) error {
+	ok, err := engine.DoesMACAddressMapToIPV4Address(macAddressOfENI, ipv4Address)
+	if err != nil {
+		log.Errorf("Error validating ipv4 addresses for ENI: %v", err)
+		return err
+	}
+	if !ok {
+		log.Error("Unable to validate ipv4 address for ENI: %v", unmappedIPV4AddressError)
+		return unmappedIPV4AddressError
+	}
+
+	return nil
+}
+
+func validateMACMapsToIPV6Address(engine engine.Engine, macAddressOfENI string, ipv6Address string) error {
+	ok, err := engine.DoesMACAddressMapToIPV6Address(macAddressOfENI, ipv6Address)
+	if err != nil {
+		log.Errorf("Error validating ipv6 addresses for ENI: %v", err)
+		return err
+	}
+	if !ok {
+		log.Error("Unable to validate ipv6 address for ENI: %v", unmappedIPV6AddressError)
+		return unmappedIPV6AddressError
+	}
 
 	return nil
 }
@@ -128,8 +194,12 @@ func del(args *skel.CmdArgs, engine engine.Engine) error {
 		return err
 	}
 
+	stopDHClient6 := false
+	if conf.IPV6Address != "" {
+		stopDHClient6 = true
+	}
 	// Valid config. Tear it down!
-	err = engine.TeardownContainerNamespace(args.Netns, conf.MACAddress)
+	err = engine.TeardownContainerNamespace(args.Netns, conf.MACAddress, stopDHClient6)
 	if err != nil {
 		log.Errorf("Unable to teardown container's namespace: %v", err)
 		return err
