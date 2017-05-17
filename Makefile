@@ -3,6 +3,7 @@ SOURCES := $(shell find $(SOURCEDIR) -name '*.go')
 ROOT := $(shell pwd)
 LOCAL_ENI_PLUGIN_BINARY=bin/plugins/eni
 LOCAL_IPAM_PLUGIN_BINARY=bin/plugins/ipam
+LOCAL_BRIDGE_PLUGIN_BINARY=bin/plugins/bridge
 GIT_PORCELAIN=$(shell git status --porcelain | wc -l)
 GIT_SHORT_HASH=$(shell git rev-parse --short HEAD)
 VERSION=$(shell cat $(ROOT)/VERSION)
@@ -15,7 +16,7 @@ get-deps:
 	go get github.com/tools/godep
 
 .PHONY: plugins
-plugins: $(LOCAL_ENI_PLUGIN_BINARY) $(LOCAL_IPAM_PLUGIN_BINARY)
+plugins: $(LOCAL_ENI_PLUGIN_BINARY) $(LOCAL_IPAM_PLUGIN_BINARY) $(LOCAL_BRIDGE_PLUGIN_BINARY)
 
 $(LOCAL_ENI_PLUGIN_BINARY): $(SOURCES)
 	GOOS=linux CGO_ENABLED=0 go build -installsuffix cgo -a -ldflags "\
@@ -32,6 +33,14 @@ $(LOCAL_IPAM_PLUGIN_BINARY): $(SOURCES)
 	     -X github.com/aws/amazon-ecs-cni-plugins/pkg/version.Version=$(VERSION) -s" \
 	     -o ${ROOT}/bin/plugins/ipam github.com/aws/amazon-ecs-cni-plugins/plugins/ipam
 	@echo "Built ipam plugin"
+
+$(LOCAL_BRIDGE_PLUGIN_BINARY): $(SOURCES)
+	GOOS=linux CGO_ENABLED=0 go build -installsuffix cgo -a -ldflags "\
+	     -X github.com/aws/amazon-ecs-cni-plugins/pkg/version.GitShortHash=$(GIT_SHORT_HASH) \
+	     -X github.com/aws/amazon-ecs-cni-plugins/pkg/version.GitPorcelain=$(GIT_PORCELAIN) \
+	     -X github.com/aws/amazon-ecs-cni-plugins/pkg/version.Version=$(VERSION) -s" \
+	     -o ${ROOT}/bin/plugins/bridge github.com/aws/amazon-ecs-cni-plugins/plugins/ecs-bridge
+	@echo "Built bridge plugin"
 
 .PHONY: generate
 generate: $(SOURCES)
