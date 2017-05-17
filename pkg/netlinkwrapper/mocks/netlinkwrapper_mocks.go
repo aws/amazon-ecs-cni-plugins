@@ -52,6 +52,27 @@ func (_mr *_MockNetLinkRecorder) AddrAdd(arg0, arg1 interface{}) *gomock.Call {
 	return _mr.mock.ctrl.RecordCall(_mr.mock, "AddrAdd", arg0, arg1)
 }
 
+func (_m *MockNetLink) AddrList(_param0 netlink.Link, _param1 int) ([]netlink.Addr, error) {
+	ret := _m.ctrl.Call(_m, "AddrList", _param0, _param1)
+	ret0, _ := ret[0].([]netlink.Addr)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+func (_mr *_MockNetLinkRecorder) AddrList(arg0, arg1 interface{}) *gomock.Call {
+	return _mr.mock.ctrl.RecordCall(_mr.mock, "AddrList", arg0, arg1)
+}
+
+func (_m *MockNetLink) LinkAdd(_param0 netlink.Link) error {
+	ret := _m.ctrl.Call(_m, "LinkAdd", _param0)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+func (_mr *_MockNetLinkRecorder) LinkAdd(arg0 interface{}) *gomock.Call {
+	return _mr.mock.ctrl.RecordCall(_mr.mock, "LinkAdd", arg0)
+}
+
 func (_m *MockNetLink) LinkByName(_param0 string) (netlink.Link, error) {
 	ret := _m.ctrl.Call(_m, "LinkByName", _param0)
 	ret0, _ := ret[0].(netlink.Link)
@@ -82,6 +103,16 @@ func (_m *MockNetLink) LinkSetDown(_param0 netlink.Link) error {
 
 func (_mr *_MockNetLinkRecorder) LinkSetDown(arg0 interface{}) *gomock.Call {
 	return _mr.mock.ctrl.RecordCall(_mr.mock, "LinkSetDown", arg0)
+}
+
+func (_m *MockNetLink) LinkSetMaster(_param0 netlink.Link, _param1 *netlink.Bridge) error {
+	ret := _m.ctrl.Call(_m, "LinkSetMaster", _param0, _param1)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+func (_mr *_MockNetLinkRecorder) LinkSetMaster(arg0, arg1 interface{}) *gomock.Call {
+	return _mr.mock.ctrl.RecordCall(_mr.mock, "LinkSetMaster", arg0, arg1)
 }
 
 func (_m *MockNetLink) LinkSetNsFd(_param0 netlink.Link, _param1 int) error {
@@ -123,6 +154,16 @@ func (_m *MockNetLink) RouteAdd(_param0 *netlink.Route) error {
 
 func (_mr *_MockNetLinkRecorder) RouteAdd(arg0 interface{}) *gomock.Call {
 	return _mr.mock.ctrl.RecordCall(_mr.mock, "RouteAdd", arg0)
+}
+
+func (_m *MockNetLink) RouteDel(_param0 *netlink.Route) error {
+	ret := _m.ctrl.Call(_m, "RouteDel", _param0)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+func (_mr *_MockNetLinkRecorder) RouteDel(arg0 interface{}) *gomock.Call {
+	return _mr.mock.ctrl.RecordCall(_mr.mock, "RouteDel", arg0)
 }
 
 func (_m *MockNetLink) RouteList(_param0 netlink.Link, _param1 int) ([]netlink.Route, error) {
