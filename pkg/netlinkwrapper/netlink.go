@@ -25,6 +25,12 @@ type NetLink interface {
 	ParseAddr(s string) (*netlink.Addr, error)
 	// AddrAdd is equivalent to `ip addr add $addr dev $link`
 	AddrAdd(link netlink.Link, addr *netlink.Addr) error
+	// AddrList is equivalent to `ip addr show `
+	AddrList(link netlink.Link, family int) ([]netlink.Addr, error)
+	// LinkAdd is equivalent to `ip link add`
+	LinkAdd(link netlink.Link) error
+	// LinkSetMaster is equivalent to `ip link set $link master $master`
+	LinkSetMaster(link netlink.Link, master *netlink.Bridge) error
 	// LinkSetUp is equivalent to `ip link set $link up`
 	LinkSetUp(link netlink.Link) error
 	// LinkList is equivalent to: `ip link show`
@@ -35,6 +41,8 @@ type NetLink interface {
 	RouteList(link netlink.Link, family int) ([]netlink.Route, error)
 	// RouteAdd will add a route to the route table
 	RouteAdd(route *netlink.Route) error
+	// RouteDel is equivalent to `ip route del`
+	RouteDel(route *netlink.Route) error
 }
 
 type netLink struct {
@@ -43,6 +51,12 @@ type netLink struct {
 // NewNetLink creates a new NetLink object
 func NewNetLink() NetLink {
 	return &netLink{}
+}
+func (*netLink) LinkSetMaster(link netlink.Link, master *netlink.Bridge) error {
+	return netlink.LinkSetMaster(link, master)
+}
+func (*netLink) LinkAdd(link netlink.Link) error {
+	return netlink.LinkAdd(link)
 }
 
 func (*netLink) LinkByName(name string) (netlink.Link, error) {
@@ -79,4 +93,12 @@ func (*netLink) RouteList(link netlink.Link, family int) ([]netlink.Route, error
 
 func (*netLink) RouteAdd(route *netlink.Route) error {
 	return netlink.RouteAdd(route)
+}
+
+func (*netLink) RouteDel(route *netlink.Route) error {
+	return netlink.RouteDel(route)
+}
+
+func (*netLink) AddrList(link netlink.Link, family int) ([]netlink.Addr, error) {
+	return netlink.AddrList(link, family)
 }
