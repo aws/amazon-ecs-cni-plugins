@@ -147,7 +147,17 @@
 			"Rev": "175e6e3d439fe2e1cee7ab652b12eb546c145a13"
 		},
 		{
+			"ImportPath": "github.com/containernetworking/cni/pkg/invoke",
+			"Comment": "v0.5.1-5-g0db5cd5",
+			"Rev": "0db5cd54f92d60b16f429cc9458cadf1cb56adc0"
+		},
+		{
 			"ImportPath": "github.com/containernetworking/cni/pkg/ip",
+			"Comment": "v0.5.1-5-g0db5cd5",
+			"Rev": "0db5cd54f92d60b16f429cc9458cadf1cb56adc0"
+		},
+		{
+			"ImportPath": "github.com/containernetworking/cni/pkg/ipam",
 			"Comment": "v0.5.1-5-g0db5cd5",
 			"Rev": "0db5cd54f92d60b16f429cc9458cadf1cb56adc0"
 		},
