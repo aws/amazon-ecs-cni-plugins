@@ -233,3 +233,26 @@ func TestDelReleaseError(t *testing.T) {
 	err := del(allocator, conf)
 	assert.Error(t, err, "Release the ip from db failed should cause the DEL fail")
 }
+
+// TestDelByID tests the ipam plugin release ip by id
+func TestDelByID(t *testing.T) {
+	conf, allocator := setup("10.0.0.0/29", "10.0.0.2/29", "", t)
+	conf.ID = "TestDelByID"
+	conf.IPV4Address = types.IPNet{}
+
+	gomock.InOrder(
+		allocator.EXPECT().ReleaseByID(conf.ID).Return("10.0.0.3", nil),
+		allocator.EXPECT().Update(config.LastKnownIPKey, "10.0.0.3").Return(nil),
+	)
+
+	err := del(allocator, conf)
+	assert.NoError(t, err)
+}
+
+func TestDelWithoutIDAndIP(t *testing.T) {
+	conf, _ := setup("10.0.0.0/29", "10.0.0.2/29", "", t)
+	conf.IPV4Address = types.IPNet{}
+
+	err := validateDelConfiguration(conf)
+	assert.Error(t, err, "Empty ip and id should cause deletion fail")
+}

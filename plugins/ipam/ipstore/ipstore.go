@@ -18,7 +18,6 @@ import (
 	"net"
 	"time"
 
-	log "github.com/cihub/seelog"
 	"github.com/docker/libkv/store"
 	"github.com/docker/libkv/store/boltdb"
 	"github.com/pkg/errors"
@@ -27,6 +26,9 @@ import (
 const (
 	// Mask size beyond 30 won't be accepted since the .0 and .255 are reserved
 	MaxMask = 30
+	// This assumes all the ip start with 1 for now before we address
+	// the issue: https://github.com/aws/amazon-ecs-cni-plugins/issues/37
+	IPPrefix = "1"
 )
 
 // IPManager is responsible for managing the ip addresses using boltdb
@@ -52,6 +54,7 @@ type IPAllocator interface {
 	Assign(string, string) error
 	Update(string, string) error
 	Release(string) error
+	ReleaseByID(string) (string, error)
 	Exists(string) (bool, error)
 	SetLastKnownIP(net.IP)
 	Close()
@@ -92,8 +95,7 @@ func (manager *IPManager) GetAvailableIP(id string) (string, error) {
 		}
 		err = manager.Assign(nextIP.String(), id)
 		if err != nil && err != store.ErrKeyExists {
-			log.Debugf("query to the db failed, err: %v", err)
-			return "", err
+			return "", errors.Wrapf(err, "ipstore get ip: failed to assign ip in ipam")
 		} else if err == store.ErrKeyExists {
 			// ip already be used
 		} else {
@@ -129,6 +131,18 @@ func (manager *IPManager) Assign(ip string, id string) error {
 	if ok {
 		return store.ErrKeyExists
 	}
+
+	// if the id presents, it should be unique
+	if id != "" {
+		ok, err := manager.UniqueID(id)
+		if err != nil {
+			return errors.Wrapf(err, "assign ipstore: check id unique failed, id: %s", id)
+		}
+		if !ok {
+			return errors.Errorf("assign ipstore: id already exists, id: %s", id)
+		}
+	}
+
 	err = manager.client.Put(ip, []byte(id), nil)
 	if err != nil {
 		return errors.Wrapf(err, "assign ipstore: failed to put the key/value into the db: %s -> %s", ip, id)
@@ -157,6 +171,53 @@ func (manager *IPManager) Release(ip string) error {
 	manager.lastKnownIP = net.ParseIP(ip)
 
 	return nil
+}
+
+// ReleaseByID release the key-value pair by id
+func (manager *IPManager) ReleaseByID(id string) (string, error) {
+	// TODO improve this part by implement listing all the kv pairs
+	// libkv library only provide list all key-value pairs with prefix of key, and
+	// if the result is empty it will return store.ErrKeyNotFound error
+	kvPairs, err := manager.client.List(IPPrefix)
+	if err == store.ErrKeyNotFound {
+		return "", errors.Errorf("release ipstore: no ip associated with the id: %s", id)
+	}
+	if err != nil {
+		return "", errors.Wrapf(err, "release ipstore: failed to list the key-value pairs in db")
+	}
+
+	var ipDeleted string
+	for _, kvPair := range kvPairs {
+		if string(kvPair.Value) == id {
+			err = manager.Release(kvPair.Key)
+			if err != nil {
+				return "", err
+			}
+			ipDeleted = kvPair.Key
+			return ipDeleted, nil
+		}
+	}
+	return "", errors.Errorf("release ipstore: no ip address associated with the given id: %s", id)
+}
+
+// UniqueID checks whether the id has already existed in the ipam
+func (manager *IPManager) UniqueID(id string) (bool, error) {
+	kvPairs, err := manager.client.List(IPPrefix)
+	// TODO improve this part by implement listing all the kv pairs
+	if err == store.ErrKeyNotFound {
+		return true, nil
+	}
+
+	if err != nil {
+		return false, errors.Wrapf(err, "ipstore: failed to list the key-value pairs in db")
+	}
+
+	for _, kvPair := range kvPairs {
+		if string(kvPair.Value) == id {
+			return false, errors.Errorf("ipstore: id already exists")
+		}
+	}
+	return true, nil
 }
 
 // Update updates the value of existed key in the db

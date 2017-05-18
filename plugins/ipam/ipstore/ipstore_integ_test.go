@@ -71,7 +71,7 @@ func TestAssignReleaseExistGetAvailableIP(t *testing.T) {
 	assert.Equal(t, "169.254.172.2", ip, "ip should be allocated serially")
 	assert.True(t, ipManager.lastKnownIP.Equal(net.ParseIP("169.254.172.2")), "ipmanager should record the recently referenced ip")
 
-	err = ipManager.Assign("169.254.172.3", "id")
+	err = ipManager.Assign("169.254.172.3", "id4")
 	assert.NoError(t, err)
 	assert.True(t, ipManager.lastKnownIP.Equal(net.ParseIP("169.254.172.3")), "ipmanager should record the recently reference ip")
 

@@ -31,6 +31,7 @@ If "gw" is omitted, value of "gateway" will be used.
 * `ipv4-gateway` (string, optional): IP inside of "subnet" to designate as the
 gateway. Defaults to ".1" IP inside of the "subnet" block.
 * `ipv4-subnet` (string, required): CIDR block for allocations.
+*Note: either `id` or `ipv4-address` must be specified in delete operation.*
 
 ## Environment variable
 * `IPAM_DB_PATH` (string, optional): path of the boltdb file.

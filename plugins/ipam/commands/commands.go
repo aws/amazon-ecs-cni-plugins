@@ -84,6 +84,10 @@ func Del(args *skel.CmdArgs) error {
 		return err
 	}
 
+	if err := validateDelConfiguration(ipamConf); err != nil {
+		return err
+	}
+
 	dbConf, err := config.LoadDBConfig()
 	if err != nil {
 		return err
@@ -101,18 +105,35 @@ func Del(args *skel.CmdArgs) error {
 	return del(ipManager, ipamConf)
 }
 
-func del(ipManager ipstore.IPAllocator, ipamConf *config.IPAMConfig) error {
-	if ipamConf.IPV4Address.IP == nil {
-		return errors.New("del commands: ip address is required for deletion")
+// validateDelConfiguration checks the configuration for ipam del
+func validateDelConfiguration(ipamConf *config.IPAMConfig) error {
+	if ipamConf.ID == "" && (ipamConf.IPV4Address.IP == nil || net.ParseIP(ipamConf.IPV4Address.IP.String()) == nil) {
+		return errors.New("del commands: ip address and id can not both be empty for deletion")
 	}
+	return nil
+}
 
-	err := ipManager.Release(ipamConf.IPV4Address.IP.String())
-	if err != nil {
-		return err
+func del(ipManager ipstore.IPAllocator, ipamConf *config.IPAMConfig) error {
+	var releasedIP string
+
+	if ipamConf.IPV4Address.IP != nil && net.ParseIP(ipamConf.IPV4Address.IP.String()) != nil {
+		// Release the ip by ip address
+		err := ipManager.Release(ipamConf.IPV4Address.IP.String())
+		if err != nil {
+			return err
+		}
+		releasedIP = ipamConf.IPV4Address.IP.String()
+	} else {
+		// Release the ip by unique id associated with the ip
+		ip, err := ipManager.ReleaseByID(ipamConf.ID)
+		if err != nil {
+			return nil
+		}
+		releasedIP = ip
 	}
 
 	// Update the last known ip
-	err = ipManager.Update("lastKnownIP", ipamConf.IPV4Address.IP.String())
+	err := ipManager.Update("lastKnownIP", releasedIP)
 	if err != nil {
 		// This error will only impact how the next ip will be find, it shouldn't cause
 		// the command to fail
