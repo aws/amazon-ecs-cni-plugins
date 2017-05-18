@@ -15,12 +15,18 @@ package commands
 
 import (
 	"errors"
+	"io/ioutil"
+	"os"
 	"testing"
 
 	"github.com/aws/amazon-ecs-cni-plugins/plugins/eni/engine/mocks"
+	"github.com/cihub/seelog"
 	"github.com/containernetworking/cni/pkg/skel"
+	"github.com/containernetworking/cni/pkg/types/current"
+	"github.com/containernetworking/cni/pkg/version"
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 const (
@@ -40,7 +46,8 @@ const (
 )
 
 var eniArgs = &skel.CmdArgs{
-	StdinData: []byte(`{"eni":"` + eniID +
+	StdinData: []byte(`{"cniVersion": "0.3.0",` +
+		`"eni":"` + eniID +
 		`", "ipv4-address":"` + eniIPV4Address +
 		`", "mac":"` + mac +
 		`", "ipv6-address":"` + eniIPV6Address +
@@ -49,7 +56,8 @@ var eniArgs = &skel.CmdArgs{
 }
 
 var eniArgsNoIPV6 = &skel.CmdArgs{
-	StdinData: []byte(`{"eni":"` + eniID +
+	StdinData: []byte(`{"cniVersion": "0.3.0",` +
+		`"eni":"` + eniID +
 		`", "ipv4-address":"` + eniIPV4Address +
 		`", "mac":"` + mac +
 		`"}`),
@@ -380,6 +388,106 @@ func TestAddNoErrorWhenIPV6AddressNotSpecifiedInConfig(t *testing.T) {
 
 	err := add(eniArgsNoIPV6, mockEngine)
 	assert.NoError(t, err)
+}
+
+// TestAddPrintResult tests the add command return compatiable result as cni
+func TestAddPrintResult(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	// Turn off the log for test, as the test needs to read the result returned by the plugin from stdout
+	logger, err := seelog.LoggerFromConfigAsString(`
+	<seelog minlevel="off"></seelog>
+	`)
+	assert.NoError(t, err, "create new logger failed")
+	err = seelog.ReplaceLogger(logger)
+	assert.NoError(t, err, "turn off the logger failed")
+
+	mockEngine := mock_engine.NewMockEngine(ctrl)
+	macAddress := macAddressSanitized
+	macAddresses := []string{macAddress}
+
+	gomock.InOrder(
+		mockEngine.EXPECT().IsDHClientInPath().Return(true),
+		mockEngine.EXPECT().GetAllMACAddresses().Return(macAddresses, nil),
+		mockEngine.EXPECT().GetMACAddressOfENI(macAddresses, eniID).Return(macAddress, nil),
+		mockEngine.EXPECT().DoesMACAddressMapToIPV4Address(macAddress, eniIPV4Address).Return(true, nil),
+		mockEngine.EXPECT().DoesMACAddressMapToIPV6Address(macAddress, eniIPV6Address).Return(true, nil),
+		mockEngine.EXPECT().GetInterfaceDeviceName(macAddress).Return(deviceName, nil),
+		mockEngine.EXPECT().GetIPV4GatewayNetmask(macAddress).Return(eniIPV4Gateway, eniIPV4SubnetMask, nil),
+		mockEngine.EXPECT().GetIPV6PrefixLength(macAddress).Return(eniIPV6SubnetMask, nil),
+		mockEngine.EXPECT().GetIPV6Gateway(deviceName).Return(eniIPV6Gateway, nil),
+		mockEngine.EXPECT().SetupContainerNamespace(nsName, deviceName, eniIPV4AddressWithSubnetMask, eniIPV6AddressWithSubnetMask, eniIPV4Gateway, eniIPV6Gateway).Return(nil),
+	)
+
+	oldStdout := os.Stdout
+	r, w, err := os.Pipe()
+	require.NoError(t, err, "redirect os.stdin succeed")
+
+	os.Stdout = w
+	err = add(eniArgs, mockEngine)
+	assert.NoError(t, err)
+
+	w.Close()
+	output, err := ioutil.ReadAll(r)
+	require.NoError(t, err, "read from stdin failed")
+	os.Stdout = oldStdout
+
+	res, err := version.NewResult("0.3.0", output)
+	assert.NoError(t, err, "construct result from stdin failed")
+	result, err := current.GetResult(res)
+	assert.NoError(t, err, "convert result to current version failed")
+	assert.Equal(t, deviceName, result.Interfaces[0].Name)
+	assert.Equal(t, macAddressSanitized, result.Interfaces[0].Mac)
+	assert.Equal(t, 2, len(result.IPs), "result should contains information of both ipv4 and ipv6")
+}
+
+func TestAddPrintResultNoIPV6(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	// Turn off the log for test, as the test needs to read the result returned by the plugin from stdout
+	logger, err := seelog.LoggerFromConfigAsString(`
+	<seelog minlevel="off"></seelog>
+	`)
+	assert.NoError(t, err, "create new logger failed")
+	err = seelog.ReplaceLogger(logger)
+	assert.NoError(t, err, "turn off the logger failed")
+
+	mockEngine := mock_engine.NewMockEngine(ctrl)
+	macAddress := macAddressSanitized
+	macAddresses := []string{macAddress}
+
+	gomock.InOrder(
+		mockEngine.EXPECT().IsDHClientInPath().Return(true),
+		mockEngine.EXPECT().GetAllMACAddresses().Return(macAddresses, nil),
+		mockEngine.EXPECT().GetMACAddressOfENI(macAddresses, eniID).Return(macAddress, nil),
+		mockEngine.EXPECT().DoesMACAddressMapToIPV4Address(macAddress, eniIPV4Address).Return(true, nil),
+		mockEngine.EXPECT().GetInterfaceDeviceName(macAddress).Return(deviceName, nil),
+		mockEngine.EXPECT().GetIPV4GatewayNetmask(macAddress).Return(eniIPV4Gateway, eniIPV4SubnetMask, nil),
+		mockEngine.EXPECT().SetupContainerNamespace(nsName, deviceName, eniIPV4AddressWithSubnetMask, "", eniIPV4Gateway, "").Return(nil),
+	)
+
+	oldStdout := os.Stdout
+	r, w, err := os.Pipe()
+	require.NoError(t, err, "redirect os.stdin succeed")
+
+	os.Stdout = w
+	err = add(eniArgsNoIPV6, mockEngine)
+	assert.NoError(t, err)
+
+	w.Close()
+	output, err := ioutil.ReadAll(r)
+	require.NoError(t, err, "read from stdin failed")
+	os.Stdout = oldStdout
+
+	res, err := version.NewResult("0.3.0", output)
+	assert.NoError(t, err, "construct result from stdin failed")
+	result, err := current.GetResult(res)
+	assert.NoError(t, err, "convert result to current version failed")
+	assert.Equal(t, deviceName, result.Interfaces[0].Name)
+	assert.Equal(t, macAddressSanitized, result.Interfaces[0].Mac)
+	assert.Equal(t, 1, len(result.IPs), "result should only contains information of ipv4")
 }
 
 func TestDelWithInvalidConfig(t *testing.T) {

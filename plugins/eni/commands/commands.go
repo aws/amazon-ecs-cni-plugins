@@ -15,11 +15,15 @@ package commands
 
 import (
 	"fmt"
+	"net"
 
 	"github.com/aws/amazon-ecs-cni-plugins/plugins/eni/engine"
 	"github.com/aws/amazon-ecs-cni-plugins/plugins/eni/types"
+
 	log "github.com/cihub/seelog"
 	"github.com/containernetworking/cni/pkg/skel"
+	cnitypes "github.com/containernetworking/cni/pkg/types"
+	"github.com/containernetworking/cni/pkg/types/current"
 	"github.com/pkg/errors"
 )
 
@@ -78,6 +82,18 @@ func add(args *skel.CmdArgs, engine engine.Engine) error {
 	}
 	log.Debugf("Found ipv4 gateway and netmask for ENI: %s %s", ipv4Gateway, ipv4Netmask)
 
+	ipv4Address := fmt.Sprintf("%s/%s", ipv4Gateway, ipv4Netmask)
+	_, ipv4Net, err := net.ParseCIDR(ipv4Address)
+	if err != nil {
+		return errors.Wrapf(err, "add eni: failed to parse ipv4 gateway netmask: %s", fmt.Sprintf("%s/%s", ipv4Gateway, ipv4Netmask))
+	}
+	ips := []*current.IPConfig{
+		{
+			Version: "4",
+			Address: *ipv4Net,
+		},
+	}
+
 	ipv6Address := ""
 	ipv6Gateway := ""
 	if conf.IPV6Address != "" {
@@ -97,6 +113,15 @@ func add(args *skel.CmdArgs, engine engine.Engine) error {
 			return err
 		}
 		log.Debugf("IPV6 Gateway IP: %v", ipv6Gateway)
+		_, ipv6net, err := net.ParseCIDR(ipv6Address)
+		if err != nil {
+			return errors.Wrapf(err, "add eni: failed to parse ipv6 gateway: %s", ipv6Address)
+		}
+
+		ips = append(ips, &current.IPConfig{
+			Version: "6",
+			Address: *ipv6net,
+		})
 	}
 
 	// Everything's prepped. We have all the parameters needed to configure
@@ -110,7 +135,17 @@ func add(args *skel.CmdArgs, engine engine.Engine) error {
 	}
 	log.Infof("ENI %s has been assigned to the container's namespace", conf.MACAddress)
 
-	return nil
+	result := &current.Result{
+		Interfaces: []*current.Interface{
+			{
+				Name: networkDeviceName,
+				Mac:  macAddressOfENI,
+			},
+		},
+		IPs: ips,
+	}
+
+	return cnitypes.PrintResult(result, conf.CNIVersion)
 }
 
 func getMACAddressOfENI(conf *types.NetConf, engine engine.Engine) (string, error) {
