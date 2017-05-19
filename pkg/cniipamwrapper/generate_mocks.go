@@ -14,3 +14,4 @@
 package cniipamwrapper
 
 //go:generate go run ../../scripts/mockgen.go github.com/aws/amazon-ecs-cni-plugins/pkg/cniipamwrapper IPAM mocks/cniipamwrapper_mocks.go
+//go:generate go run ../../scripts/mockgen.go github.com/containernetworking/cni/pkg/types Result mocks_types/result_mocks.go
