@@ -26,12 +26,18 @@ import (
 	"github.com/vishvananda/netlink"
 )
 
+// zeroLengthIPString is what we expect net.IP.String() to return if the
+// ip has length 0. We use this to determing if an IP is empty.
+// Refer https://golang.org/pkg/net/#IP.String
+const zeroLengthIPString = "<nil>"
+
 // Engine represents the execution engine for the ECS Bridge plugin.
 // It defines all the operations performed during the execution of the
 // plugin
 type Engine interface {
 	CreateBridge(bridgeName string, mtu int) (*netlink.Bridge, error)
-	CreateVethPair(netnsName string, bridge *netlink.Bridge, mtu int, interfaceName string) (*current.Interface, *current.Interface, error)
+	CreateVethPair(netnsName string, mtu int, interfaceName string) (*current.Interface, string, error)
+	AttachHostVethInterfaceToBridge(hostVethName string, bridge *netlink.Bridge) (*current.Interface, error)
 	RunIPAMPluginAdd(plugin string, netConf []byte) (*current.Result, error)
 	ConfigureContainerVethInterface(netnsName string, result *current.Result, interfaceName string) error
 	ConfigureBridge(result *current.Result, bridge *netlink.Bridge) error
@@ -59,12 +65,12 @@ func New() Engine {
 
 // CreateBridge creates the bridge if needed
 func (engine *engine) CreateBridge(bridgeName string, mtu int) (*netlink.Bridge, error) {
+	bridgeLinkAttributes := netlink.NewLinkAttrs()
+	bridgeLinkAttributes.MTU = mtu
+	bridgeLinkAttributes.Name = bridgeName
+
 	bridge := &netlink.Bridge{
-		LinkAttrs: netlink.LinkAttrs{
-			Name:   bridgeName,
-			MTU:    mtu,
-			TxQLen: -1,
-		},
+		LinkAttrs: bridgeLinkAttributes,
 	}
 
 	err := engine.netLink.LinkAdd(bridge)
@@ -80,8 +86,9 @@ func (engine *engine) CreateBridge(bridgeName string, mtu int) (*netlink.Bridge,
 	}
 	bridge, ok := bridgeLink.(*netlink.Bridge)
 	if !ok {
-		return nil, errors.Wrapf(err,
-			"bridge create: interface named %s already exists, but is not a bridge", bridgeName)
+		return nil, errors.Errorf(
+			"bridge create: interface named %s already exists, but is not a bridge",
+			bridgeName)
 	}
 
 	if err := engine.netLink.LinkSetUp(bridge); err != nil {
@@ -92,36 +99,37 @@ func (engine *engine) CreateBridge(bridgeName string, mtu int) (*netlink.Bridge,
 	return bridge, nil
 }
 
-// CreateVethPair creates the veth pair to attach the container to
-// the bridge
-func (engine *engine) CreateVethPair(netnsName string, bridge *netlink.Bridge, mtu int, interfaceName string) (*current.Interface, *current.Interface, error) {
-	setupContext := newCreateVethPairContext(
+// CreateVethPair creates the veth pair to attach the container to the bridge
+func (engine *engine) CreateVethPair(netnsName string, mtu int, interfaceName string) (*current.Interface, string, error) {
+	createVethContext := newCreateVethPairContext(
 		interfaceName, mtu, engine.ip)
 
-	err := engine.ns.WithNetNSPath(netnsName, setupContext.run)
+	err := engine.ns.WithNetNSPath(netnsName, createVethContext.run)
 
 	if err != nil {
-		return nil, nil, err
+		return nil, "", err
 	}
 
-	hostVethName := setupContext.hostVethName
-	containerInterfaceResult := setupContext.containerInterfaceResult
+	return createVethContext.containerInterfaceResult, createVethContext.hostVethName, nil
+}
 
-	hostVeth, err := engine.netLink.LinkByName(hostVethName)
+// AttachHostVethInterfaceToBridge moves the host end of the veth pair to the bridge
+func (engine *engine) AttachHostVethInterfaceToBridge(hostVethName string, bridge *netlink.Bridge) (*current.Interface, error) {
+	hostVethInterface, err := engine.netLink.LinkByName(hostVethName)
 	if err != nil {
-		return nil, nil, errors.Wrapf(err,
+		return nil, errors.Wrapf(err,
 			"bridge create veth pair: unable to look up host veth interface %s", hostVethName)
 	}
 
-	err = engine.netLink.LinkSetMaster(hostVeth, bridge)
+	err = engine.netLink.LinkSetMaster(hostVethInterface, bridge)
 	if err != nil {
-		return nil, nil, errors.Wrapf(err,
+		return nil, errors.Wrapf(err,
 			"bridge create veth pair: unable to assign the veth interface %s to bridge", hostVethName)
 	}
 
-	return containerInterfaceResult, &current.Interface{
+	return &current.Interface{
 		Name: hostVethName,
-		Mac:  hostVeth.Attrs().HardwareAddr.String(),
+		Mac:  hostVethInterface.Attrs().HardwareAddr.String(),
 	}, nil
 }
 
@@ -146,7 +154,11 @@ func (engine *engine) RunIPAMPluginAdd(plugin string, netConf []byte) (*current.
 		return nil, errors.New("bridge IPAM ADD: Missing IP config in result")
 	}
 
-	if result.IPs[0].Gateway == nil {
+	if result.IPs[0].Address.Mask == nil || result.IPs[0].Address.Mask.String() == zeroLengthIPString {
+		return nil, errors.New("bridge IPAM ADD: IP address mask not set in result")
+	}
+
+	if result.IPs[0].Gateway == nil || result.IPs[0].Gateway.String() == zeroLengthIPString {
 		return nil, errors.New("bridge IPAM ADD: Gateway not set in result")
 	}
 
@@ -192,7 +204,6 @@ func (engine *engine) ConfigureBridge(result *current.Result, bridge *netlink.Br
 
 	bridgeAddr := &netlink.Addr{
 		IPNet: resultBridgeNetwork,
-		Label: "", // TODO why?
 	}
 	err = engine.netLink.AddrAdd(bridge, bridgeAddr)
 	if err != nil {
@@ -220,7 +231,7 @@ func (engine *engine) GetInterfaceIPV4Address(netnsName string, interfaceName st
 func (engine *engine) RunIPAMPluginDel(plugin string, netconf []byte) error {
 	err := engine.ipam.ExecDel(plugin, netconf)
 	if err != nil {
-		errors.Wrapf(err,
+		return errors.Wrapf(err,
 			"bridge ipam DEL: failed to execute the plugin: %s", plugin)
 	}
 

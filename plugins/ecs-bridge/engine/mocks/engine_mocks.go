@@ -43,6 +43,17 @@ func (_m *MockEngine) EXPECT() *_MockEngineRecorder {
 	return _m.recorder
 }
 
+func (_m *MockEngine) AttachHostVethInterfaceToBridge(_param0 string, _param1 *netlink.Bridge) (*current.Interface, error) {
+	ret := _m.ctrl.Call(_m, "AttachHostVethInterfaceToBridge", _param0, _param1)
+	ret0, _ := ret[0].(*current.Interface)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+func (_mr *_MockEngineRecorder) AttachHostVethInterfaceToBridge(arg0, arg1 interface{}) *gomock.Call {
+	return _mr.mock.ctrl.RecordCall(_mr.mock, "AttachHostVethInterfaceToBridge", arg0, arg1)
+}
+
 func (_m *MockEngine) ConfigureBridge(_param0 *current.Result, _param1 *netlink.Bridge) error {
 	ret := _m.ctrl.Call(_m, "ConfigureBridge", _param0, _param1)
 	ret0, _ := ret[0].(error)
@@ -74,16 +85,16 @@ func (_mr *_MockEngineRecorder) CreateBridge(arg0, arg1 interface{}) *gomock.Cal
 	return _mr.mock.ctrl.RecordCall(_mr.mock, "CreateBridge", arg0, arg1)
 }
 
-func (_m *MockEngine) CreateVethPair(_param0 string, _param1 *netlink.Bridge, _param2 int, _param3 string) (*current.Interface, *current.Interface, error) {
-	ret := _m.ctrl.Call(_m, "CreateVethPair", _param0, _param1, _param2, _param3)
+func (_m *MockEngine) CreateVethPair(_param0 string, _param1 int, _param2 string) (*current.Interface, string, error) {
+	ret := _m.ctrl.Call(_m, "CreateVethPair", _param0, _param1, _param2)
 	ret0, _ := ret[0].(*current.Interface)
-	ret1, _ := ret[1].(*current.Interface)
+	ret1, _ := ret[1].(string)
 	ret2, _ := ret[2].(error)
 	return ret0, ret1, ret2
 }
 
-func (_mr *_MockEngineRecorder) CreateVethPair(arg0, arg1, arg2, arg3 interface{}) *gomock.Call {
-	return _mr.mock.ctrl.RecordCall(_mr.mock, "CreateVethPair", arg0, arg1, arg2, arg3)
+func (_mr *_MockEngineRecorder) CreateVethPair(arg0, arg1, arg2 interface{}) *gomock.Call {
+	return _mr.mock.ctrl.RecordCall(_mr.mock, "CreateVethPair", arg0, arg1, arg2)
 }
 
 func (_m *MockEngine) DeleteVeth(_param0 string, _param1 string) error {
