@@ -40,10 +40,14 @@ func newDeleteLinkContext(interfaceName string, ip cniipwrapper.IP) *deleteLinkC
 func (delContext *deleteLinkContext) run(hostNS ns.NetNS) error {
 	_, err := delContext.ip.DelLinkByNameAddr(
 		delContext.interfaceName, netlink.FAMILY_V4)
-	if err != nil && err == ip.ErrLinkNotFound {
-		return nil
+	if err != nil {
+		if err == ip.ErrLinkNotFound {
+			return nil
+		}
+		return errors.Wrapf(err,
+			"bridge delete veth: unable to delete link for interface: %s",
+			delContext.interfaceName)
 	}
-	return errors.Wrapf(err,
-		"bridge delete veth: unable to delete link for interface: %s",
-		delContext.interfaceName)
+
+	return nil
 }

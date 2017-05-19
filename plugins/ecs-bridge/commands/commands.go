@@ -49,8 +49,14 @@ func add(args *skel.CmdArgs, engine engine.Engine) error {
 	}
 
 	log.Infof("Creating veth pair for namespace: %s", args.Netns)
-	containerVethInterface, hostVethInterface, err := engine.CreateVethPair(
-		args.Netns, bridge, conf.MTU, args.IfName)
+	containerVethInterface, hostVethName, err := engine.CreateVethPair(
+		args.Netns, conf.MTU, args.IfName)
+	if err != nil {
+		return err
+	}
+
+	log.Infof("Attaching veth pair %s to bridge", hostVethName)
+	hostVethInterface, err := engine.AttachHostVethInterfaceToBridge(hostVethName, bridge)
 	if err != nil {
 		return err
 	}
