@@ -67,10 +67,6 @@ func LoadIPAMConfig(bytes []byte, args string) (*IPAMConfig, string, error) {
 		return nil, "", errors.New("loadIPAMConfig config: 'IPAM' field missing in configuration")
 	}
 
-	if err := types.LoadArgs(args, ipamConf.IPAM); err != nil {
-		return nil, "", errors.Wrapf(err, "loadIPAMConfig config: failed to parse args: %v", args)
-	}
-
 	// subnet is required to allocate ip address
 	if ipamConf.IPAM.IPV4Subnet.IP == nil || ipamConf.IPAM.IPV4Subnet.Mask == nil {
 		return nil, "", errors.New("loadIPAMConfig config: subnet is required")
