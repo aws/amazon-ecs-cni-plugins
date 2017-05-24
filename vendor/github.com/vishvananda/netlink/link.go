@@ -170,6 +170,7 @@ type LinkStatistics64 struct {
 type LinkXdp struct {
 	Fd       int
 	Attached bool
+	Flags    uint32
 }
 
 // Device links cannot be created via netlink. These links
@@ -215,6 +216,8 @@ func (ifb *Ifb) Type() string {
 // Bridge links are simple linux bridges
 type Bridge struct {
 	LinkAttrs
+	MulticastSnooping *bool
+	HelloTime         *uint32
 }
 
 func (bridge *Bridge) Attrs() *LinkAttrs {
@@ -731,8 +734,32 @@ func (vrf *Vrf) Type() string {
 	return "vrf"
 }
 
+type GTP struct {
+	LinkAttrs
+	FD0         int
+	FD1         int
+	Role        int
+	PDPHashsize int
+}
+
+func (gtp *GTP) Attrs() *LinkAttrs {
+	return &gtp.LinkAttrs
+}
+
+func (gtp *GTP) Type() string {
+	return "gtp"
+}
+
 // iproute2 supported devices;
 // vlan | veth | vcan | dummy | ifb | macvlan | macvtap |
 // bridge | bond | ipoib | ip6tnl | ipip | sit | vxlan |
 // gre | gretap | ip6gre | ip6gretap | vti | nlmon |
 // bond_slave | ipvlan
+
+// LinkNotFoundError wraps the various not found errors when
+// getting/reading links. This is intended for better error
+// handling by dependent code so that "not found error" can
+// be distinguished from other errors
+type LinkNotFoundError struct {
+	error
+}
