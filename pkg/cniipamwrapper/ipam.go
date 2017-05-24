@@ -25,7 +25,7 @@ type IPAM interface {
 	ExecAdd(plugin string, netconf []byte) (types.Result, error)
 	// ExecDel invokes the IPAM plugin with the ADD command
 	ExecDel(plugin string, netconf []byte) error
-	// ConfifureIface configures the interface named ifName
+	// ConfigureIface configures the interface named ifName
 	// with the result object
 	ConfigureIface(ifName string, res *current.Result) error
 }

@@ -73,14 +73,14 @@ func add(args *skel.CmdArgs, engine engine.Engine) error {
 	// includes the bridge, the two ends of the veth interface created
 	result.Interfaces = []*current.Interface{
 		// the bridge interface
-		&current.Interface{
+		0: &current.Interface{
 			Name: bridge.Attrs().Name,
 			Mac:  bridge.Attrs().HardwareAddr.String(),
 		},
 		// the host veth interface
-		hostVethInterface,
+		1: hostVethInterface,
 		// the container veth interface
-		containerVethInterface,
+		2: containerVethInterface,
 	}
 
 	// Set the index for the container veth interface in the `Interfaces`
