@@ -65,7 +65,49 @@ func setup(t *testing.T) (*gomock.Controller,
 		mock_cninswrapper.NewMockNS(ctrl)
 }
 
-func TestCreateBridgeLinkAddError(t *testing.T) {
+func TestLookupBridgeLinkByNameError(t *testing.T) {
+	ctrl, _, mockNetLink, _, _, _ := setup(t)
+	defer ctrl.Finish()
+
+	mockNetLink.EXPECT().LinkByName(bridgeName).Return(nil, errors.New("error"))
+	engine := &engine{netLink: mockNetLink}
+	_, err := engine.lookupBridge(bridgeName)
+	assert.Error(t, err)
+}
+
+func TestLookupBridgeNotABridgeError(t *testing.T) {
+	ctrl, _, mockNetLink, _, _, _ := setup(t)
+	defer ctrl.Finish()
+
+	mockNetLink.EXPECT().LinkByName(bridgeName).Return(&netlink.Dummy{}, nil)
+	engine := &engine{netLink: mockNetLink}
+	_, err := engine.lookupBridge(bridgeName)
+	assert.Error(t, err)
+}
+
+func TestLookupBridgeLinkNotFound(t *testing.T) {
+	ctrl, _, mockNetLink, _, _, _ := setup(t)
+	defer ctrl.Finish()
+
+	mockNetLink.EXPECT().LinkByName(bridgeName).Return(nil, netlink.LinkNotFoundError{})
+	engine := &engine{netLink: mockNetLink}
+	bridge, err := engine.lookupBridge(bridgeName)
+	assert.NoError(t, err)
+	assert.Nil(t, bridge)
+}
+
+func TestLookupBridgeLinkFound(t *testing.T) {
+	ctrl, _, mockNetLink, _, _, _ := setup(t)
+	defer ctrl.Finish()
+
+	mockNetLink.EXPECT().LinkByName(bridgeName).Return(&netlink.Bridge{}, nil)
+	engine := &engine{netLink: mockNetLink}
+	bridge, err := engine.lookupBridge(bridgeName)
+	assert.NoError(t, err)
+	assert.NotNil(t, bridge)
+}
+
+func TestCreateBridgeInternalLinkAddError(t *testing.T) {
 	ctrl, _, mockNetLink, _, _, _ := setup(t)
 	defer ctrl.Finish()
 
@@ -74,35 +116,29 @@ func TestCreateBridgeLinkAddError(t *testing.T) {
 		assert.Equal(t, mtu, link.Attrs().MTU)
 		assert.Equal(t, -1, link.Attrs().TxQLen)
 	}).Return(errors.New("error"))
+	engine := &engine{netLink: mockNetLink}
+	err := engine.createBridge(bridgeName, mtu)
+	assert.Error(t, err)
+}
 
+func TestCreateBridgeLookupBridgeError(t *testing.T) {
+	ctrl, _, mockNetLink, _, _, _ := setup(t)
+	defer ctrl.Finish()
+
+	mockNetLink.EXPECT().LinkByName(bridgeName).Return(nil, errors.New("error"))
 	engine := &engine{netLink: mockNetLink}
 	_, err := engine.CreateBridge(bridgeName, mtu)
 	assert.Error(t, err)
 }
 
-func TestCreateBridgeLinkByNameError(t *testing.T) {
+func TestCreateBridgeLinkAddError(t *testing.T) {
 	ctrl, _, mockNetLink, _, _, _ := setup(t)
 	defer ctrl.Finish()
 
 	gomock.InOrder(
-		mockNetLink.EXPECT().LinkAdd(gomock.Any()).Return(syscall.EEXIST),
-		mockNetLink.EXPECT().LinkByName(bridgeName).Return(nil, errors.New("error")),
+		mockNetLink.EXPECT().LinkByName(bridgeName).Return(nil, netlink.LinkNotFoundError{}),
+		mockNetLink.EXPECT().LinkAdd(gomock.Any()).Return(errors.New("error")),
 	)
-
-	engine := &engine{netLink: mockNetLink}
-	_, err := engine.CreateBridge(bridgeName, mtu)
-	assert.Error(t, err)
-}
-
-func TestCreateBridgeLinkExistsButNotBridge(t *testing.T) {
-	ctrl, _, mockNetLink, _, _, _ := setup(t)
-	defer ctrl.Finish()
-
-	gomock.InOrder(
-		mockNetLink.EXPECT().LinkAdd(gomock.Any()).Return(syscall.EEXIST),
-		mockNetLink.EXPECT().LinkByName(bridgeName).Return(&netlink.Dummy{}, nil),
-	)
-
 	engine := &engine{netLink: mockNetLink}
 	_, err := engine.CreateBridge(bridgeName, mtu)
 	assert.Error(t, err)
@@ -114,11 +150,11 @@ func TestCreateBridgeLinkSetupError(t *testing.T) {
 
 	bridgeLink := &netlink.Bridge{}
 	gomock.InOrder(
-		mockNetLink.EXPECT().LinkAdd(gomock.Any()).Return(syscall.EEXIST),
+		mockNetLink.EXPECT().LinkByName(bridgeName).Return(nil, netlink.LinkNotFoundError{}),
+		mockNetLink.EXPECT().LinkAdd(gomock.Any()).Return(nil),
 		mockNetLink.EXPECT().LinkByName(bridgeName).Return(bridgeLink, nil),
 		mockNetLink.EXPECT().LinkSetUp(bridgeLink).Return(errors.New("error")),
 	)
-
 	engine := &engine{netLink: mockNetLink}
 	_, err := engine.CreateBridge(bridgeName, mtu)
 	assert.Error(t, err)
@@ -130,11 +166,11 @@ func TestCreateBridgeSuccess(t *testing.T) {
 
 	bridgeLink := &netlink.Bridge{}
 	gomock.InOrder(
-		mockNetLink.EXPECT().LinkAdd(gomock.Any()).Return(syscall.EEXIST),
+		mockNetLink.EXPECT().LinkByName(bridgeName).Return(nil, netlink.LinkNotFoundError{}),
+		mockNetLink.EXPECT().LinkAdd(gomock.Any()).Return(nil),
 		mockNetLink.EXPECT().LinkByName(bridgeName).Return(bridgeLink, nil),
 		mockNetLink.EXPECT().LinkSetUp(bridgeLink).Return(nil),
 	)
-
 	engine := &engine{netLink: mockNetLink}
 	createdBridge, err := engine.CreateBridge(bridgeName, mtu)
 	assert.NoError(t, err)

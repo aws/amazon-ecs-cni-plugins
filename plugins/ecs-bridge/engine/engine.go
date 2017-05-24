@@ -65,6 +65,60 @@ func New() Engine {
 
 // CreateBridge creates the bridge if needed
 func (engine *engine) CreateBridge(bridgeName string, mtu int) (*netlink.Bridge, error) {
+	bridge, err := engine.lookupBridge(bridgeName)
+	if err != nil {
+		return nil, err
+	}
+
+	if bridge == nil {
+		err = engine.createBridge(bridgeName, mtu)
+		if err != nil {
+			return nil, err
+		}
+
+		// We need to lookup the bridge link again because LinkAdd
+		// doesn't return a handle to the link with all the other
+		// attributes set
+		bridge, err = engine.lookupBridge(bridgeName)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	if err := engine.netLink.LinkSetUp(bridge); err != nil {
+		return nil, errors.Wrapf(err,
+			"bridge create: unable to bring up the bridge interface %s", bridgeName)
+	}
+
+	return bridge, nil
+}
+
+// lookupBridge tries to get the link interface for the bridge by its name. If
+// it cannot find the bridge it returns nil. If the link device is not of type
+// bridge, or if there's an error with LinkByName, it returns an error
+func (engine *engine) lookupBridge(bridgeName string) (*netlink.Bridge, error) {
+	bridgeLink, err := engine.netLink.LinkByName(bridgeName)
+	if err != nil {
+		if _, ok := err.(netlink.LinkNotFoundError); !ok {
+			return nil, errors.Wrapf(err,
+				"bridge create: error lookup the bridge interface %s", bridgeName)
+		}
+
+		return nil, nil
+	}
+
+	bridge, ok := bridgeLink.(*netlink.Bridge)
+	if !ok {
+		return nil, errors.Errorf(
+			"bridge create: interface named %s already exists, but is not a bridge",
+			bridgeName)
+	}
+
+	return bridge, nil
+}
+
+// createBridge creates a bridge interface
+func (engine *engine) createBridge(bridgeName string, mtu int) error {
 	bridgeLinkAttributes := netlink.NewLinkAttrs()
 	bridgeLinkAttributes.MTU = mtu
 	bridgeLinkAttributes.Name = bridgeName
@@ -74,29 +128,12 @@ func (engine *engine) CreateBridge(bridgeName string, mtu int) (*netlink.Bridge,
 	}
 
 	err := engine.netLink.LinkAdd(bridge)
-	if err != nil && err != syscall.EEXIST {
-		return nil, errors.Wrapf(err,
+	if err != nil {
+		return errors.Wrapf(err,
 			"bridge create: unable to add bridge interface %s", bridgeName)
 	}
 
-	bridgeLink, err := engine.netLink.LinkByName(bridgeName)
-	if err != nil {
-		return nil, errors.Wrapf(err,
-			"bridge create: unable to lookup the bridge interface %s", bridgeName)
-	}
-	bridge, ok := bridgeLink.(*netlink.Bridge)
-	if !ok {
-		return nil, errors.Errorf(
-			"bridge create: interface named %s already exists, but is not a bridge",
-			bridgeName)
-	}
-
-	if err := engine.netLink.LinkSetUp(bridge); err != nil {
-		return nil, errors.Wrapf(err,
-			"bridge create: unable to bring up the bridge interface %s", bridgeName)
-	}
-
-	return bridge, nil
+	return nil
 }
 
 // CreateVethPair creates the veth pair to attach the container to the bridge
