@@ -662,7 +662,7 @@ func TestGetInterfaceIPV4AddressContextLinkByNameError(t *testing.T) {
 	defer ctrl.Finish()
 
 	mockNetLink.EXPECT().LinkByName(interfaceName).Return(nil, errors.New("error"))
-	ipv4Context := newGetInterfaceIPV4AddressContext(interfaceName, mockNetLink)
+	ipv4Context := newGetContainerIPV4Context(interfaceName, mockNetLink)
 	err := ipv4Context.run(nil)
 	assert.Error(t, err)
 }
@@ -676,7 +676,7 @@ func TestGetInterfaceIPV4AddressContextAddrListError(t *testing.T) {
 		mockNetLink.EXPECT().LinkByName(interfaceName).Return(mockLink, nil),
 		mockNetLink.EXPECT().AddrList(mockLink, netlink.FAMILY_V4).Return(nil, errors.New("error")),
 	)
-	ipv4Context := newGetInterfaceIPV4AddressContext(interfaceName, mockNetLink)
+	ipv4Context := newGetContainerIPV4Context(interfaceName, mockNetLink)
 	err := ipv4Context.run(nil)
 	assert.Error(t, err)
 }
@@ -690,7 +690,7 @@ func TestGetInterfaceIPV4AddressContextAddrListEmpty(t *testing.T) {
 		mockNetLink.EXPECT().LinkByName(interfaceName).Return(mockLink, nil),
 		mockNetLink.EXPECT().AddrList(mockLink, netlink.FAMILY_V4).Return(nil, nil),
 	)
-	ipv4Context := newGetInterfaceIPV4AddressContext(interfaceName, mockNetLink)
+	ipv4Context := newGetContainerIPV4Context(interfaceName, mockNetLink)
 	err := ipv4Context.run(nil)
 	assert.Error(t, err)
 }
