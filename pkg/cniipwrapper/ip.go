@@ -21,6 +21,7 @@ import (
 )
 
 // IPAM wraps methods used from the the cni/pkg/ip package
+// Seee github.com/containernetworking/cni/pkg/ip for more details
 type IP interface {
 	// SetupVeth creates a veth pair
 	SetupVeth(contVethName string, mtu int, hostNS ns.NetNS) (net.Interface, net.Interface, error)
@@ -31,8 +32,7 @@ type IP interface {
 	DelLinkByNameAddr(ifName string, family int) (*net.IPNet, error)
 }
 
-type cniIP struct {
-}
+type cniIP struct{}
 
 // New creates a new IP object
 func New() IP {
