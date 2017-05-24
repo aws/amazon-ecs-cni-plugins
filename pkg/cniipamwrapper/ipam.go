@@ -30,8 +30,7 @@ type IPAM interface {
 	ConfigureIface(ifName string, res *current.Result) error
 }
 
-type _ipam struct {
-}
+type _ipam struct{}
 
 // New creates a new IPAM object
 func New() IPAM {

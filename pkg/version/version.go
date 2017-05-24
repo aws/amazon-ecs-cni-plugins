@@ -16,6 +16,8 @@ package version
 import (
 	"encoding/json"
 	"strings"
+
+	"github.com/pkg/errors"
 )
 
 // Version is the version number of the plugin
@@ -49,7 +51,7 @@ func String() (string, error) {
 
 	verInfoJSON, err := json.Marshal(verInfo)
 	if err != nil {
-		return "", err
+		return "", errors.Wrapf(err, "version: failed to marshal version info: %v", verInfo)
 	}
 
 	return string(verInfoJSON), nil
