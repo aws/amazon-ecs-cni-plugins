@@ -36,12 +36,12 @@ type NetConf struct {
 func NewConf(args *skel.CmdArgs) (*NetConf, error) {
 	var conf NetConf
 	if err := json.Unmarshal(args.StdinData, &conf); err != nil {
-		return nil, errors.Wrap(err, "newconf types: failed to parse config")
+		return nil, errors.Wrap(err, "bridge parsing config: failed to parse config")
 	}
 
 	if conf.BridgeName == "" {
 		return nil, errors.Errorf(
-			"newconf types: missing required parameter in config: '%s'",
+			"bridge parsing config: missing required parameter in config named: '%s'",
 			"bridge")
 	}
 

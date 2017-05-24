@@ -21,13 +21,14 @@ import (
 	"github.com/containernetworking/cni/pkg/types/current"
 )
 
-// Add invokes the command to add ENI to a container's namespace
+// Add invokes the command to create the bridge add the veth pair to
+// connect container's namespace with the bridge
 func Add(args *skel.CmdArgs) error {
 	defer log.Flush()
 	return add(args, engine.New())
 }
 
-// Del invokes the command to remove ENI from a container's namespace
+// Del invokes the command to tear down the bridge and the veth pair
 func Del(args *skel.CmdArgs) error {
 	defer log.Flush()
 	return del(args, engine.New())

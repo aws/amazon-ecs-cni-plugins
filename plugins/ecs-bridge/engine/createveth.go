@@ -38,6 +38,7 @@ func newCreateVethPairContext(
 	interfaceName string,
 	mtu int,
 	ip cniipwrapper.IP) *createVethPairContext {
+
 	return &createVethPairContext{
 		interfaceName: interfaceName,
 		mtu:           mtu,

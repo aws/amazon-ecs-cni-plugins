@@ -124,7 +124,7 @@ func (engine *engine) AttachHostVethInterfaceToBridge(hostVethName string, bridg
 	err = engine.netLink.LinkSetMaster(hostVethInterface, bridge)
 	if err != nil {
 		return nil, errors.Wrapf(err,
-			"bridge create veth pair: unable to assign the veth interface %s to bridge", hostVethName)
+			"bridge create veth pair: unable to attach the veth interface %s to bridge", hostVethName)
 	}
 
 	return &current.Interface{
@@ -198,7 +198,6 @@ func (engine *engine) ConfigureBridge(result *current.Result, bridge *netlink.Br
 				return nil
 			}
 		}
-
 		return errors.New("bridge configure: mismatch in bridge ip address")
 	}
 
@@ -218,7 +217,7 @@ func (engine *engine) ConfigureBridge(result *current.Result, bridge *netlink.Br
 // GetInterfaceIPV4Address gets the ipv4 address of a given interface
 // in the container
 func (engine *engine) GetInterfaceIPV4Address(netnsName string, interfaceName string) (string, error) {
-	ipv4Context := newGetInterfaceIPV4AddressContext(interfaceName, engine.netLink)
+	ipv4Context := newGetContainerIPV4Context(interfaceName, engine.netLink)
 	err := engine.ns.WithNetNSPath(netnsName, ipv4Context.run)
 	if err != nil {
 		return "", err

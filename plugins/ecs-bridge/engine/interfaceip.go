@@ -20,11 +20,11 @@ import (
 	"github.com/vishvananda/netlink"
 )
 
-// getxInterfaceIPV4AddressContext wraps the parameters and the method to
+// getContainerIPV4Context wraps the parameters and the method to
 // get the ipv4 address of the container's veth's interface. This should
 // only be needed if there's a need to determine the IPv4 address of the
 // interface before executing the DEL command using the ipam plugin
-type getInterfaceIPV4AddressContext struct {
+type getContainerIPV4Context struct {
 	interfaceName string
 	netLink       netlinkwrapper.NetLink
 	// ipv4Addr is set when the closure executes. Don't expect this
@@ -32,10 +32,10 @@ type getInterfaceIPV4AddressContext struct {
 	ipv4Addr string
 }
 
-func newGetInterfaceIPV4AddressContext(
+func newGetContainerIPV4Context(
 	interfaceName string,
-	netLink netlinkwrapper.NetLink) *getInterfaceIPV4AddressContext {
-	return &getInterfaceIPV4AddressContext{
+	netLink netlinkwrapper.NetLink) *getContainerIPV4Context {
+	return &getContainerIPV4Context{
 		interfaceName: interfaceName,
 		netLink:       netLink,
 	}
@@ -43,7 +43,7 @@ func newGetInterfaceIPV4AddressContext(
 
 // run defines the closure to execute within container's namespace to get
 // the ipv4 address of the veth interface
-func (ipv4Context *getInterfaceIPV4AddressContext) run(hostNS ns.NetNS) error {
+func (ipv4Context *getContainerIPV4Context) run(hostNS ns.NetNS) error {
 	link, err := ipv4Context.netLink.LinkByName(ipv4Context.interfaceName)
 	if err != nil {
 		return errors.Wrapf(err,
