@@ -14,7 +14,7 @@
 package cniipamwrapper
 
 import (
-	"github.com/containernetworking/cni/pkg/ipam"
+	cni_ipam "github.com/containernetworking/cni/pkg/ipam"
 	"github.com/containernetworking/cni/pkg/types"
 	"github.com/containernetworking/cni/pkg/types/current"
 )
@@ -30,21 +30,21 @@ type IPAM interface {
 	ConfigureIface(ifName string, res *current.Result) error
 }
 
-type _ipam struct{}
+type ipam struct{}
 
 // New creates a new IPAM object
 func New() IPAM {
-	return &_ipam{}
+	return &ipam{}
 }
 
-func (*_ipam) ExecAdd(plugin string, netconf []byte) (types.Result, error) {
-	return ipam.ExecAdd(plugin, netconf)
+func (*ipam) ExecAdd(plugin string, netconf []byte) (types.Result, error) {
+	return cni_ipam.ExecAdd(plugin, netconf)
 }
 
-func (*_ipam) ExecDel(plugin string, netconf []byte) error {
-	return ipam.ExecDel(plugin, netconf)
+func (*ipam) ExecDel(plugin string, netconf []byte) error {
+	return cni_ipam.ExecDel(plugin, netconf)
 }
 
-func (*_ipam) ConfigureIface(ifName string, res *current.Result) error {
-	return ipam.ConfigureIface(ifName, res)
+func (*ipam) ConfigureIface(ifName string, res *current.Result) error {
+	return cni_ipam.ConfigureIface(ifName, res)
 }
