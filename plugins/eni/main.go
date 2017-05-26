@@ -16,6 +16,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"os"
 	"runtime"
 
 	"github.com/aws/amazon-ecs-cni-plugins/pkg/logger"
@@ -31,6 +32,8 @@ const (
 )
 
 func init() {
+	// This is to ensure that all the namespace operations are performed for
+	// a single thread
 	runtime.LockOSThread()
 }
 
@@ -43,18 +46,21 @@ func main() {
 	flag.Parse()
 
 	if printVersion {
-		printVersionInfo()
+		if err := printVersionInfo(); err != nil {
+			os.Stderr.WriteString(
+				fmt.Sprintf("Error getting version string: %s", err.Error()))
+		}
 		return
 	}
 
 	skel.PluginMain(commands.Add, commands.Del, cnispec.GetSpecVersionSupported())
 }
 
-func printVersionInfo() {
+func printVersionInfo() error {
 	versionInfo, err := version.String()
 	if err != nil {
-		fmt.Println("Error getting version string: ", err)
-		return
+		return err
 	}
 	fmt.Println(versionInfo)
+	return nil
 }

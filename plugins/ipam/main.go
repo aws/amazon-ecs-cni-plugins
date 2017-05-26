@@ -16,6 +16,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"os"
 
 	"github.com/aws/amazon-ecs-cni-plugins/pkg/logger"
 	"github.com/aws/amazon-ecs-cni-plugins/pkg/version"
@@ -38,18 +39,21 @@ func main() {
 	flag.Parse()
 
 	if printVersion {
-		printVersionInfo()
+		if err := printVersionInfo(); err != nil {
+			os.Stderr.WriteString(
+				fmt.Sprintf("Error getting version string: %s", err.Error()))
+		}
 		return
 	}
 
 	skel.PluginMain(commands.Add, commands.Del, cnispec.GetSpecVersionSupported())
 }
 
-func printVersionInfo() {
+func printVersionInfo() error {
 	versionInfo, err := version.String()
 	if err != nil {
-		log.Errorf("Error getting version string: %v", err)
-		return
+		return err
 	}
 	fmt.Println(versionInfo)
+	return nil
 }
