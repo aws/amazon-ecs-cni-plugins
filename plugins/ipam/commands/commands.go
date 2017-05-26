@@ -28,6 +28,7 @@ import (
 // Add will return ip, gateway, routes which can be
 // used in bridge plugin to configure veth pair and bridge
 func Add(args *skel.CmdArgs) error {
+	defer seelog.Flush()
 	ipamConf, cniVersion, err := config.LoadIPAMConfig(args.StdinData, args.Args)
 	if err != nil {
 		return err
@@ -77,6 +78,7 @@ func add(ipManager ipstore.IPAllocator, ipamConf *config.IPAMConfig, cniVersion 
 
 // Del will release one ip address and update the last known ip
 func Del(args *skel.CmdArgs) error {
+	defer seelog.Flush()
 	ipamConf, _, err := config.LoadIPAMConfig(args.StdinData, args.Args)
 	if err != nil {
 		return err
