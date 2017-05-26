@@ -38,11 +38,13 @@ var (
 
 // Add invokes the command to add ENI to a container's namespace
 func Add(args *skel.CmdArgs) error {
+	defer log.Flush()
 	return add(args, engine.New())
 }
 
 // Del invokes the command to remove ENI from a container's namespace
 func Del(args *skel.CmdArgs) error {
+	defer log.Flush()
 	return del(args, engine.New())
 }
 
