@@ -100,7 +100,7 @@ func add(args *skel.CmdArgs, engine engine.Engine) error {
 	if err != nil {
 		return err
 	}
-	return nil
+	return result.Print()
 }
 
 func del(args *skel.CmdArgs, engine engine.Engine) error {
