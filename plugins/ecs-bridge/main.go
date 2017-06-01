@@ -28,7 +28,7 @@ import (
 )
 
 const (
-	defaultLogFilePath = "/var/log/ecs/ecs-cni-bridge-plugin.log"
+	defaultLogFilePath = "/log/ecs-cni-bridge-plugin.log"
 )
 
 func init() {

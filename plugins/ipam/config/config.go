@@ -31,7 +31,7 @@ const (
 	EnvIpamTimeout           = "IPAM_DB_CONNECTION_TIMEOUT"
 	LastKnownIPKey           = "lastKnownIP"
 	GatewayValue             = "GateWay"
-	DefaultDBPath            = "/var/lib/ecs/data/ipam"
+	DefaultDBPath            = "/data/ipam"
 	BucketName               = "IPAM"
 	DefaultConnectionTimeout = 5 * time.Second
 )

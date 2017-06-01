@@ -26,7 +26,7 @@ import (
 )
 
 const (
-	defaultLogFilePath = "/var/log/ecs/ecs-cni-ipam-plugin.log"
+	defaultLogFilePath = "/log/ecs-cni-ipam-plugin.log"
 )
 
 func main() {
