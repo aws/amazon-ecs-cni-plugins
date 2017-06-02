@@ -18,6 +18,7 @@ import "os"
 // OS wraps methods from the 'os' package
 type OS interface {
 	FindProcess(pid int) (OSProcess, error)
+	Getenv(key string) string
 }
 
 // OSProcess wraps methods from the 'os.Process' struct
@@ -35,4 +36,8 @@ func NewOS() OS {
 
 func (*_os) FindProcess(pid int) (OSProcess, error) {
 	return os.FindProcess(pid)
+}
+
+func (*_os) Getenv(key string) string {
+	return os.Getenv(key)
 }
