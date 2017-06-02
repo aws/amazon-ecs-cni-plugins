@@ -82,7 +82,6 @@ type engine struct {
 
 // New creates a new Engine object
 func New() Engine {
-	newDHClient(nil, nil, nil)
 	return create(
 		ec2metadata.NewEC2Metadata(),
 		ioutilwrapper.NewIOUtil(),

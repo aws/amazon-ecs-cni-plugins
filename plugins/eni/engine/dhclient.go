@@ -121,7 +121,7 @@ func (client *dhclient) getEnvOrDefault(key string, defaultValue string) string 
 func (client *dhclient) IsExecutableInPath() bool {
 	dhclientPath, err := client.exec.LookPath(client.executable)
 	if err != nil {
-		log.Warnf("Error searching dhclient in PATH: %v", err)
+		log.Errorf("Looking up dhclient in PATH: %v", err)
 		return false
 	}
 
