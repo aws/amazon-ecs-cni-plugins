@@ -20,14 +20,16 @@ import (
 	"github.com/pkg/errors"
 )
 
-// Version is the version number of the plugin
+const Command = "version"
+
+// Version is the version number of the repository
 var Version string
 
 // GitPorcelain indicates the output of the git status --porcelain command to
 // determine the cleanliness of the git repo when this plugin was built
 var GitPorcelain string
 
-// GitShortHash is the short hash of this plugin build
+// GitShortHash is the short hash of this repository build
 var GitShortHash string
 
 type versionInfo struct {
