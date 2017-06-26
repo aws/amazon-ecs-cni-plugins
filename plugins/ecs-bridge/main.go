@@ -19,6 +19,7 @@ import (
 	"os"
 	"runtime"
 
+	"github.com/aws/amazon-ecs-cni-plugins/pkg/capabilities"
 	"github.com/aws/amazon-ecs-cni-plugins/pkg/logger"
 	"github.com/aws/amazon-ecs-cni-plugins/pkg/version"
 	"github.com/aws/amazon-ecs-cni-plugins/plugins/ecs-bridge/commands"
@@ -42,13 +43,26 @@ func main() {
 	logger.SetupLogger(logger.GetLogFileLocation(defaultLogFilePath))
 
 	var printVersion bool
-	flag.BoolVar(&printVersion, "version", false, "prints version and exits")
+	var printCapabilities bool
+	flag.BoolVar(&printVersion, version.Command, false, "prints version and exits")
+	flag.BoolVar(&printCapabilities, capabilities.Command, false, "print a list of supported features")
 	flag.Parse()
 
 	if printVersion {
 		if err := printVersionInfo(); err != nil {
 			os.Stderr.WriteString(
 				fmt.Sprintf("Error getting version string: %s", err.Error()))
+			os.Exit(1)
+		}
+		return
+	}
+
+	if printCapabilities {
+		// capabilities: awsvpc-network-mode
+		capability := capabilities.New(capabilities.TaskENICapability)
+		err := capability.Print()
+		if err != nil {
+			os.Stderr.WriteString(err.Error())
 			os.Exit(1)
 		}
 		return
