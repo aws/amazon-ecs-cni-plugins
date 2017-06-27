@@ -49,6 +49,7 @@ func main() {
 		if err := printVersionInfo(); err != nil {
 			os.Stderr.WriteString(
 				fmt.Sprintf("Error getting version string: %s", err.Error()))
+			os.Exit(1)
 		}
 		return
 	}
