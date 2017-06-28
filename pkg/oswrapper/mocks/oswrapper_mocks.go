@@ -55,6 +55,16 @@ func (_mr *_MockOSRecorder) FindProcess(arg0 interface{}) *gomock.Call {
 	return _mr.mock.ctrl.RecordCall(_mr.mock, "FindProcess", arg0)
 }
 
+func (_m *MockOS) Getenv(_param0 string) string {
+	ret := _m.ctrl.Call(_m, "Getenv", _param0)
+	ret0, _ := ret[0].(string)
+	return ret0
+}
+
+func (_mr *_MockOSRecorder) Getenv(arg0 interface{}) *gomock.Call {
+	return _mr.mock.ctrl.RecordCall(_mr.mock, "Getenv", arg0)
+}
+
 // Mock of OSProcess interface
 type MockOSProcess struct {
 	ctrl     *gomock.Controller
