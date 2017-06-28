@@ -20,6 +20,7 @@ import (
 	"github.com/pkg/errors"
 )
 
+// Command is the option for plugin to print the version
 const Command = "version"
 
 // Version is the version number of the repository

@@ -21,23 +21,26 @@ import (
 )
 
 const (
-	Command           = "capabilities"
+	// Command is the option for the plugin to print version
+	Command = "capabilities"
+	// TaskENICapability is the capability to support basic task-eni network mode
 	TaskENICapability = "awsvpc-network-mode"
 )
 
-// capability indicates the capability of a plugin
-type capability struct {
+// Capability indicates the capability of a plugin
+type Capability struct {
 	Capabilities []string `json:"capabilities,omitempty"`
 }
 
-func New(capabilities ...string) *capability {
-	return &capability{
+// New returns a Capability object with specified capabilities
+func New(capabilities ...string) *Capability {
+	return &Capability{
 		Capabilities: capabilities,
 	}
 }
 
-// String returns the JSON string of the Features struct
-func (cap *capability) String() (string, error) {
+// String returns the JSON string of the Capability struct
+func (cap *Capability) String() (string, error) {
 	data, err := json.Marshal(cap)
 	if err != nil {
 		return "", errors.Wrapf(err, "capabilities: failed to marshal capabilities info: %v", cap.Capabilities)
@@ -46,8 +49,8 @@ func (cap *capability) String() (string, error) {
 	return string(data), nil
 }
 
-// Print writes the supported features info into the stdout
-func (cap *capability) Print() error {
+// Print writes the supported capabilities info into the stdout
+func (cap *Capability) Print() error {
 	info, err := cap.String()
 	if err != nil {
 		return err
