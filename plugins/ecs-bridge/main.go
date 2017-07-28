@@ -68,7 +68,6 @@ func main() {
 		return
 	}
 
-	log.Info("main")
 	skel.PluginMain(commands.Add, commands.Del, cnispec.GetSpecVersionSupported())
 }
 
