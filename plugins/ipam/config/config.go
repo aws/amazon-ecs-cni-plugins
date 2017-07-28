@@ -31,7 +31,7 @@ const (
 	EnvIpamTimeout           = "IPAM_DB_CONNECTION_TIMEOUT"
 	LastKnownIPKey           = "lastKnownIP"
 	GatewayValue             = "GateWay"
-	DefaultDBPath            = "/data/ipam"
+	DefaultDBPath            = "/data/eni-ipam.db"
 	BucketName               = "IPAM"
 	DefaultConnectionTimeout = 5 * time.Second
 )
