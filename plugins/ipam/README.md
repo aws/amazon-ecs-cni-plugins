@@ -3,12 +3,12 @@
 ## Overview
 
 The IPAM plugin will construct the IP, Gateway, Routes as a struct which will be
-used by the bridge plugin to configure the bridge and veth pair in the container
-network namespace. An example of this configuration looks like:
+used by the ECS Bridge plugin to configure the bridge and veth pair in the 
+container network namespace. An example of this configuration looks like:
 ```json
 {
     "ipam": {
-        "type": "ipam",
+        "type": "ecs-ipam",
         "id": "12345",
         "ipv4-address": "10.0.0.2/24",
         "ipv4-gateway": "10.0.0.1",
@@ -20,7 +20,8 @@ network namespace. An example of this configuration looks like:
     }
 }
 ```
-## Parameter
+
+## Parameters
 * `id` (string, optional): information about this ip, can be any information related
 to this ip.
 * `ipv4-address` (string, optional): ipv4 address of the veth inside the
@@ -33,7 +34,7 @@ gateway. Defaults to ".1" IP inside of the "subnet" block.
 * `ipv4-subnet` (string, required): CIDR block for allocations.
 *Note: either `id` or `ipv4-address` must be specified in delete operation.*
 
-## Environment variable
+## Environment Variables
 * `IPAM_DB_PATH` (string, optional): path of the boltdb file.
 * `IPAM_DB_CONNECTION_TIMEOUT` (string, optional): timeout for the connection
 to the boltdb.
@@ -43,17 +44,17 @@ Before running the command you should set up these environment variable:
 * `CNI_COMMAND`: Command to execute eg: ADD.
 * `CNI_PATH`: Plugin binary path eg: `pwd`/bin.
 * `CNI_IFNAME`: Interface name inside the container, this is only required for
-bridge plugin, but is hard coded in skel package which we consume, so for use
-ipam plugin separately, it should be set but won't be used.
+bridge plugin, but is hard coded in skel package which we consume. So for using
+the ipam plugin separately, it should be set but won't be used.
 Ref: https://github.com/containernetworking/cni/blob/v0.5.1/pkg/skel/skel.go#L53
 ### Add:
 ```
-export CNI_COMMAND=ADD && cat mynet.conf | ../bin/ipam
+export CNI_COMMAND=ADD && cat mynet.conf | ../bin/ecs-ipam
 ```
 
 ### Del:
 ```
-export CNI_COMMAND=DEL && cat mynet.conf | ../bin/ipam
+export CNI_COMMAND=DEL && cat mynet.conf | ../bin/ecs-ipam
 ```
 
 `mynet.conf` is the configuration file for the plugin, it's the same as descriped
