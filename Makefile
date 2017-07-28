@@ -7,6 +7,7 @@ LOCAL_BRIDGE_PLUGIN_BINARY=bin/plugins/ecs-bridge
 GIT_PORCELAIN=$(shell git status --porcelain | wc -l)
 GIT_SHORT_HASH=$(shell git rev-parse --short HEAD)
 VERSION=$(shell cat $(ROOT)/VERSION)
+GO_EXECUTABLE=$(shell which go)
 
 .PHONY: get-deps
 get-deps:
@@ -46,12 +47,15 @@ $(LOCAL_BRIDGE_PLUGIN_BINARY): $(SOURCES)
 generate: $(SOURCES)
 	go generate -x ./pkg/... ./plugins/...
 
-.PHONY: unit-test integration-test
+.PHONY: unit-test integration-test e2e-test
 unit-test: $(SOURCES)
 	go test -v -cover -race -timeout 10s ./pkg/... ./plugins/...
 
 integration-test: $(SOURCE)
 	go test -v -tags integration -race -timeout 10s ./pkg/... ./plugins/...
+
+e2e-test:  $(SOURCE) plugins
+	sudo -E CNI_PATH=${ROOT}/bin/plugins ${GO_EXECUTABLE} test -v -tags e2e -race -timeout 10s ./plugins/...
 
 .PHONY: clean
 clean:
