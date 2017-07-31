@@ -1,4 +1,4 @@
-# ECS Bridge Plugin
+# ECS ENI Plugin
 
 ## Overview
 
@@ -20,8 +20,8 @@ An example configuration for invoking the plugin is listed next:
 * `eni` (string, required): the ENI ID
 * `ipv4-address` (string, required): the ipv4 address of the ENI. This is the
 Primary private IPV4 address of the interface
-* `mac (string, required): the MAC address if the ENI
-* `ipv6-address (string, optional): the ipv6 address of the ENI
+* `mac` (string, required): the MAC address of the ENI
+* `ipv6-address` (string, optional): the ipv6 address of the ENI
 
 ## Environment Variables
 * `ENI_DHCLIENT_LEASES_PATH` (string, optional): the dhclient leases file path.
@@ -46,7 +46,7 @@ export CNI_COMMAND=ADD && cat mynet.conf | ../bin/ecs-eni
 export CNI_COMMAND=DEL && cat mynet.conf | ../bin/ecs-eni
 ```
 
-`mynet.conf` is the configuration file for the plugin, it's the same as descriped
+`mynet.conf` is the configuration file for the plugin, it's the same as described
 in the overview above.
 
 ## Testing

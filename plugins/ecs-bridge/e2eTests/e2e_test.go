@@ -58,9 +58,13 @@ const (
 )
 
 func init() {
+	// This is to ensure that all the namespace operations are performed for
+	// a single thread
 	runtime.LockOSThread()
 }
 
+// configureNetNSFunc function type defines a method that configures the network
+// namespace before executing the "ADD" command
 type configureNetNSFunc func() error
 
 func TestAddDel(t *testing.T) {
@@ -70,33 +74,46 @@ func TestAddDel(t *testing.T) {
 		"When Bridge Does Not Exist":                        configureNetNSNop,
 	}
 
+	// Ensure that the bridge plugin exists
 	bridgePluginPath, err := invoke.FindInPath("ecs-bridge", []string{os.Getenv("CNI_PATH")})
 	require.NoError(t, err, "Unable to find bridge plugin in path")
 
+	// Create a directory for storing test logs
 	testLogDir, err := ioutil.TempDir("", "ecs-bridge-e2e-test-")
 	require.NoError(t, err, "Unable to create directory for storing test logs")
 
+	// Configure the env var to use the test logs directory
 	os.Setenv("ECS_CNI_LOG_FILE", fmt.Sprintf("%s/bridge.log", testLogDir))
 	t.Logf("Using %s for test logs", testLogDir)
 	defer os.Unsetenv("ECS_CNI_LOG_FILE")
 
+	// Handle deletion of test logs at the end of the test execution if
+	// specified
 	ok, err := strconv.ParseBool(getEnvOrDefault("ECS_PRESERVE_E2E_TEST_LOGS", "false"))
 	assert.NoError(t, err, "Unable to parse ECS_PRESERVE_E2E_TEST_LOGS env var")
-	if !ok {
-		defer os.RemoveAll(testLogDir)
-	}
+	defer func(preserve bool) {
+		if !t.Failed() && !preserve {
+			os.RemoveAll(testLogDir)
+		}
+	}(ok)
 
+	// Execute test cases
 	for tcName, configFunc := range testCases {
 		t.Run(tcName, func(t *testing.T) {
+			// Create a network namespace to execute the test in.
+			// The bridge and veth pairs will be created in this namespace
 			testNS, err := ns.NewNS()
 			require.NoError(t, err, "Unable to create the network namespace to run the test in")
 			defer testNS.Close()
 
+			// Create a network namespace to mimic the container's network namespace.
+			// One end of the veth pair device will be moved to this namespace
 			targetNS, err := ns.NewNS()
 			require.NoError(t, err,
 				"Unable to create the network namespace that represents the network namespace of the container")
 			defer targetNS.Close()
 
+			// Create a directory to store IPAM db
 			ipamDir, err := ioutil.TempDir("", "ecs-ipam-")
 			require.NoError(t, err, "Unable to create a temp directory for the ipam db")
 			os.Setenv("IPAM_DB_PATH", fmt.Sprintf("%s/ipam.db", ipamDir))
@@ -107,17 +124,21 @@ func TestAddDel(t *testing.T) {
 				defer os.RemoveAll(ipamDir)
 			}
 
+			// Construct args to invoke the CNI plugin with
 			execInvokeArgs := &invoke.Args{
 				ContainerID: containerID,
 				NetNS:       targetNS.Path(),
 				IfName:      ifName,
 				Path:        os.Getenv("CNI_PATH"),
 			}
+			// vethTestNetNS is a placeholder that will be populated during execution
+			// of the "ADD" command with details of the veth pair device created
 			var vethTestNetNS netlink.Link
 			testNS.Do(func(ns.NetNS) error {
 				err = configFunc()
 				require.NoError(t, err, "Unable to configure test netns before executing ADD")
 
+				// Execute the "ADD" command for the plugin
 				execInvokeArgs.Command = "ADD"
 				_, err := invoke.ExecPluginWithResult(
 					bridgePluginPath,
@@ -125,16 +146,20 @@ func TestAddDel(t *testing.T) {
 					execInvokeArgs)
 				require.NoError(t, err, "Unable to execute ADD command for ecs-bridge plugin")
 
+				// Validate that bridge was created with the expected address
 				bridge := getBridgeLink(t)
 				validateBridgeAddress(t, bridge)
-				vethTestNetNS, ok = getVeth(t)
+				// Validate that veth pair device was created
+				vethTestNetNS, ok = getVethAndVerifyLo(t)
 				require.True(t, ok, "veth device not found in test netns")
 				return nil
 			})
 
 			var vethTargetNetNS netlink.Link
 			targetNS.Do(func(ns.NetNS) error {
-				vethTargetNetNS, ok = getVeth(t)
+				// Validate the other end of the veth pair device has the desired
+				// route and the address allocated to it
+				vethTargetNetNS, ok = getVethAndVerifyLo(t)
 				require.True(t, ok, "veth device not found in target netns")
 				validateVethAddress(t, vethTargetNetNS)
 				validateRouteForVethInTargetNetNS(t, vethTargetNetNS)
@@ -142,6 +167,7 @@ func TestAddDel(t *testing.T) {
 			})
 
 			testNS.Do(func(ns.NetNS) error {
+				// Execute the "DEL" command for the plugin
 				execInvokeArgs.Command = "DEL"
 				err := invoke.ExecPluginWithoutResult(
 					bridgePluginPath,
@@ -149,7 +175,9 @@ func TestAddDel(t *testing.T) {
 					execInvokeArgs)
 				require.NoError(t, err, "Unable to execute DEL command for ecs-bridge plugin")
 
+				// Validate veth interface is removed
 				validateLinkDoesNotExist(t, vethTestNetNS.Attrs().Name)
+				// Validate that the bridge address remains unaltered
 				bridge := getBridgeLink(t)
 				validateBridgeAddress(t, bridge)
 				return nil
@@ -164,6 +192,7 @@ func TestAddDel(t *testing.T) {
 
 }
 
+// configureNetNSWithBridge creates a bridge in the network namespace
 func configureNetNSWithBridge() error {
 	bridgeLinkAttributes := netlink.NewLinkAttrs()
 	bridgeLinkAttributes.Name = bridgeName
@@ -173,6 +202,8 @@ func configureNetNSWithBridge() error {
 	})
 }
 
+// configureNetNSWithBridgeAndSetIPAddress creates a bridge in the network namespace
+// and sets and IP address for the same
 func configureNetNSWithBridgeAndSetIPAddress() error {
 	if err := configureNetNSWithBridge(); err != nil {
 		return err
@@ -199,6 +230,8 @@ func configureNetNSNop() error {
 	return nil
 }
 
+// getEnvOrDefault gets the value of an env var. It returns the fallback value
+// if the env var is not set
 func getEnvOrDefault(name string, fallback string) string {
 	val := os.Getenv(name)
 	if val == "" {
@@ -208,6 +241,7 @@ func getEnvOrDefault(name string, fallback string) string {
 	return val
 }
 
+// getBridgeLink gets a handle to the bridge device
 func getBridgeLink(t *testing.T) netlink.Link {
 	bridgeLink, err := netlink.LinkByName(bridgeName)
 	require.NoError(t, err, "Unable to find bridge: %s", bridgeName)
@@ -216,6 +250,8 @@ func getBridgeLink(t *testing.T) netlink.Link {
 	return bridgeLink
 }
 
+// validateBridgeAddress validates that the bridge is set up with the expected
+// IP address
 func validateBridgeAddress(t *testing.T, bridge netlink.Link) {
 	addrs, err := netlink.AddrList(bridge, netlink.FAMILY_V4)
 	require.NoError(t, err, "Unable to list the addresses of: %s", bridge.Attrs().Name)
@@ -229,7 +265,9 @@ func validateBridgeAddress(t *testing.T, bridge netlink.Link) {
 		expectedBridgeAddress, bridge.Attrs().Name)
 }
 
-func getVeth(t *testing.T) (netlink.Link, bool) {
+// getVethAndVerifyLo gets the veth pair device in the namespace. It also
+// verifies that localhost interface device exists in the namespace
+func getVethAndVerifyLo(t *testing.T) (netlink.Link, bool) {
 	links, err := netlink.LinkList()
 	require.NoError(t, err, "Unable to list devices")
 	loFound := false
@@ -251,6 +289,7 @@ func getVeth(t *testing.T) (netlink.Link, bool) {
 	return veth, vethFound
 }
 
+// validateVethAddress validates the address of the veth device
 func validateVethAddress(t *testing.T, veth netlink.Link) {
 	addrs, err := netlink.AddrList(veth, netlink.FAMILY_V4)
 	require.NoError(t, err, "Unable to list addresses of: %s", veth.Attrs().Name)
@@ -264,24 +303,33 @@ func validateVethAddress(t *testing.T, veth netlink.Link) {
 		expectedVethAddress, veth.Attrs().Name)
 }
 
+// validateRouteForVethInTargetNetNS validates that the expected route has been
+// added for the veth device in target network namespace
 func validateRouteForVethInTargetNetNS(t *testing.T, veth netlink.Link) {
 	routes, err := netlink.RouteList(veth, netlink.FAMILY_V4)
 	require.NoError(t, err, "Unable to list routes for: %s", veth.Attrs().Name)
 	routeFound := false
+	defaultRouteFound := false
 	for _, route := range routes {
-		if route.Dst.String() == dst &&
+		if route.Gw == nil {
+			defaultRouteFound = true
+		} else if route.Dst.String() == dst &&
 			route.Src == nil &&
 			route.Gw.String() == expectedGateway {
 			routeFound = true
 		}
 	}
+	require.False(t, defaultRouteFound,
+		"Unexpected default route found for: %s", veth.Attrs().Name)
 	require.True(t, routeFound, "Route with gateway '%s' not found for: %s",
 		expectedGateway, veth.Attrs().Name)
 }
 
+// validateLinkDoesNotExist validates that the named link does not exist in the
+// network namespace
 func validateLinkDoesNotExist(t *testing.T, name string) {
 	_, err := netlink.LinkByName(name)
 	require.Error(t, err, "Link %s should not exist", name)
 	_, ok := err.(netlink.LinkNotFoundError)
-	require.True(t, ok, "Error type is incorrect for link: %s", name)
+	require.True(t, ok, "Error type is incorrect for link '%s': %v", name, err)
 }
