@@ -57,7 +57,7 @@ export CNI_COMMAND=ADD && cat mynet.conf | ../bin/ecs-ipam
 export CNI_COMMAND=DEL && cat mynet.conf | ../bin/ecs-ipam
 ```
 
-`mynet.conf` is the configuration file for the plugin, it's the same as descriped
+`mynet.conf` is the configuration file for the plugin, it's the same as described
 in the overview above.
 
 Then you can use the following program to check the content of the db, be sure
