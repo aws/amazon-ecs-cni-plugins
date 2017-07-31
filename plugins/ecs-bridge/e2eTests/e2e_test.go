@@ -73,14 +73,15 @@ func TestAddDel(t *testing.T) {
 	bridgePluginPath, err := invoke.FindInPath("ecs-bridge", []string{os.Getenv("CNI_PATH")})
 	require.NoError(t, err, "Unable to find bridge plugin in path")
 
-	testLogDir, err := ioutil.TempDir("", "ecs-bridge-tests-")
+	testLogDir, err := ioutil.TempDir("", "ecs-bridge-e2e-test-")
 	require.NoError(t, err, "Unable to create directory for storing test logs")
 
 	os.Setenv("ECS_CNI_LOG_FILE", fmt.Sprintf("%s/bridge.log", testLogDir))
 	t.Logf("Using %s for test logs", testLogDir)
 	defer os.Unsetenv("ECS_CNI_LOG_FILE")
-	ok, err := strconv.ParseBool(getEnvOrDefault("ECS_BRIDGE_PRESERVE_INTEGRATION_TEST_LOGS", "false"))
-	assert.NoError(t, err, "Unable to parse ECS_BRIDGE_PRESERVE_INTEGRATION_TEST_LOGS env var")
+
+	ok, err := strconv.ParseBool(getEnvOrDefault("ECS_PRESERVE_E2E_TEST_LOGS", "false"))
+	assert.NoError(t, err, "Unable to parse ECS_PRESERVE_E2E_TEST_LOGS env var")
 	if !ok {
 		defer os.RemoveAll(testLogDir)
 	}
