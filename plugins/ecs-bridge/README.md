@@ -3,7 +3,7 @@
 ## Overview
 
 The ECS Bridge plugin configures the network namespace of the container to be
-able to communicate with the credentials endpoint of the ECS Agent by creating a
+able to communicate with the credentials endpoint of the [ECS Agent](https://github.com/aws/amazon-ecs-agent) by creating a
 bridge (if required) and veth pair to connect the container's network namespace
 to the bridge. An example configuration for invoking this plugin is listed next:
 ```json
@@ -49,7 +49,7 @@ export CNI_COMMAND=ADD && cat mynet.conf | ../bin/ecs-bridge
 export CNI_COMMAND=DEL && cat mynet.conf | ../bin/ecs-bridge
 ```
 
-`mynet.conf` is the configuration file for the plugin, it's the same as descriped
+`mynet.conf` is the configuration file for the plugin, it's the same as described
 in the overview above.
 
 ## Testing

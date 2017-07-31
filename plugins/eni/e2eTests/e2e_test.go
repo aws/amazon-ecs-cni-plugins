@@ -50,6 +50,8 @@ const (
 )
 
 func init() {
+	// This is to ensure that all the namespace operations are performed for
+	// a single thread
 	runtime.LockOSThread()
 }
 
@@ -63,54 +65,68 @@ type config struct {
 }
 
 func TestAddDel(t *testing.T) {
+	// Ensure that the eni plugin exists
+	eniPluginPath, err := invoke.FindInPath("ecs-eni", []string{os.Getenv("CNI_PATH")})
+	require.NoError(t, err, "Unable to find eni plugin in path")
+
+	// Ensure that we are able to build a config from instance's metadata
 	cfg, err := newConfig()
 	require.NoError(t, err, "Unable to get instance config")
 	ec2Client := ec2.New(session.Must(session.NewSession()), &aws.Config{
 		Region: aws.String(cfg.region),
 	})
+
+	// Create an ENI
 	eni, err := createENI(ec2Client, cfg)
 	require.NoError(t, err, "Unable to create ENI")
 	defer deleteENI(ec2Client, eni)
 
 	require.NoError(t, waitUntilNetworkInterfaceAvailable(ec2Client, eni), "ENI didn't transition into 'available'")
-
+	// Attach the ENI to the instance
 	attachment, err := attachENI(ec2Client, cfg, eni)
 	require.NoError(t, err, "Unable to attach ENI")
 	defer detachENI(ec2Client, attachment)
 
-	waitUntilNetworkInterfaceAttached(eni, 5*time.Second)
+	require.NoError(t, waitUntilNetworkInterfaceAttached(eni, 5*time.Second), "ENI was not attached to the instance")
 
-	eniPluginPath, err := invoke.FindInPath("ecs-eni", []string{os.Getenv("CNI_PATH")})
-	require.NoError(t, err, "Unable to find eni plugin in path")
-
+	// Create a directory for storing test logs
 	testLogDir, err := ioutil.TempDir("", "ecs-eni-e2e-test-")
 	require.NoError(t, err, "Unable to create directory for storing test logs")
 
+	// Configure the env var to use the test logs directory
 	os.Setenv("ECS_CNI_LOG_FILE", fmt.Sprintf("%s/eni.log", testLogDir))
 	t.Logf("Using %s for test logs", testLogDir)
 	defer os.Unsetenv("ECS_CNI_LOG_FILE")
 
+	// Configure dhclient env var's for the plugin to use test logs directory
 	os.Setenv("ENI_DHCLIENT_LEASES_PATH", testLogDir)
 	defer os.Unsetenv("ENI_DHCLIENT_LEASES_PATH")
-
 	os.Setenv("ENI_DHCLIENT_PID_FILE_PATH", testLogDir)
 	defer os.Unsetenv("ENI_DHCLIENT_PID_FILE_PATH")
 
+	// Handle deletion of test logs at the end of the test execution if
+	// specified
 	ok, err := strconv.ParseBool(getEnvOrDefault("ECS_PRESERVE_E2E_TEST_LOGS", "false"))
 	assert.NoError(t, err, "Unable to parse ECS_PRESERVE_E2E_TEST_LOGS env var")
-	if !ok {
-		defer os.RemoveAll(testLogDir)
-	}
+	defer func(preserve bool) {
+		if !t.Failed() && !preserve {
+			os.RemoveAll(testLogDir)
+		}
+	}(ok)
 
+	// Use the current network namespace to execute the test in
 	testNS, err := ns.GetCurrentNS()
 	require.NoError(t, err, "Unable to get the network namespace to run the test in")
 	defer testNS.Close()
 
+	// Create a network namespace to mimic the container's network namespace.
+	// The ENI will be moved to this namespace
 	targetNS, err := ns.NewNS()
 	require.NoError(t, err,
 		"Unable to create the network namespace that represents the network namespace of the container")
 	defer targetNS.Close()
 
+	// Construct args to invoke the CNI plugin with
 	execInvokeArgs := &invoke.Args{
 		ContainerID: containerID,
 		NetNS:       targetNS.Path(),
@@ -124,6 +140,7 @@ func TestAddDel(t *testing.T) {
 	t.Logf("Using config: %s", string(netConf))
 
 	testNS.Do(func(ns.NetNS) error {
+		// Execute the "ADD" command for the plugin
 		execInvokeArgs.Command = "ADD"
 		err := invoke.ExecPluginWithoutResult(
 			eniPluginPath,
@@ -134,6 +151,8 @@ func TestAddDel(t *testing.T) {
 	})
 
 	targetNS.Do(func(ns.NetNS) error {
+		// Validate that only 2 devices exist in the target network
+		// namespace (lo and eni)
 		links, err := netlink.LinkList()
 		require.NoError(t, err, "Unable to list devices in target network namespace")
 		assert.Len(t, links, 2, "Incorrect number of devices discovered in taget network namespace")
@@ -145,19 +164,24 @@ func TestAddDel(t *testing.T) {
 			}
 		}
 		require.True(t, eniFound, "ENI not found in target network namespace")
+		// TODO: Validate that dhclient process is running
 		return nil
 	})
+
 	testNS.Do(func(ns.NetNS) error {
+		// Execute the "DEL" command for the plugin
 		execInvokeArgs.Command = "DEL"
 		err := invoke.ExecPluginWithoutResult(
 			eniPluginPath,
 			netConf,
 			execInvokeArgs)
 		require.NoError(t, err, "Unable to execute DEL command for ecs-eni plugin")
+		// TODO: Validate that the dhclient process is stopped
 		return nil
 	})
 }
 
+// newConfig creates a new config object
 func newConfig() (*config, error) {
 	ec2Metadata := ec2metadata.New(session.Must(session.NewSession()))
 	region, err := ec2Metadata.Region()
@@ -195,14 +219,23 @@ func newConfig() (*config, error) {
 		return nil, errors.Wrapf(err, "unable to get vpc from ec2 metadata")
 	}
 
-	return &config{region, subnet, int64(len(strings.Split(interfaces, "\n"))), instanceID, strings.Split(securityGroups, "\n"), vpc}, nil
+	return &config{region: region,
+		subnet:         subnet,
+		index:          int64(len(strings.Split(interfaces, "\n"))),
+		instanceID:     instanceID,
+		securityGroups: strings.Split(securityGroups, "\n"),
+		vpc:            vpc,
+	}, nil
 }
 
+// createENI creates an ENI in the same subnet as the instance's primary ENI
 func createENI(ec2Client *ec2.EC2, cfg *config) (*ec2.NetworkInterface, error) {
 	var filterValuesGroupName []*string
 	for _, sg := range cfg.securityGroups {
 		filterValuesGroupName = append(filterValuesGroupName, aws.String(sg))
 	}
+	// Get security group id for the security group that the instance was
+	// started with
 	securityGroups, err := ec2Client.DescribeSecurityGroups(&ec2.DescribeSecurityGroupsInput{
 		Filters: []*ec2.Filter{
 			{
@@ -222,6 +255,7 @@ func createENI(ec2Client *ec2.EC2, cfg *config) (*ec2.NetworkInterface, error) {
 		securityGroupIDs = append(securityGroupIDs, sg.GroupId)
 	}
 
+	// Create the ENI
 	output, err := ec2Client.CreateNetworkInterface(&ec2.CreateNetworkInterfaceInput{
 		Description: aws.String("for running end-to-end test for ECS ENI Plugin"),
 		Groups:      securityGroupIDs,
@@ -233,6 +267,7 @@ func createENI(ec2Client *ec2.EC2, cfg *config) (*ec2.NetworkInterface, error) {
 	return output.NetworkInterface, nil
 }
 
+// waitUntilNetworkInterfaceAvailable waits until the ENI state == "available"
 func waitUntilNetworkInterfaceAvailable(ec2Client *ec2.EC2, eni *ec2.NetworkInterface) error {
 	return ec2Client.WaitUntilNetworkInterfaceAvailable(&ec2.DescribeNetworkInterfacesInput{
 		Filters: []*ec2.Filter{{
@@ -241,6 +276,7 @@ func waitUntilNetworkInterfaceAvailable(ec2Client *ec2.EC2, eni *ec2.NetworkInte
 		}})
 }
 
+// deleteENI deletes the ENI
 func deleteENI(ec2Client *ec2.EC2, eni *ec2.NetworkInterface) error {
 	err := waitUntilNetworkInterfaceAvailable(ec2Client, eni)
 	if err != nil {
@@ -255,6 +291,7 @@ func deleteENI(ec2Client *ec2.EC2, eni *ec2.NetworkInterface) error {
 	return nil
 }
 
+// attachENI attaches the ENI to the current EC2 instance
 func attachENI(ec2Client *ec2.EC2, cfg *config, eni *ec2.NetworkInterface) (*ec2.AttachNetworkInterfaceOutput, error) {
 	return ec2Client.AttachNetworkInterface(&ec2.AttachNetworkInterfaceInput{
 		DeviceIndex:        aws.Int64(cfg.index),
@@ -263,6 +300,7 @@ func attachENI(ec2Client *ec2.EC2, cfg *config, eni *ec2.NetworkInterface) (*ec2
 	})
 }
 
+// detachENI detaches the ENI from the current EC2 instance
 func detachENI(ec2Client *ec2.EC2, attachment *ec2.AttachNetworkInterfaceOutput) error {
 	_, err := ec2Client.DetachNetworkInterface(&ec2.DetachNetworkInterfaceInput{
 		AttachmentId: attachment.AttachmentId,
@@ -275,6 +313,7 @@ func detachENI(ec2Client *ec2.EC2, attachment *ec2.AttachNetworkInterfaceOutput)
 	return nil
 }
 
+// waitUntilNetworkInterfaceAttached waits until the ENI shows up on the instance
 func waitUntilNetworkInterfaceAttached(eni *ec2.NetworkInterface, interval time.Duration) error {
 	for {
 		links, err := netlink.LinkList()
@@ -290,6 +329,8 @@ func waitUntilNetworkInterfaceAttached(eni *ec2.NetworkInterface, interval time.
 	}
 }
 
+// getEnvOrDefault gets the value of an env var. It returns the fallback value
+// if the env var is not set
 func getEnvOrDefault(name string, fallback string) string {
 	val := os.Getenv(name)
 	if val == "" {
