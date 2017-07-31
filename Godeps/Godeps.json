@@ -1,7 +1,7 @@
 {
 	"ImportPath": "github.com/aws/amazon-ecs-cni-plugins",
 	"GoVersion": "go1.7",
-	"GodepVersion": "v75",
+	"GodepVersion": "v79",
 	"Packages": [
 		"./..."
 	],
@@ -92,6 +92,11 @@
 			"Rev": "92ed7a76d078fc5b792a3b5c834274c8dc89d10a"
 		},
 		{
+			"ImportPath": "github.com/aws/aws-sdk-go/private/protocol/ec2query",
+			"Comment": "v1.5.10-1-g92ed7a7",
+			"Rev": "92ed7a76d078fc5b792a3b5c834274c8dc89d10a"
+		},
+		{
 			"ImportPath": "github.com/aws/aws-sdk-go/private/protocol/query",
 			"Comment": "v1.5.10-1-g92ed7a7",
 			"Rev": "92ed7a76d078fc5b792a3b5c834274c8dc89d10a"
@@ -108,6 +113,16 @@
 		},
 		{
 			"ImportPath": "github.com/aws/aws-sdk-go/private/protocol/xml/xmlutil",
+			"Comment": "v1.5.10-1-g92ed7a7",
+			"Rev": "92ed7a76d078fc5b792a3b5c834274c8dc89d10a"
+		},
+		{
+			"ImportPath": "github.com/aws/aws-sdk-go/private/waiter",
+			"Comment": "v1.5.10-1-g92ed7a7",
+			"Rev": "92ed7a76d078fc5b792a3b5c834274c8dc89d10a"
+		},
+		{
+			"ImportPath": "github.com/aws/aws-sdk-go/service/ec2",
 			"Comment": "v1.5.10-1-g92ed7a7",
 			"Rev": "92ed7a76d078fc5b792a3b5c834274c8dc89d10a"
 		},
