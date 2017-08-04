@@ -7,7 +7,7 @@ LOCAL_BRIDGE_PLUGIN_BINARY=bin/plugins/ecs-bridge
 GIT_PORCELAIN=$(shell git status --porcelain | wc -l)
 GIT_SHORT_HASH=$(shell git rev-parse --short HEAD)
 VERSION=$(shell cat $(ROOT)/VERSION)
-GO_EXECUTABLE=$(shell which go)
+GO_EXECUTABLE=$(shell command -v go 2> /dev/null)
 
 .PHONY: get-deps
 get-deps:
