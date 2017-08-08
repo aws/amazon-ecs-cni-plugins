@@ -19,12 +19,12 @@ requests should be opened against that branch.
 Any contributions should pass all tests, including those not run by our
 current CI system.
 
-You may run all test by either running the `make test` target (requires `go`,
+You may run all tests by running the `make test` target (requires `go`,
 and `go cover` to be installed).
 
 ## Licensing
 
-The Amazon ECS Agent is released under an [Apache
+The Amazon ECS CNI Plugins is released under an [Apache
 2.0](http://aws.amazon.com/apache-2-0/) license. Any code you submit will be
 released under that license.
 
