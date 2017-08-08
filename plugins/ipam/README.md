@@ -1,8 +1,8 @@
-# IPAM plugin
+# ECS IPAM plugin
 
 ## Overview
 
-The IPAM plugin will construct the IP, Gateway, Routes as a struct which will be
+The ECS IPAM plugin will construct the IP, Gateway, Routes as a struct which will be
 used by the ECS Bridge plugin to configure the bridge and veth pair in the 
 container network namespace. An example of this configuration looks like:
 ```json

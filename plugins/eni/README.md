@@ -76,5 +76,5 @@ execution for debugging purposes:
 * `ECS_PRESERVE_E2E_TEST_LOGS`: This is set to `false` by default.
 Overriding with `true` preserves log files from the plugins
 
-Please refer the ../../Makefile for an example of the command line required to 
+Please refer the [Makefile](../../Makefile) for an example of the command line required to
 run end-to-end tests (under the `e2e-test` target).
