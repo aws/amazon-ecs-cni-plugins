@@ -14,13 +14,11 @@
 package main
 
 import (
-	"bufio"
 	"bytes"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"regexp"
 	"strings"
 	"time"
 )
@@ -54,57 +52,54 @@ func main() {
 	packageName := os.Args[1]
 	interfaces := os.Args[2]
 	outputPath := os.Args[3]
-	re := regexp.MustCompile("(?m)[\r\n]+^.*" + projectVendor + ".*$")
 
+	err := generateMocks(packageName, interfaces, outputPath)
+	if err != nil {
+		exitErr, ok := err.(*exec.ExitError)
+		if ok {
+			// Prevents swallowing CLI program errors that come
+			// from running mockgen and goimports
+			// https://golang.org/pkg/os/exec/#ExitError
+			fmt.Fprintln(os.Stderr, string(exitErr.Stderr))
+		}
+		// Print the encapsulating golang error type
+		fmt.Println(err)
+		os.Exit(1)
+	}
+
+}
+
+func generateMocks(packageName string, interfaces string, outputPath string) error {
 	copyrightHeader := fmt.Sprintf(copyrightHeaderFormat, time.Now().Year())
 
 	path, _ := filepath.Split(outputPath)
 	err := os.MkdirAll(path, os.ModeDir|0755)
 	if err != nil {
-		printErrorAndExitWithErrorCode(err)
+		return err
 	}
 
 	outputFile, err := os.Create(outputPath)
-	if err != nil {
-		printErrorAndExitWithErrorCode(err)
-	}
 	defer outputFile.Close()
+	if err != nil {
+		return err
+	}
 
 	mockgen := exec.Command("mockgen", packageName, interfaces)
 	mockgenOut, err := mockgen.Output()
 	if err != nil {
-		printErrorAndExitWithErrorCode(
-			fmt.Errorf("Error running mockgen for package '%s' and interfaces '%s': %v\n", packageName, interfaces, err))
+		return err
 	}
 
-	sanitized := re.ReplaceAllString(string(mockgenOut), "")
+	sanitized := strings.Replace(string(mockgenOut), projectVendor, "", -1)
 
 	withHeader := copyrightHeader + licenseBlock + sanitized
 
 	goimports := exec.Command("goimports")
 	goimports.Stdin = bytes.NewBufferString(withHeader)
 	goimports.Stdout = outputFile
-	err = goimports.Run()
-	if err != nil {
-		printErrorAndExitWithErrorCode(err)
-	}
-
-	scanner := bufio.NewScanner(outputFile)
-	mockFileContents := scanner.Bytes()
-	sanitizedMockFileContents := strings.Replace(string(mockFileContents), projectVendor, "", 1)
-
-	writer := bufio.NewWriter(outputFile)
-	_, err = writer.WriteString(sanitizedMockFileContents)
-	if err != nil {
-		printErrorAndExitWithErrorCode(err)
-	}
+	return goimports.Run()
 }
 
 func usage() {
 	fmt.Println(os.Args[0], " PACKAGE INTERFACE_NAMES OUTPUT_FILE")
-}
-
-func printErrorAndExitWithErrorCode(err error) {
-	fmt.Println(err)
-	os.Exit(1)
 }
