@@ -65,7 +65,7 @@ type Engine interface {
 	GetIPV6Gateway(deviceName string) (string, error)
 	DoesMACAddressMapToIPV4Address(macAddress string, ipv4Address string) (bool, error)
 	DoesMACAddressMapToIPV6Address(macAddress string, ipv4Address string) (bool, error)
-	SetupContainerNamespace(netns string, deviceName string, ipv4Address string, ipv6Address string, ipv4Gateway string, ipv6Gateway string, dhclient DHClient) error
+	SetupContainerNamespace(netns string, deviceName string, ipv4Address string, ipv6Address string, ipv4Gateway string, ipv6Gateway string, dhclient DHClient, blockIMDS bool) error
 	TeardownContainerNamespace(netns string, macAddress string, stopDHClient6 bool, dhclient DHClient) error
 }
 
@@ -319,7 +319,7 @@ func (engine *engine) doesMACAddressMapToIPAddress(macAddress string, addressToF
 // SetupContainerNamespace configures the network namespace of the container with
 // the ipv4 address and routes to use the ENI interface. The ipv4 address is of the
 // ipv4-address/netmask format
-func (engine *engine) SetupContainerNamespace(netns string, deviceName string, ipv4Address string, ipv6Address string, ipv4Gateway string, ipv6Gateway string, dhclient DHClient) error {
+func (engine *engine) SetupContainerNamespace(netns string, deviceName string, ipv4Address string, ipv6Address string, ipv4Gateway string, ipv6Gateway string, dhclient DHClient, blockIMDS bool) error {
 	// Get the device link for the ENI
 	eniLink, err := engine.netLink.LinkByName(deviceName)
 	if err != nil {
@@ -342,7 +342,7 @@ func (engine *engine) SetupContainerNamespace(netns string, deviceName string, i
 	}
 
 	// Generate the closure to execute within the container's namespace
-	toRun, err := newSetupNamespaceClosureContext(engine.netLink, dhclient, deviceName, ipv4Address, ipv6Address, ipv4Gateway, ipv6Gateway)
+	toRun, err := newSetupNamespaceClosureContext(engine.netLink, dhclient, deviceName, ipv4Address, ipv6Address, ipv4Gateway, ipv6Gateway, blockIMDS)
 	if err != nil {
 		return errors.Wrap(err,
 			"setupContainerNamespace engine: unable to create closure to execute in container namespace")
