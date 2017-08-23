@@ -15,6 +15,7 @@ package engine
 
 import (
 	"net"
+	"syscall"
 	"time"
 
 	"github.com/aws/amazon-ecs-cni-plugins/pkg/netlinkwrapper"
@@ -22,6 +23,10 @@ import (
 	"github.com/containernetworking/cni/pkg/ns"
 	"github.com/pkg/errors"
 	"github.com/vishvananda/netlink"
+)
+
+const (
+	instanceMetadataEndpoint = "169.254.169.254/32"
 )
 
 var linkWithMACNotFoundError = errors.New("engine: device with mac address not found")
@@ -35,6 +40,7 @@ type setupNamespaceClosureContext struct {
 	ipv6Addr    *netlink.Addr
 	ipv4Gateway net.IP
 	ipv6Gateway net.IP
+	blockIMDS   bool
 }
 
 // teardownNamespaceClosureContext wraps the parameters and the method to teardown the
@@ -51,7 +57,7 @@ type teardownNamespaceClosureContext struct {
 // newSetupNamespaceClosureContext creates a new setupNamespaceClosure object
 func newSetupNamespaceClosureContext(netLink netlinkwrapper.NetLink, dhclient DHClient,
 	deviceName string, ipv4Address string, ipv6Address string,
-	ipv4Gateway string, ipv6Gateway string) (*setupNamespaceClosureContext, error) {
+	ipv4Gateway string, ipv6Gateway string, blockIMDS bool) (*setupNamespaceClosureContext, error) {
 	nlIPV4Addr, err := netLink.ParseAddr(ipv4Address)
 	if err != nil {
 		return nil, errors.Wrap(err,
@@ -70,6 +76,7 @@ func newSetupNamespaceClosureContext(netLink netlinkwrapper.NetLink, dhclient DH
 		deviceName:  deviceName,
 		ipv4Addr:    nlIPV4Addr,
 		ipv4Gateway: ipv4GatewayIP,
+		blockIMDS:   blockIMDS,
 	}
 	if ipv6Address != "" {
 		nlIPV6Addr, err := netLink.ParseAddr(ipv6Address)
@@ -141,6 +148,22 @@ func (closureContext *setupNamespaceClosureContext) run(_ ns.NetNS) error {
 	if err != nil {
 		return errors.Wrap(err,
 			"setupNamespaceClosure engine: unable to bring up the device")
+	}
+
+	// Add a blackhole route for IMDS endpoint if required
+	if closureContext.blockIMDS {
+		_, imdsNetwork, err := net.ParseCIDR(instanceMetadataEndpoint)
+		if err != nil {
+			// This should never happen because we always expect
+			// 169.254.169.254/32 to be parsed without any errors
+			return errors.Wrapf(err, "setupNamespaceClosure engine: unable to parse instance metadata endpoint")
+		}
+		if err = closureContext.netLink.RouteAdd(&netlink.Route{
+			Dst:  imdsNetwork,
+			Type: syscall.RTN_BLACKHOLE,
+		}); err != nil {
+			return errors.Wrapf(err, "setupNamespaceClosure engine: unable to add route to block instance metadata")
+		}
 	}
 
 	// Setup ipv4 route for the gateway

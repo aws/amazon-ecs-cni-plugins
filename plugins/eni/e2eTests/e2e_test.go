@@ -46,8 +46,10 @@ const (
     "cniVersion":"0.3.0",
     "eni":"%s",
     "ipv4-address":"%s",
-    "mac":"%s"
+    "mac":"%s",
+    "block-instance-metadata":true
 }`
+	imdsEndpoint = "169.254.169.254/32"
 )
 
 func init() {
@@ -165,6 +167,8 @@ func TestAddDel(t *testing.T) {
 			}
 		}
 		require.True(t, eniFound, "ENI not found in target network namespace")
+
+		validateTargetNSRoutes(t)
 		// TODO: Validate that dhclient process is running
 		return nil
 	})
@@ -328,6 +332,25 @@ func waitUntilNetworkInterfaceAttached(eni *ec2.NetworkInterface, interval time.
 		}
 		time.Sleep(interval)
 	}
+}
+
+// validateTargetNSRoutes validates routes in the target network namespace
+func validateTargetNSRoutes(t *testing.T) {
+	routes, err := netlink.RouteList(nil, netlink.FAMILY_V4)
+	require.NoError(t, err, "Unable to list routes")
+
+	var imdsRouteFound, gatewayRouteFound bool
+	for _, route := range routes {
+		if route.Gw == nil && route.Dst.String() == imdsEndpoint {
+			imdsRouteFound = true
+		}
+		if route.Gw != nil && route.Dst == nil {
+			gatewayRouteFound = true
+		}
+	}
+
+	require.True(t, imdsRouteFound, "Blocking route for instance metadata not found ")
+	require.True(t, gatewayRouteFound, "Route to use the vpc subnet gateway not found ")
 }
 
 // getEnvOrDefault gets the value of an env var. It returns the fallback value

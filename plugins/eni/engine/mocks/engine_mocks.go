@@ -133,14 +133,14 @@ func (_mr *_MockEngineRecorder) GetMACAddressOfENI(arg0, arg1 interface{}) *gomo
 	return _mr.mock.ctrl.RecordCall(_mr.mock, "GetMACAddressOfENI", arg0, arg1)
 }
 
-func (_m *MockEngine) SetupContainerNamespace(_param0 string, _param1 string, _param2 string, _param3 string, _param4 string, _param5 string, _param6 engine.DHClient) error {
-	ret := _m.ctrl.Call(_m, "SetupContainerNamespace", _param0, _param1, _param2, _param3, _param4, _param5, _param6)
+func (_m *MockEngine) SetupContainerNamespace(_param0 string, _param1 string, _param2 string, _param3 string, _param4 string, _param5 string, _param6 engine.DHClient, _param7 bool) error {
+	ret := _m.ctrl.Call(_m, "SetupContainerNamespace", _param0, _param1, _param2, _param3, _param4, _param5, _param6, _param7)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
-func (_mr *_MockEngineRecorder) SetupContainerNamespace(arg0, arg1, arg2, arg3, arg4, arg5, arg6 interface{}) *gomock.Call {
-	return _mr.mock.ctrl.RecordCall(_mr.mock, "SetupContainerNamespace", arg0, arg1, arg2, arg3, arg4, arg5, arg6)
+func (_mr *_MockEngineRecorder) SetupContainerNamespace(arg0, arg1, arg2, arg3, arg4, arg5, arg6, arg7 interface{}) *gomock.Call {
+	return _mr.mock.ctrl.RecordCall(_mr.mock, "SetupContainerNamespace", arg0, arg1, arg2, arg3, arg4, arg5, arg6, arg7)
 }
 
 func (_m *MockEngine) TeardownContainerNamespace(_param0 string, _param1 string, _param2 bool, _param3 engine.DHClient) error {
