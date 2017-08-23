@@ -31,6 +31,7 @@ type NetConf struct {
 	IPV4Address string `json:"ipv4-address"`
 	MACAddress  string `json:"mac"`
 	IPV6Address string `json:"ipv6-address"`
+	BlockIMDS   bool   `json:"block-instance-metadata"`
 }
 
 // NewConf creates a new NetConf object by parsing the arguments supplied

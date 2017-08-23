@@ -12,7 +12,8 @@ An example configuration for invoking the plugin is listed next:
     "cniVersion":"0.3.0",
     "eni":"eni-eni01en1",
     "ipv4-address":"172.31.31.65/20",
-    "mac":"01:23:45:67:89:ab"
+    "mac":"01:23:45:67:89:ab",
+    "block-instance-metadata":true
 }
 ```
 
@@ -22,6 +23,8 @@ An example configuration for invoking the plugin is listed next:
 Primary private IPV4 address of the interface
 * `mac` (string, required): the MAC address of the ENI
 * `ipv6-address` (string, optional): the ipv6 address of the ENI
+* `block-instance-metadata` (bool, optional): specifies if the route to EC2 
+instance metadata should be blocked
 
 ## Environment Variables
 * `ENI_DHCLIENT_LEASES_PATH` (string, optional): the dhclient leases file path.

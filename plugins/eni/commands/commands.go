@@ -130,7 +130,8 @@ func add(args *skel.CmdArgs, engine engine.Engine, dhclient engine.DHClient) err
 	// the network namespace of the ENI. Invoke SetupContainerNamespace to
 	// do the same
 	err = engine.SetupContainerNamespace(args.Netns, networkDeviceName,
-		fmt.Sprintf("%s/%s", conf.IPV4Address, ipv4Netmask), ipv6Address, ipv4Gateway, ipv6Gateway, dhclient)
+		fmt.Sprintf("%s/%s", conf.IPV4Address, ipv4Netmask),
+		ipv6Address, ipv4Gateway, ipv6Gateway, dhclient, conf.BlockIMDS)
 	if err != nil {
 		log.Errorf("Unable to setup container's namespace: %v", err)
 		return err
