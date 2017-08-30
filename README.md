@@ -1,6 +1,6 @@
 # Amazon ECS CNI Plugins
 
-[![Build Status](https://travis-ci.org/aws/amazon-ecs-cni-plugins.svg?branch=dev)](https://travis-ci.org/aws/amazon-ecs-cni-plugins)
+[![Build Status](https://travis-ci.org/aws/amazon-ecs-cni-plugins.svg?branch=master)](https://travis-ci.org/aws/amazon-ecs-cni-plugins)
 ## Description
 
 Amazon ECS CNI Plugins is a collection of Container Network Interface([CNI](https://github.com/containernetworking/cni)) Plugins used by the [Amazon ECS Agent](https://github.com/aws/amazon-ecs-agent) to configure network namespace of containers with Elastic Network Interfaces ([ENIs](http://docs.aws.amazon.com/AWSEC2/latest/UserGuide/using-eni.html))
