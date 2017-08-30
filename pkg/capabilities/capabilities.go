@@ -40,18 +40,18 @@ func New(capabilities ...string) *Capability {
 }
 
 // String returns the JSON string of the Capability struct
-func (cap *Capability) String() (string, error) {
-	data, err := json.Marshal(cap)
+func (capability *Capability) String() (string, error) {
+	data, err := json.Marshal(capability)
 	if err != nil {
-		return "", errors.Wrapf(err, "capabilities: failed to marshal capabilities info: %v", cap.Capabilities)
+		return "", errors.Wrapf(err, "capabilities: failed to marshal capabilities info: %v", capability.Capabilities)
 	}
 
 	return string(data), nil
 }
 
 // Print writes the supported capabilities info into the stdout
-func (cap *Capability) Print() error {
-	info, err := cap.String()
+func (capability *Capability) Print() error {
+	info, err := capability.String()
 	if err != nil {
 		return err
 	}
