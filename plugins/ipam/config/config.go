@@ -64,7 +64,7 @@ func LoadIPAMConfig(bytes []byte, args string) (*IPAMConfig, string, error) {
 		return nil, "", errors.Wrapf(err, "loadIPAMConfig config: failed to load netconf, %s", string(bytes))
 	}
 	if ipamConf.IPAM == nil {
-		return nil, "", errors.New("loadIPAMConfig config: 'IPAM' field missing in configuration")
+		return nil, "", errors.New("loadIPAMConfig config: 'IPAM' field missing in configuration: " + string(bytes))
 	}
 
 	// subnet is required to allocate ip address
