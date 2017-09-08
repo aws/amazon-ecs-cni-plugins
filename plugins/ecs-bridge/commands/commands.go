@@ -14,8 +14,10 @@
 package commands
 
 import (
+	"github.com/aws/amazon-ecs-cni-plugins/pkg/utils"
 	"github.com/aws/amazon-ecs-cni-plugins/plugins/ecs-bridge/engine"
 	"github.com/aws/amazon-ecs-cni-plugins/plugins/ecs-bridge/types"
+
 	log "github.com/cihub/seelog"
 	"github.com/containernetworking/cni/pkg/skel"
 	"github.com/containernetworking/cni/pkg/types/current"
@@ -110,6 +112,11 @@ func del(args *skel.CmdArgs, engine engine.Engine) error {
 		// Either should be sufficient.
 		log.Errorf("Error loading config from args: %v", err)
 		return err
+	}
+
+	if utils.ZeroOrNil(conf.IPAM) {
+		log.Infof("IPAM configuration not found, skip DEL for IPAM")
+		return nil
 	}
 
 	log.Infof("Running IPAM plugin DEL: %s", conf.IPAM.Type)
