@@ -4,12 +4,29 @@ ROOT := $(shell pwd)
 LOCAL_ENI_PLUGIN_BINARY=bin/plugins/ecs-eni
 LOCAL_IPAM_PLUGIN_BINARY=bin/plugins/ecs-ipam
 LOCAL_BRIDGE_PLUGIN_BINARY=bin/plugins/ecs-bridge
-GIT_PORCELAIN=$(shell git status --porcelain | wc -l)
-GIT_SHORT_HASH=$(shell git rev-parse --short HEAD)
 VERSION=$(shell cat $(ROOT)/VERSION)
 GO_EXECUTABLE=$(shell command -v go 2> /dev/null)
 
+# We want to embed some git details in the build. We support pulling
+# these details from the environment in order support builds outside
+# of a git working copy. If they're not given explicitly, we'll try to
+# use git to directly inspect the repository state...
+GIT_SHORT_HASH ?= $(shell git rev-parse --short HEAD 2> /dev/null)
+GIT_PORCELAIN ?= $(shell git status --porcelain 2> /dev/null | wc -l)
+
+# ...and if we can't inspect the repo state, we'll fall back to some
+# static strings
+ifeq ($(strip $(GIT_SHORT_HASH)),)
+  GIT_SHORT_HASH=unknown
+endif
+ifeq ($(strip $(GIT_PORCELAIN)),)
+  # This indicates that the repo is dirty. Since we can't tell whether
+  # it is or not, this seems the safest fallback.
+  GIT_PORCELAIN=1
+endif
+
 .PHONY: get-deps
+
 get-deps:
 	go get github.com/golang/mock/gomock
 	go get github.com/golang/mock/mockgen
