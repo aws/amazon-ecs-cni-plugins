@@ -59,6 +59,9 @@ const (
 	// package and is not exposed anywhere. Hence, we declare this string to
 	// match the error message returned by the os package
 	processFinishedErrorMessage = "os: process already finished"
+
+	maxDHClientStartAttempts            = 10
+	durationBetweenDHClientStartRetries = 2 * time.Second
 )
 
 // DHClient interface provides methods to perform various dhclient actions
@@ -75,12 +78,14 @@ type DHClient interface {
 }
 
 type dhclient struct {
-	os             oswrapper.OS
-	exec           execwrapper.Exec
-	ioutil         ioutilwrapper.IOUtil
-	executable     string
-	leasesFilePath string
-	pidFilePath    string
+	os                                  oswrapper.OS
+	exec                                execwrapper.Exec
+	ioutil                              ioutilwrapper.IOUtil
+	executable                          string
+	leasesFilePath                      string
+	pidFilePath                         string
+	dhclientStartAttemptsMax            int
+	dhclientStartDurationBetweenRetries time.Duration
 }
 
 // NewDHClient creates a new DHClient object
@@ -88,14 +93,22 @@ func NewDHClient() *dhclient {
 	return newDHClient(
 		oswrapper.NewOS(),
 		execwrapper.NewExec(),
-		ioutilwrapper.NewIOUtil())
+		ioutilwrapper.NewIOUtil(),
+		maxDHClientStartAttempts,
+		durationBetweenDHClientStartRetries)
 }
 
-func newDHClient(os oswrapper.OS, exec execwrapper.Exec, ioutil ioutilwrapper.IOUtil) *dhclient {
+func newDHClient(os oswrapper.OS,
+	exec execwrapper.Exec,
+	ioutil ioutilwrapper.IOUtil,
+	dhclientStartAttemptsMax int,
+	dhclientStartDurationBetweenRetries time.Duration) *dhclient {
 	client := &dhclient{
 		os:     os,
 		exec:   exec,
 		ioutil: ioutil,
+		dhclientStartAttemptsMax:            dhclientStartAttemptsMax,
+		dhclientStartDurationBetweenRetries: dhclientStartDurationBetweenRetries,
 	}
 	client.loadEnvConfig()
 	return client
@@ -131,14 +144,29 @@ func (client *dhclient) IsExecutableInPath() bool {
 
 func (client *dhclient) Start(deviceName string, ipRev int) error {
 	args := client.constructDHClientArgs(deviceName, ipRev)
-	cmd := client.exec.Command(client.executable, args...)
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		log.Errorf("Error executing '%s' with args '%v': raw output: %s",
-			client.executable, args, string(out))
-		return errors.Wrapf(err,
-			"engine dhclient: unable to start dhclient for ipv%d address; command: %s %v; output: %s",
-			ipRev, client.executable, args, string(out))
+	var out []byte
+	var err error
+	attempts := 1
+	for {
+		cmd := client.exec.Command(client.executable, args...)
+		out, err = cmd.CombinedOutput()
+		if err == nil {
+			return nil
+		}
+
+		log.Warnf("Error executing '%s' with args '%v' (attempt %d/%d): raw output: %s",
+			client.executable, args, attempts, client.dhclientStartAttemptsMax, string(out))
+		// If a dhclient process was already running in the default namespace,
+		// there might be a delay in its cleanup, which will result in an
+		// error in trying to start dhclient process. Retry to offset that.
+		if attempts >= client.dhclientStartAttemptsMax {
+			return errors.Wrapf(err,
+				"engine dhclient: unable to start dhclient for ipv%d address; command: %s %v; output: %s",
+				ipRev, client.executable, args, string(out))
+
+		}
+		attempts++
+		time.Sleep(client.dhclientStartDurationBetweenRetries)
 	}
 
 	return nil

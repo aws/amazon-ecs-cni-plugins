@@ -598,7 +598,7 @@ func TestIsValidGetIPAddressReturnsErrorOnGetMetadataError(t *testing.T) {
 
 	suffix := "/suffix"
 	mockMetadata.EXPECT().GetMetadata(metadataNetworkInterfacesPath+firstMACAddressSanitized+suffix).Return("", errors.New("error"))
-	engine := &engine{metadata: mockMetadata}
+	engine := &engine{metadata: mockMetadata, metadataMaxRetryCount: 1}
 
 	_, err := engine.doesMACAddressMapToIPAddress(firstMACAddressSanitized, eniIPV4Address, "/suffix")
 	assert.Error(t, err)
@@ -610,7 +610,7 @@ func TestDoesMACAddressMapToIPAddressReturnsFalseWhenNotFound(t *testing.T) {
 
 	suffix := "/suffix"
 	mockMetadata.EXPECT().GetMetadata(metadataNetworkInterfacesPath+firstMACAddressSanitized+suffix).Return("172.31.32.3", nil)
-	engine := &engine{metadata: mockMetadata}
+	engine := &engine{metadata: mockMetadata, metadataMaxRetryCount: 1}
 
 	ok, err := engine.doesMACAddressMapToIPAddress(firstMACAddressSanitized, eniIPV4Address, "/suffix")
 	assert.NoError(t, err)
@@ -628,7 +628,7 @@ func TestDoesMACAddressMapToIPAddressReturnsTrueWhenFound(t *testing.T) {
 
 	suffix := "/suffix"
 	mockMetadata.EXPECT().GetMetadata(metadataNetworkInterfacesPath+firstMACAddressSanitized+suffix).Return(eniIPV4Address, nil)
-	engine := &engine{metadata: mockMetadata}
+	engine := &engine{metadata: mockMetadata, metadataMaxRetryCount: 1}
 
 	ok, err := engine.doesMACAddressMapToIPAddress(firstMACAddressSanitized, eniIPV4Address, suffix)
 	assert.NoError(t, err)
@@ -640,12 +640,36 @@ func TestDoesMACAddressMapToIPAddressReturnsTrueWhenFound(t *testing.T) {
 	assert.True(t, ok)
 }
 
+func TestIsValidGetIPAddressRetriesOnGetMetadataError(t *testing.T) {
+	ctrl, mockMetadata, _, _, _, _, _ := setup(t)
+	defer ctrl.Finish()
+
+	suffix := "/suffix"
+	gomock.InOrder(
+		// First attempt fails
+		mockMetadata.EXPECT().GetMetadata(
+			metadataNetworkInterfacesPath+firstMACAddressSanitized+suffix).Return(
+			"", errors.New("error")),
+		// Second attempt succeeds
+		mockMetadata.EXPECT().GetMetadata(
+			metadataNetworkInterfacesPath+firstMACAddressSanitized+suffix).Return(
+			eniIPV4Address, nil),
+	)
+	engine := &engine{metadata: mockMetadata,
+		metadataMaxRetryCount:          2,
+		metadataDurationBetweenRetries: time.Microsecond}
+
+	ok, err := engine.doesMACAddressMapToIPAddress(firstMACAddressSanitized, eniIPV4Address, "/suffix")
+	assert.NoError(t, err)
+	assert.True(t, ok)
+}
+
 func TestIsValidGetIPV4AddressReturnsError(t *testing.T) {
 	ctrl, mockMetadata, _, _, _, _, _ := setup(t)
 	defer ctrl.Finish()
 
 	mockMetadata.EXPECT().GetMetadata(metadataNetworkInterfacesPath+firstMACAddressSanitized+metadataNetworkInterfaceIPV4AddressesSuffix).Return("", errors.New("error"))
-	engine := &engine{metadata: mockMetadata}
+	engine := &engine{metadata: mockMetadata, metadataMaxRetryCount: 1}
 
 	_, err := engine.DoesMACAddressMapToIPV4Address(firstMACAddressSanitized, eniIPV4Address)
 	assert.Error(t, err)
@@ -656,7 +680,7 @@ func TestIsValidGetIPV4Address(t *testing.T) {
 	defer ctrl.Finish()
 
 	mockMetadata.EXPECT().GetMetadata(metadataNetworkInterfacesPath+firstMACAddressSanitized+metadataNetworkInterfaceIPV4AddressesSuffix).Return(eniIPV4Address, nil)
-	engine := &engine{metadata: mockMetadata}
+	engine := &engine{metadata: mockMetadata, metadataMaxRetryCount: 1}
 
 	ok, err := engine.DoesMACAddressMapToIPV4Address(firstMACAddressSanitized, eniIPV4Address)
 	assert.NoError(t, err)
@@ -668,7 +692,7 @@ func TestIsValidGetIPV6AddressReturnsError(t *testing.T) {
 	defer ctrl.Finish()
 
 	mockMetadata.EXPECT().GetMetadata(metadataNetworkInterfacesPath+firstMACAddressSanitized+metadataNetworkInterfaceIPV6AddressesSuffix).Return("", errors.New("error"))
-	engine := &engine{metadata: mockMetadata}
+	engine := &engine{metadata: mockMetadata, metadataMaxRetryCount: 1}
 
 	_, err := engine.DoesMACAddressMapToIPV6Address(firstMACAddressSanitized, eniIPV6Address)
 	assert.Error(t, err)
@@ -679,7 +703,7 @@ func TestIsValidGetIPV6Address(t *testing.T) {
 	defer ctrl.Finish()
 
 	mockMetadata.EXPECT().GetMetadata(metadataNetworkInterfacesPath+firstMACAddressSanitized+metadataNetworkInterfaceIPV6AddressesSuffix).Return(eniIPV6Address, nil)
-	engine := &engine{metadata: mockMetadata}
+	engine := &engine{metadata: mockMetadata, metadataMaxRetryCount: 1}
 
 	ok, err := engine.DoesMACAddressMapToIPV6Address(firstMACAddressSanitized, eniIPV6Address)
 	assert.NoError(t, err)
@@ -1012,12 +1036,29 @@ func TestSetupNamespaceClosureRunFailsOnDHClientV4CommandCombinedOutputError(t *
 			dhclientPIDFilePathDefault+"/ns-"+deviceName+"-dhclient4.pid",
 			"eth1").Return(mockCmd),
 		mockCmd.EXPECT().CombinedOutput().Return([]byte{0}, errors.New("error")),
+		mockExec.EXPECT().Command(dhclientExecutableNameDefault,
+			"-q",
+			"-lf",
+			dhclientLeasesFilePathDefault+"/ns-"+deviceName+"-dhclient4.leases",
+			"-pf",
+			dhclientPIDFilePathDefault+"/ns-"+deviceName+"-dhclient4.pid",
+			"eth1").Return(mockCmd),
+		mockCmd.EXPECT().CombinedOutput().Return([]byte{0}, errors.New("error")),
+		mockExec.EXPECT().Command(dhclientExecutableNameDefault,
+			"-q",
+			"-lf",
+			dhclientLeasesFilePathDefault+"/ns-"+deviceName+"-dhclient4.leases",
+			"-pf",
+			dhclientPIDFilePathDefault+"/ns-"+deviceName+"-dhclient4.pid",
+			"eth1").Return(mockCmd),
+		mockCmd.EXPECT().CombinedOutput().Return([]byte{0}, errors.New("error")),
 	)
 	dhclient := &dhclient{
-		exec:           mockExec,
-		executable:     dhclientExecutableNameDefault,
-		leasesFilePath: dhclientLeasesFilePathDefault,
-		pidFilePath:    dhclientPIDFilePathDefault,
+		exec:                     mockExec,
+		executable:               dhclientExecutableNameDefault,
+		leasesFilePath:           dhclientLeasesFilePathDefault,
+		pidFilePath:              dhclientPIDFilePathDefault,
+		dhclientStartAttemptsMax: 3,
 	}
 	closure, err := newSetupNamespaceClosureContext(mockNetLink, dhclient, deviceName, eniIPV4CIDRBlock, "", eniIPV4Gateway, "", false)
 	assert.NoError(t, err)
@@ -1053,6 +1094,14 @@ func TestSetupNamespaceClosureRunFailsOnIPV6RouteAddError(t *testing.T) {
 			"-pf",
 			dhclientPIDFilePathDefault+"/ns-"+deviceName+"-dhclient4.pid",
 			"eth1").Return(mockCmd),
+		mockCmd.EXPECT().CombinedOutput().Return([]byte{0}, errors.New("error")),
+		mockExec.EXPECT().Command(dhclientExecutableNameDefault,
+			"-q",
+			"-lf",
+			dhclientLeasesFilePathDefault+"/ns-"+deviceName+"-dhclient4.leases",
+			"-pf",
+			dhclientPIDFilePathDefault+"/ns-"+deviceName+"-dhclient4.pid",
+			"eth1").Return(mockCmd),
 		mockCmd.EXPECT().CombinedOutput().Return([]byte{0}, nil),
 		mockENILink.EXPECT().Attrs().Return(&netlink.LinkAttrs{Index: eniLinkIndex}),
 		mockNetLink.EXPECT().RouteAdd(gomock.Any()).Do(func(route *netlink.Route) {
@@ -1061,10 +1110,11 @@ func TestSetupNamespaceClosureRunFailsOnIPV6RouteAddError(t *testing.T) {
 		}).Return(errors.New("error")),
 	)
 	dhclient := &dhclient{
-		exec:           mockExec,
-		executable:     dhclientExecutableNameDefault,
-		leasesFilePath: dhclientLeasesFilePathDefault,
-		pidFilePath:    dhclientPIDFilePathDefault,
+		exec:                     mockExec,
+		executable:               dhclientExecutableNameDefault,
+		leasesFilePath:           dhclientLeasesFilePathDefault,
+		pidFilePath:              dhclientPIDFilePathDefault,
+		dhclientStartAttemptsMax: 3,
 	}
 	closure, err := newSetupNamespaceClosureContext(mockNetLink, dhclient, deviceName, eniIPV4CIDRBlock, eniIPV6CIDRBlock, eniIPV4Gateway, eniIPV6Gateway, false)
 	assert.NoError(t, err)
@@ -1115,12 +1165,31 @@ func TestSetupNamespaceClosureRunFailsOnDHClientV6CommandCombinedOutputError(t *
 			dhclientPIDFilePathDefault+"/ns-"+deviceName+"-dhclient6.pid",
 			"eth1").Return(mockCmd),
 		mockCmd.EXPECT().CombinedOutput().Return([]byte{0}, errors.New("error")),
+		mockExec.EXPECT().Command(dhclientExecutableNameDefault,
+			"-q",
+			"-6",
+			"-lf",
+			dhclientLeasesFilePathDefault+"/ns-"+deviceName+"-dhclient6.leases",
+			"-pf",
+			dhclientPIDFilePathDefault+"/ns-"+deviceName+"-dhclient6.pid",
+			"eth1").Return(mockCmd),
+		mockCmd.EXPECT().CombinedOutput().Return([]byte{0}, errors.New("error")),
+		mockExec.EXPECT().Command(dhclientExecutableNameDefault,
+			"-q",
+			"-6",
+			"-lf",
+			dhclientLeasesFilePathDefault+"/ns-"+deviceName+"-dhclient6.leases",
+			"-pf",
+			dhclientPIDFilePathDefault+"/ns-"+deviceName+"-dhclient6.pid",
+			"eth1").Return(mockCmd),
+		mockCmd.EXPECT().CombinedOutput().Return([]byte{0}, errors.New("error")),
 	)
 	dhclient := &dhclient{
-		exec:           mockExec,
-		executable:     dhclientExecutableNameDefault,
-		leasesFilePath: dhclientLeasesFilePathDefault,
-		pidFilePath:    dhclientPIDFilePathDefault,
+		exec:                     mockExec,
+		executable:               dhclientExecutableNameDefault,
+		leasesFilePath:           dhclientLeasesFilePathDefault,
+		pidFilePath:              dhclientPIDFilePathDefault,
+		dhclientStartAttemptsMax: 3,
 	}
 	closure, err := newSetupNamespaceClosureContext(mockNetLink, dhclient, deviceName, eniIPV4CIDRBlock, eniIPV6CIDRBlock, eniIPV4Gateway, eniIPV6Gateway, false)
 	assert.NoError(t, err)
@@ -1155,10 +1224,11 @@ func TestSetupNamespaceClosureRunNoIPV6(t *testing.T) {
 		mockCmd.EXPECT().CombinedOutput().Return([]byte{0}, nil),
 	)
 	dhclient := &dhclient{
-		exec:           mockExec,
-		executable:     dhclientExecutableNameDefault,
-		leasesFilePath: dhclientLeasesFilePathDefault,
-		pidFilePath:    dhclientPIDFilePathDefault,
+		exec:                     mockExec,
+		executable:               dhclientExecutableNameDefault,
+		leasesFilePath:           dhclientLeasesFilePathDefault,
+		pidFilePath:              dhclientPIDFilePathDefault,
+		dhclientStartAttemptsMax: 1,
 	}
 	closure, err := newSetupNamespaceClosureContext(mockNetLink, dhclient, deviceName, eniIPV4CIDRBlock, "", eniIPV4Gateway, "", false)
 	assert.NoError(t, err)
@@ -1218,10 +1288,11 @@ func TestSetupNamespaceClosureRunBlockIMDS(t *testing.T) {
 		mockCmd.EXPECT().CombinedOutput().Return([]byte{0}, nil),
 	)
 	dhclient := &dhclient{
-		exec:           mockExec,
-		executable:     dhclientExecutableNameDefault,
-		leasesFilePath: dhclientLeasesFilePathDefault,
-		pidFilePath:    dhclientPIDFilePathDefault,
+		exec:                     mockExec,
+		executable:               dhclientExecutableNameDefault,
+		leasesFilePath:           dhclientLeasesFilePathDefault,
+		pidFilePath:              dhclientPIDFilePathDefault,
+		dhclientStartAttemptsMax: 1,
 	}
 	closure, err := newSetupNamespaceClosureContext(mockNetLink, dhclient, deviceName, eniIPV4CIDRBlock, eniIPV6CIDRBlock, eniIPV4Gateway, eniIPV6Gateway, true)
 	assert.NoError(t, err)
@@ -1274,10 +1345,11 @@ func TestSetupNamespaceClosureRun(t *testing.T) {
 		mockCmd.EXPECT().CombinedOutput().Return([]byte{0}, nil),
 	)
 	dhclient := &dhclient{
-		exec:           mockExec,
-		executable:     dhclientExecutableNameDefault,
-		leasesFilePath: dhclientLeasesFilePathDefault,
-		pidFilePath:    dhclientPIDFilePathDefault,
+		exec:                     mockExec,
+		executable:               dhclientExecutableNameDefault,
+		leasesFilePath:           dhclientLeasesFilePathDefault,
+		pidFilePath:              dhclientPIDFilePathDefault,
+		dhclientStartAttemptsMax: 1,
 	}
 	closure, err := newSetupNamespaceClosureContext(mockNetLink, dhclient, deviceName, eniIPV4CIDRBlock, eniIPV6CIDRBlock, eniIPV4Gateway, eniIPV6Gateway, false)
 	assert.NoError(t, err)
@@ -1383,9 +1455,10 @@ func TestTearDownNamespaceClosureRunFailsWhenStopDHClientV4Fails(t *testing.T) {
 	eth1 := mock_netlink.NewMockLink(ctrl)
 	mockDHClientProcess := mock_oswrapper.NewMockOSProcess(ctrl)
 	dhclient := &dhclient{
-		os:          mockOS,
-		ioutil:      mockIOUtil,
-		pidFilePath: dhclientPIDFilePathDefault,
+		os:                       mockOS,
+		ioutil:                   mockIOUtil,
+		pidFilePath:              dhclientPIDFilePathDefault,
+		dhclientStartAttemptsMax: 1,
 	}
 	closure, err := newTeardownNamespaceClosureContext(mockNetLink, dhclient, eniMACAddress, true,
 		checkDHClientStateInteval, maxDHClientStopWait)
@@ -1418,9 +1491,10 @@ func TestTearDownNamespaceClosureRunFailsWhenStopDHClientV6Fails(t *testing.T) {
 	mockDHClientV4Process := mock_oswrapper.NewMockOSProcess(ctrl)
 	mockDHClientV6Process := mock_oswrapper.NewMockOSProcess(ctrl)
 	dhclient := &dhclient{
-		os:          mockOS,
-		ioutil:      mockIOUtil,
-		pidFilePath: dhclientPIDFilePathDefault,
+		os:                       mockOS,
+		ioutil:                   mockIOUtil,
+		pidFilePath:              dhclientPIDFilePathDefault,
+		dhclientStartAttemptsMax: 1,
 	}
 	closure, err := newTeardownNamespaceClosureContext(mockNetLink, dhclient, eniMACAddress, true,
 		checkDHClientStateInteval, maxDHClientStopWait)
@@ -1465,9 +1539,10 @@ func TestTearDownNamespaceClosureRunNoIPV6(t *testing.T) {
 	eth1 := mock_netlink.NewMockLink(ctrl)
 	mockDHClientV4Process := mock_oswrapper.NewMockOSProcess(ctrl)
 	dhclient := &dhclient{
-		os:          mockOS,
-		ioutil:      mockIOUtil,
-		pidFilePath: dhclientPIDFilePathDefault,
+		os:                       mockOS,
+		ioutil:                   mockIOUtil,
+		pidFilePath:              dhclientPIDFilePathDefault,
+		dhclientStartAttemptsMax: 1,
 	}
 	closure, err := newTeardownNamespaceClosureContext(mockNetLink, dhclient, eniMACAddress, false,
 		checkDHClientStateInteval, maxDHClientStopWait)
@@ -1505,9 +1580,10 @@ func TestTearDownNamespaceClosureRun(t *testing.T) {
 	mockDHClientV4Process := mock_oswrapper.NewMockOSProcess(ctrl)
 	mockDHClientV6Process := mock_oswrapper.NewMockOSProcess(ctrl)
 	dhclient := &dhclient{
-		os:          mockOS,
-		ioutil:      mockIOUtil,
-		pidFilePath: dhclientPIDFilePathDefault,
+		os:                       mockOS,
+		ioutil:                   mockIOUtil,
+		pidFilePath:              dhclientPIDFilePathDefault,
+		dhclientStartAttemptsMax: 1,
 	}
 	closure, err := newTeardownNamespaceClosureContext(mockNetLink, dhclient, eniMACAddress, true,
 		checkDHClientStateInteval, maxDHClientStopWait)

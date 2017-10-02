@@ -65,7 +65,8 @@ func TestLoadEnvConfig(t *testing.T) {
 				os.Unsetenv(dhclientPIDFilePathEnvConfig)
 			}()
 
-			dhclient := newDHClient(oswrapper.NewOS(), nil, nil)
+			dhclient := newDHClient(oswrapper.NewOS(), nil, nil,
+				maxDHClientStartAttempts, durationBetweenDHClientStartRetries)
 			assert.Equal(t, tc.expecedExecutable, dhclient.executable)
 			assert.Equal(t, tc.expectedLeasesFilePath, dhclient.leasesFilePath)
 			assert.Equal(t, tc.expectedPIDFilePath, dhclient.pidFilePath)
@@ -83,7 +84,8 @@ func TestIsDHClientInPathReturnsFalseOnLookPathError(t *testing.T) {
 		mockOS.EXPECT().Getenv(dhclientPIDFilePathEnvConfig).Return(""),
 		mockExec.EXPECT().LookPath(dhclientExecutableNameDefault).Return("", errors.New("error")),
 	)
-	dhclient := newDHClient(mockOS, mockExec, mockIOUtil)
+	dhclient := newDHClient(mockOS, mockExec, mockIOUtil,
+		maxDHClientStartAttempts, durationBetweenDHClientStartRetries)
 
 	ok := dhclient.IsExecutableInPath()
 	assert.False(t, ok)
@@ -99,7 +101,8 @@ func TestIsDHClientInPath(t *testing.T) {
 		mockOS.EXPECT().Getenv(dhclientPIDFilePathEnvConfig).Return(""),
 		mockExec.EXPECT().LookPath(dhclientExecutableNameDefault).Return("dhclient", nil),
 	)
-	dhclient := newDHClient(mockOS, mockExec, mockIOUtil)
+	dhclient := newDHClient(mockOS, mockExec, mockIOUtil,
+		maxDHClientStartAttempts, durationBetweenDHClientStartRetries)
 
 	ok := dhclient.IsExecutableInPath()
 	assert.True(t, ok)
@@ -115,7 +118,8 @@ func TestGetDHClientArgs(t *testing.T) {
 		mockOS.EXPECT().Getenv(dhclientPIDFilePathEnvConfig).Return(""),
 	)
 
-	dhclient := newDHClient(mockOS, mockExec, mockIOUtil)
+	dhclient := newDHClient(mockOS, mockExec, mockIOUtil,
+		maxDHClientStartAttempts, durationBetweenDHClientStartRetries)
 	testCases := []struct {
 		ipRev        int
 		expectedArgs []string
@@ -161,7 +165,8 @@ func TestGetLeasesAndPIDFile(t *testing.T) {
 		mockOS.EXPECT().Getenv(dhclientPIDFilePathEnvConfig).Return(""),
 	)
 
-	dhclient := newDHClient(mockOS, mockExec, mockIOUtil)
+	dhclient := newDHClient(mockOS, mockExec, mockIOUtil,
+		maxDHClientStartAttempts, durationBetweenDHClientStartRetries)
 	testCases := []struct {
 		ipRev              int
 		expectedLeasesFile string
@@ -356,7 +361,8 @@ func TestStopDHClientFailsWhenReadFileReturnsError(t *testing.T) {
 		mockIOUtil.EXPECT().ReadFile(pidFilePath).Return(nil, errors.New("error")),
 	)
 
-	dhclient := newDHClient(mockOS, mockExec, mockIOUtil)
+	dhclient := newDHClient(mockOS, mockExec, mockIOUtil,
+		maxDHClientStartAttempts, durationBetweenDHClientStartRetries)
 
 	err := dhclient.Stop(deviceName, ipRev4, checkDHClientStateInteval, maxDHClientStopWait)
 	assert.Error(t, err)

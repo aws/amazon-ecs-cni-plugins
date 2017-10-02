@@ -193,10 +193,7 @@ func (closureContext *setupNamespaceClosureContext) run(_ ns.NetNS) error {
 		}
 
 		// Start dhclient for IPV6 address
-		err = closureContext.dhclient.Start(closureContext.deviceName, ipRev6)
-		if err != nil {
-			return err
-		}
+		return closureContext.dhclient.Start(closureContext.deviceName, ipRev6)
 	}
 
 	return nil
