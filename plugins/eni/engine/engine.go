@@ -52,6 +52,9 @@ const (
 
 	minIPV4CIDRBlockSize = 28
 	maxIPV4CIDRBlockSize = 16
+
+	instanceMetadataMaxRetryCount          = 20
+	instanceMetadataDurationBetweenRetries = 1 * time.Second
 )
 
 // Engine represents the execution engine for the ENI plugin. It defines all the
@@ -78,6 +81,8 @@ type engine struct {
 	os                               oswrapper.OS
 	ipv6GatewayTickDuration          time.Duration
 	maxTicksForRetrievingIPV6Gateway int
+	metadataMaxRetryCount            int
+	metadataDurationBetweenRetries   time.Duration
 }
 
 // New creates a new Engine object
@@ -91,7 +96,13 @@ func New() Engine {
 		oswrapper.NewOS())
 }
 
-func create(metadata ec2metadata.EC2Metadata, ioutil ioutilwrapper.IOUtil, netLink netlinkwrapper.NetLink, ns cninswrapper.NS, exec execwrapper.Exec, os oswrapper.OS) Engine {
+func create(metadata ec2metadata.EC2Metadata,
+	ioutil ioutilwrapper.IOUtil,
+	netLink netlinkwrapper.NetLink,
+	ns cninswrapper.NS,
+	exec execwrapper.Exec,
+	os oswrapper.OS,
+) Engine {
 	return &engine{
 		metadata: metadata,
 		ioutil:   ioutil,
@@ -101,6 +112,8 @@ func create(metadata ec2metadata.EC2Metadata, ioutil ioutilwrapper.IOUtil, netLi
 		os:       os,
 		ipv6GatewayTickDuration:          ipv6GatewayTickDuration,
 		maxTicksForRetrievingIPV6Gateway: maxTicksForRetrievingIPV6Gateway,
+		metadataMaxRetryCount:            instanceMetadataMaxRetryCount,
+		metadataDurationBetweenRetries:   instanceMetadataDurationBetweenRetries,
 	}
 }
 
@@ -232,7 +245,10 @@ func (engine *engine) GetIPV6Gateway(deviceName string) (string, error) {
 		engine.maxTicksForRetrievingIPV6Gateway, engine.ipv6GatewayTickDuration)
 }
 
-func (engine *engine) getIPV6GatewayIPFromRoutes(link netlink.Link, deviceName string, maxTicks int, durationBetweenTicks time.Duration) (string, error) {
+func (engine *engine) getIPV6GatewayIPFromRoutes(link netlink.Link,
+	deviceName string,
+	maxTicks int,
+	durationBetweenTicks time.Duration) (string, error) {
 	// In rare cases, it is possible that there's a delay in the kernel updating
 	// its routing table for non-primary ENIs attached to the instance. Retry querying
 	// the routing table for such scenarios.
@@ -304,9 +320,32 @@ func (engine *engine) DoesMACAddressMapToIPV6Address(macAddress string, ipv6Addr
 
 func (engine *engine) doesMACAddressMapToIPAddress(macAddress string, addressToFind string, metatdataPathSuffix string) (bool, error) {
 	// TODO Use fmt.Sprintf and wrap that in a method
-	addressesResponse, err := engine.metadata.GetMetadata(metadataNetworkInterfacesPath + macAddress + metatdataPathSuffix)
+	var addressesResponse string
+	var err error
+
+	attempts := 1
+	for {
+		addressesResponse, err = engine.metadata.GetMetadata(
+			metadataNetworkInterfacesPath + macAddress + metatdataPathSuffix)
+		if err == nil {
+			break
+		}
+		log.Warnf("Error querying metadata path (attempt %d/%d) : '%s': %v",
+			attempts, engine.metadataMaxRetryCount,
+			metadataNetworkInterfacesPath+macAddress+metatdataPathSuffix, err)
+		// It could take few seconds for the ENI's MAC address to show up in
+		// instance metdata
+		// Retry a few times before giving up
+		if attempts >= engine.metadataMaxRetryCount {
+			break
+		}
+		attempts++
+		time.Sleep(engine.metadataDurationBetweenRetries)
+	}
 	if err != nil {
-		return false, err
+		return false, errors.Wrapf(err,
+			"querying metadata path: '%s'",
+			metadataNetworkInterfacesPath+macAddress+metatdataPathSuffix)
 	}
 	for _, address := range strings.Split(addressesResponse, "\n") {
 		if address == addressToFind {
@@ -319,7 +358,14 @@ func (engine *engine) doesMACAddressMapToIPAddress(macAddress string, addressToF
 // SetupContainerNamespace configures the network namespace of the container with
 // the ipv4 address and routes to use the ENI interface. The ipv4 address is of the
 // ipv4-address/netmask format
-func (engine *engine) SetupContainerNamespace(netns string, deviceName string, ipv4Address string, ipv6Address string, ipv4Gateway string, ipv6Gateway string, dhclient DHClient, blockIMDS bool) error {
+func (engine *engine) SetupContainerNamespace(netns string,
+	deviceName string,
+	ipv4Address string,
+	ipv6Address string,
+	ipv4Gateway string,
+	ipv6Gateway string,
+	dhclient DHClient,
+	blockIMDS bool) error {
 	// Get the device link for the ENI
 	eniLink, err := engine.netLink.LinkByName(deviceName)
 	if err != nil {
@@ -342,7 +388,8 @@ func (engine *engine) SetupContainerNamespace(netns string, deviceName string, i
 	}
 
 	// Generate the closure to execute within the container's namespace
-	toRun, err := newSetupNamespaceClosureContext(engine.netLink, dhclient, deviceName, ipv4Address, ipv6Address, ipv4Gateway, ipv6Gateway, blockIMDS)
+	toRun, err := newSetupNamespaceClosureContext(engine.netLink, dhclient, deviceName,
+		ipv4Address, ipv6Address, ipv4Gateway, ipv6Gateway, blockIMDS)
 	if err != nil {
 		return errors.Wrap(err,
 			"setupContainerNamespace engine: unable to create closure to execute in container namespace")
