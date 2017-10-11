@@ -17,6 +17,7 @@ package engine
 
 import (
 	"errors"
+	"fmt"
 	"net"
 	"syscall"
 	"testing"
@@ -1123,6 +1124,20 @@ func TestSetupNamespaceClosureRunFailsOnIPV6RouteAddError(t *testing.T) {
 	assert.Error(t, err)
 }
 
+func TestIsRouteExistsError(t *testing.T) {
+	for _, tc := range []struct {
+		err      error
+		expected bool
+	}{
+		{errors.New("error"), false},
+		{syscall.Errno(syscall.EEXIST), true},
+	} {
+		t.Run(fmt.Sprintf("Error %v returns %t for isRouteExistsError", tc.err, tc.expected), func(t *testing.T) {
+			assert.Equal(t, tc.expected, isRouteExistsError(tc.err))
+		})
+	}
+}
+
 func TestSetupNamespaceClosureRunFailsOnDHClientV6CommandCombinedOutputError(t *testing.T) {
 	ctrl, _, _, _, mockNetLink, mockExec, _ := setup(t)
 	defer ctrl.Finish()
@@ -1155,7 +1170,7 @@ func TestSetupNamespaceClosureRunFailsOnDHClientV6CommandCombinedOutputError(t *
 		mockNetLink.EXPECT().RouteAdd(gomock.Any()).Do(func(route *netlink.Route) {
 			assert.Equal(t, route.Gw.String(), eniIPV6Gateway)
 			assert.Equal(t, route.LinkIndex, eniLinkIndex)
-		}).Return(nil),
+		}).Return(syscall.Errno(syscall.EEXIST)),
 		mockExec.EXPECT().Command(dhclientExecutableNameDefault,
 			"-q",
 			"-6",
