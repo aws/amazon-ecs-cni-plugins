@@ -187,7 +187,7 @@ func (closureContext *setupNamespaceClosureContext) run(_ ns.NetNS) error {
 			LinkIndex: eniLink.Attrs().Index,
 			Gw:        closureContext.ipv6Gateway,
 		})
-		if err != nil {
+		if err != nil && !isRouteExistsError(err) {
 			return errors.Wrap(err,
 				"setupNamespaceClosure engine: unable to add the route for the ipv6 gateway")
 		}
@@ -197,6 +197,17 @@ func (closureContext *setupNamespaceClosureContext) run(_ ns.NetNS) error {
 	}
 
 	return nil
+}
+
+// isRouteExistsError returns true if the error type is syscall.EEXIST
+// This helps us determine if we should ignore this error as the route
+// that we want to add already exists in the routing table
+func isRouteExistsError(err error) bool {
+	if errno, ok := err.(syscall.Errno); ok {
+		return errno == syscall.EEXIST
+	}
+
+	return false
 }
 
 // run defines the closure to execute within the container's namespace to tear it down
@@ -209,7 +220,7 @@ func (closureContext *teardownNamespaceClosureContext) run(_ ns.NetNS) error {
 	}
 
 	deviceName := link.Attrs().Name
-	log.Debugf("Found link device as: %s", deviceName)
+	log.Debugf("Found link device as (hardware address=%s): %s", closureContext.hardwareAddr, deviceName)
 
 	// Stop the dhclient process for IPV4 address
 	err = closureContext.dhclient.Stop(deviceName, ipRev4,
@@ -227,7 +238,7 @@ func (closureContext *teardownNamespaceClosureContext) run(_ ns.NetNS) error {
 		}
 	}
 
-	log.Infof("Cleaned up dhclient")
+	log.Infof("Cleaned up dhclient for device(hardware address=%s): %s", closureContext.hardwareAddr, deviceName)
 	return nil
 }
 
