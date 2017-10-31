@@ -20,6 +20,7 @@ import (
 	time "time"
 
 	engine "github.com/aws/amazon-ecs-cni-plugins/plugins/eni/engine"
+	"github.com/containernetworking/cni/pkg/skel"
 	gomock "github.com/golang/mock/gomock"
 )
 
@@ -133,14 +134,14 @@ func (_mr *_MockEngineRecorder) GetMACAddressOfENI(arg0, arg1 interface{}) *gomo
 	return _mr.mock.ctrl.RecordCall(_mr.mock, "GetMACAddressOfENI", arg0, arg1)
 }
 
-func (_m *MockEngine) SetupContainerNamespace(_param0 string, _param1 string, _param2 string, _param3 string, _param4 string, _param5 string, _param6 engine.DHClient, _param7 bool) error {
-	ret := _m.ctrl.Call(_m, "SetupContainerNamespace", _param0, _param1, _param2, _param3, _param4, _param5, _param6, _param7)
+func (_m *MockEngine) SetupContainerNamespace(_param0 *skel.CmdArgs, _param1 string, _param2 string, _param3 string, _param4 string, _param5 string, _param6 string, _param7 engine.DHClient, _param8 bool) error {
+	ret := _m.ctrl.Call(_m, "SetupContainerNamespace", _param0, _param1, _param2, _param3, _param4, _param5, _param6, _param7, _param8)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
-func (_mr *_MockEngineRecorder) SetupContainerNamespace(arg0, arg1, arg2, arg3, arg4, arg5, arg6, arg7 interface{}) *gomock.Call {
-	return _mr.mock.ctrl.RecordCall(_mr.mock, "SetupContainerNamespace", arg0, arg1, arg2, arg3, arg4, arg5, arg6, arg7)
+func (_mr *_MockEngineRecorder) SetupContainerNamespace(arg0, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8 interface{}) *gomock.Call {
+	return _mr.mock.ctrl.RecordCall(_mr.mock, "SetupContainerNamespace", arg0, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8)
 }
 
 func (_m *MockEngine) TeardownContainerNamespace(_param0 string, _param1 string, _param2 bool, _param3 engine.DHClient) error {
@@ -184,14 +185,14 @@ func (_mr *_MockDHClientRecorder) IsExecutableInPath() *gomock.Call {
 	return _mr.mock.ctrl.RecordCall(_mr.mock, "IsExecutableInPath")
 }
 
-func (_m *MockDHClient) Start(_param0 string, _param1 int) error {
-	ret := _m.ctrl.Call(_m, "Start", _param0, _param1)
+func (_m *MockDHClient) Start(_param0 string, _param1 string, _param2 int) error {
+	ret := _m.ctrl.Call(_m, "Start", _param0, _param1, _param2)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
-func (_mr *_MockDHClientRecorder) Start(arg0, arg1 interface{}) *gomock.Call {
-	return _mr.mock.ctrl.RecordCall(_mr.mock, "Start", arg0, arg1)
+func (_mr *_MockDHClientRecorder) Start(arg0, arg1, arg2 interface{}) *gomock.Call {
+	return _mr.mock.ctrl.RecordCall(_mr.mock, "Start", arg0, arg1, arg2)
 }
 
 func (_m *MockDHClient) Stop(_param0 string, _param1 int, _param2 time.Duration, _param3 time.Duration) error {

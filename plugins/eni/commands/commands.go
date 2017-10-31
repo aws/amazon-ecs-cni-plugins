@@ -130,7 +130,7 @@ func add(args *skel.CmdArgs, engine engine.Engine, dhclient engine.DHClient) err
 	// Everything's prepped. We have all the parameters needed to configure
 	// the network namespace of the ENI. Invoke SetupContainerNamespace to
 	// do the same
-	err = engine.SetupContainerNamespace(args.Netns, networkDeviceName,
+	err = engine.SetupContainerNamespace(args, networkDeviceName, macAddressOfENI,
 		fmt.Sprintf("%s/%s", conf.IPV4Address, ipv4Netmask),
 		ipv6Address, ipv4Gateway, ipv6Gateway, dhclient, conf.BlockIMDS)
 	if err != nil {

@@ -35,7 +35,9 @@ var linkWithMACNotFoundError = errors.New("engine: device with mac address not f
 type setupNamespaceClosureContext struct {
 	netLink     netlinkwrapper.NetLink
 	dhclient    DHClient
+	ifName      string
 	deviceName  string
+	macAddress  string
 	ipv4Addr    *netlink.Addr
 	ipv6Addr    *netlink.Addr
 	ipv4Gateway net.IP
@@ -56,7 +58,7 @@ type teardownNamespaceClosureContext struct {
 
 // newSetupNamespaceClosureContext creates a new setupNamespaceClosure object
 func newSetupNamespaceClosureContext(netLink netlinkwrapper.NetLink, dhclient DHClient,
-	deviceName string, ipv4Address string, ipv6Address string,
+	ifName string, deviceName string, macAddress string, ipv4Address string, ipv6Address string,
 	ipv4Gateway string, ipv6Gateway string, blockIMDS bool) (*setupNamespaceClosureContext, error) {
 	nlIPV4Addr, err := netLink.ParseAddr(ipv4Address)
 	if err != nil {
@@ -73,7 +75,9 @@ func newSetupNamespaceClosureContext(netLink netlinkwrapper.NetLink, dhclient DH
 	nsClosure := &setupNamespaceClosureContext{
 		netLink:     netLink,
 		dhclient:    dhclient,
+		ifName:      ifName,
 		deviceName:  deviceName,
+		macAddress:  macAddress,
 		ipv4Addr:    nlIPV4Addr,
 		ipv4Gateway: ipv4GatewayIP,
 		blockIMDS:   blockIMDS,
@@ -127,6 +131,10 @@ func (closureContext *setupNamespaceClosureContext) run(_ ns.NetNS) error {
 			closureContext.deviceName)
 	}
 
+	err = closureContext.netLink.LinkSetName(eniLink, closureContext.ifName)
+	if err != nil {
+		return errors.Wrap(err, "setupNamespaceClosure engine: unable to change interface name")
+	}
 	// Add the IPV4 Address to the link
 	err = closureContext.netLink.AddrAdd(eniLink, closureContext.ipv4Addr)
 	if err != nil {
@@ -176,7 +184,7 @@ func (closureContext *setupNamespaceClosureContext) run(_ ns.NetNS) error {
 	}
 
 	// Start dhclient for IPV4 address
-	err = closureContext.dhclient.Start(closureContext.deviceName, ipRev4)
+	err = closureContext.dhclient.Start(closureContext.ifName, closureContext.macAddress, ipRev4)
 	if err != nil {
 		return err
 	}
@@ -193,7 +201,7 @@ func (closureContext *setupNamespaceClosureContext) run(_ ns.NetNS) error {
 		}
 
 		// Start dhclient for IPV6 address
-		return closureContext.dhclient.Start(closureContext.deviceName, ipRev6)
+		return closureContext.dhclient.Start(closureContext.ifName, closureContext.macAddress, ipRev6)
 	}
 
 	return nil
@@ -223,7 +231,7 @@ func (closureContext *teardownNamespaceClosureContext) run(_ ns.NetNS) error {
 	log.Debugf("Found link device as (hardware address=%s): %s", closureContext.hardwareAddr, deviceName)
 
 	// Stop the dhclient process for IPV4 address
-	err = closureContext.dhclient.Stop(deviceName, ipRev4,
+	err = closureContext.dhclient.Stop(closureContext.hardwareAddr.String(), ipRev4,
 		closureContext.checkDHClientStateInteval, closureContext.maxDHClientStopWait)
 	if err != nil {
 		return err
@@ -231,7 +239,7 @@ func (closureContext *teardownNamespaceClosureContext) run(_ ns.NetNS) error {
 
 	if closureContext.stopDHClient6 {
 		// Stop the dhclient process for IPV6 address
-		err = closureContext.dhclient.Stop(deviceName, ipRev6,
+		err = closureContext.dhclient.Stop(closureContext.hardwareAddr.String(), ipRev6,
 			closureContext.checkDHClientStateInteval, closureContext.maxDHClientStopWait)
 		if err != nil {
 			return err
