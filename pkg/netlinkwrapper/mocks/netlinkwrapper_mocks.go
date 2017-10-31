@@ -115,6 +115,16 @@ func (_mr *_MockNetLinkRecorder) LinkSetMaster(arg0, arg1 interface{}) *gomock.C
 	return _mr.mock.ctrl.RecordCall(_mr.mock, "LinkSetMaster", arg0, arg1)
 }
 
+func (_m *MockNetLink) LinkSetName(_param0 netlink.Link, _param1 string) error {
+	ret := _m.ctrl.Call(_m, "LinkSetName", _param0, _param1)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+func (_mr *_MockNetLinkRecorder) LinkSetName(arg0, arg1 interface{}) *gomock.Call {
+	return _mr.mock.ctrl.RecordCall(_mr.mock, "LinkSetName", arg0, arg1)
+}
+
 func (_m *MockNetLink) LinkSetNsFd(_param0 netlink.Link, _param1 int) error {
 	ret := _m.ctrl.Call(_m, "LinkSetNsFd", _param0, _param1)
 	ret0, _ := ret[0].(error)

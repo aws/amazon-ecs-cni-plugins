@@ -15,10 +15,6 @@ package engine
 
 import (
 	"fmt"
-	"net"
-	"strings"
-	"time"
-
 	"github.com/aws/amazon-ecs-cni-plugins/pkg/cninswrapper"
 	"github.com/aws/amazon-ecs-cni-plugins/pkg/ec2metadata"
 	"github.com/aws/amazon-ecs-cni-plugins/pkg/execwrapper"
@@ -26,8 +22,12 @@ import (
 	"github.com/aws/amazon-ecs-cni-plugins/pkg/netlinkwrapper"
 	"github.com/aws/amazon-ecs-cni-plugins/pkg/oswrapper"
 	log "github.com/cihub/seelog"
+	"github.com/containernetworking/cni/pkg/skel"
 	"github.com/pkg/errors"
 	"github.com/vishvananda/netlink"
+	"net"
+	"strings"
+	"time"
 )
 
 const (
@@ -68,7 +68,7 @@ type Engine interface {
 	GetIPV6Gateway(deviceName string) (string, error)
 	DoesMACAddressMapToIPV4Address(macAddress string, ipv4Address string) (bool, error)
 	DoesMACAddressMapToIPV6Address(macAddress string, ipv4Address string) (bool, error)
-	SetupContainerNamespace(netns string, deviceName string, ipv4Address string, ipv6Address string, ipv4Gateway string, ipv6Gateway string, dhclient DHClient, blockIMDS bool) error
+	SetupContainerNamespace(args *skel.CmdArgs, deviceName string, macAddress string, ipv4Address string, ipv6Address string, ipv4Gateway string, ipv6Gateway string, dhclient DHClient, blockIMDS bool) error
 	TeardownContainerNamespace(netns string, macAddress string, stopDHClient6 bool, dhclient DHClient) error
 }
 
@@ -359,8 +359,9 @@ func (engine *engine) doesMACAddressMapToIPAddress(macAddress string, addressToF
 // SetupContainerNamespace configures the network namespace of the container with
 // the ipv4 address and routes to use the ENI interface. The ipv4 address is of the
 // ipv4-address/netmask format
-func (engine *engine) SetupContainerNamespace(netns string,
+func (engine *engine) SetupContainerNamespace(args *skel.CmdArgs,
 	deviceName string,
+	macAddress string,
 	ipv4Address string,
 	ipv6Address string,
 	ipv4Gateway string,
@@ -375,21 +376,21 @@ func (engine *engine) SetupContainerNamespace(netns string,
 	}
 
 	// Get the handle for the container's network namespace
-	containerNS, err := engine.ns.GetNS(netns)
+	containerNS, err := engine.ns.GetNS(args.Netns)
 	if err != nil {
 		return errors.Wrapf(err,
-			"setupContainerNamespace engine: unable to get network namespace for '%s'", netns)
+			"setupContainerNamespace engine: unable to get network namespace for '%s'", args.Netns)
 	}
 
 	// Assign the ENI device to container's network namespace
 	err = engine.netLink.LinkSetNsFd(eniLink, int(containerNS.Fd()))
 	if err != nil {
 		return errors.Wrapf(err,
-			"setupContainerNamespace engine: unable to move device '%s' to container namespace '%s'", deviceName, netns)
+			"setupContainerNamespace engine: unable to move device '%s' to container namespace '%s'", deviceName, args.Netns)
 	}
 
 	// Generate the closure to execute within the container's namespace
-	toRun, err := newSetupNamespaceClosureContext(engine.netLink, dhclient, deviceName,
+	toRun, err := newSetupNamespaceClosureContext(engine.netLink, dhclient, args.IfName, deviceName, macAddress,
 		ipv4Address, ipv6Address, ipv4Gateway, ipv6Gateway, blockIMDS)
 	if err != nil {
 		return errors.Wrap(err,
@@ -397,10 +398,10 @@ func (engine *engine) SetupContainerNamespace(netns string,
 	}
 
 	// Execute the closure within the container's namespace
-	err = engine.ns.WithNetNSPath(netns, toRun.run)
+	err = engine.ns.WithNetNSPath(args.Netns, toRun.run)
 	if err != nil {
 		return errors.Wrapf(err,
-			"setupContainerNamespace engine: unable to setup device '%s' in namespace '%s'", deviceName, netns)
+			"setupContainerNamespace engine: unable to setup device '%s' in namespace '%s'", deviceName, args.Netns)
 	}
 	return nil
 }

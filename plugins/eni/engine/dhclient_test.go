@@ -129,9 +129,9 @@ func TestGetDHClientArgs(t *testing.T) {
 			[]string{
 				"-q",
 				"-lf",
-				dhclientLeasesFilePathDefault + "/ns-" + deviceName + "-dhclient4.leases",
+				dhclientLeasesFilePathDefault + "/ns-" + eniMACAddress + "-dhclient4.leases",
 				"-pf",
-				dhclientPIDFilePathDefault + "/ns-" + deviceName + "-dhclient4.pid",
+				dhclientPIDFilePathDefault + "/ns-" + eniMACAddress + "-dhclient4.pid",
 				deviceName},
 		},
 		{
@@ -140,15 +140,15 @@ func TestGetDHClientArgs(t *testing.T) {
 				"-q",
 				"-6",
 				"-lf",
-				dhclientLeasesFilePathDefault + "/ns-" + deviceName + "-dhclient6.leases",
+				dhclientLeasesFilePathDefault + "/ns-" + eniMACAddress + "-dhclient6.leases",
 				"-pf",
-				dhclientPIDFilePathDefault + "/ns-" + deviceName + "-dhclient6.pid",
+				dhclientPIDFilePathDefault + "/ns-" + eniMACAddress + "-dhclient6.pid",
 				deviceName},
 		},
 	}
 	for _, tc := range testCases {
 		t.Run(fmt.Sprintf("IP%d", tc.ipRev), func(t *testing.T) {
-			args := dhclient.constructDHClientArgs(deviceName, tc.ipRev)
+			args := dhclient.constructDHClientArgs(deviceName, eniMACAddress, tc.ipRev)
 			assert.NotEmpty(t, args)
 			assert.Equal(t, tc.expectedArgs, args)
 		})
@@ -174,20 +174,20 @@ func TestGetLeasesAndPIDFile(t *testing.T) {
 	}{
 		{
 			ipRev4,
-			dhclientLeasesFilePathDefault + "/ns-" + deviceName + "-dhclient4.leases",
-			dhclientPIDFilePathDefault + "/ns-" + deviceName + "-dhclient4.pid",
+			dhclientLeasesFilePathDefault + "/ns-" + eniMACAddress + "-dhclient4.leases",
+			dhclientPIDFilePathDefault + "/ns-" + eniMACAddress + "-dhclient4.pid",
 		},
 		{
 			ipRev6,
-			dhclientLeasesFilePathDefault + "/ns-" + deviceName + "-dhclient6.leases",
-			dhclientPIDFilePathDefault + "/ns-" + deviceName + "-dhclient6.pid",
+			dhclientLeasesFilePathDefault + "/ns-" + eniMACAddress + "-dhclient6.leases",
+			dhclientPIDFilePathDefault + "/ns-" + eniMACAddress + "-dhclient6.pid",
 		},
 	}
 	for _, tc := range testCases {
 		t.Run(fmt.Sprintf("IP%d", tc.ipRev), func(t *testing.T) {
-			leasesFile := dhclient.getLeasesFile(deviceName, tc.ipRev)
+			leasesFile := dhclient.getLeasesFile(eniMACAddress, tc.ipRev)
 			assert.Equal(t, tc.expectedLeasesFile, leasesFile)
-			pidFile := dhclient.getPIDFile(deviceName, tc.ipRev)
+			pidFile := dhclient.getPIDFile(eniMACAddress, tc.ipRev)
 			assert.Equal(t, tc.expectedPIDFile, pidFile)
 		})
 	}
@@ -376,10 +376,10 @@ func TestStopDHClientFailsWhenReadFileReturnsInvalidPID(t *testing.T) {
 		ioutil:      mockIOUtil,
 		pidFilePath: dhclientPIDFilePathDefault,
 	}
-	pidFilePath := dhclientPIDFilePathDefault + "/ns-" + deviceName + "-dhclient4.pid"
+	pidFilePath := dhclientPIDFilePathDefault + "/ns-" + eniMACAddress + "-dhclient4.pid"
 	mockIOUtil.EXPECT().ReadFile(pidFilePath).Return([]byte(invalidDHClientPIDFieContents), nil)
 
-	err := dhclient.Stop(deviceName, ipRev4, checkDHClientStateInteval, maxDHClientStopWait)
+	err := dhclient.Stop(eniMACAddress, ipRev4, checkDHClientStateInteval, maxDHClientStopWait)
 	assert.Error(t, err)
 }
 
@@ -392,14 +392,14 @@ func TestStopDHClientFailsWhenDHClientProcessNotFound(t *testing.T) {
 		ioutil:      mockIOUtil,
 		pidFilePath: dhclientPIDFilePathDefault,
 	}
-	pidFilePath := dhclientPIDFilePathDefault + "/ns-" + deviceName + "-dhclient4.pid"
+	pidFilePath := dhclientPIDFilePathDefault + "/ns-" + eniMACAddress + "-dhclient4.pid"
 
 	gomock.InOrder(
 		mockIOUtil.EXPECT().ReadFile(pidFilePath).Return([]byte(dhclientV4PIDFileContents), nil),
 		mockOS.EXPECT().FindProcess(dhclientV4PID).Return(nil, errors.New("error")),
 	)
 
-	err := dhclient.Stop(deviceName, ipRev4, checkDHClientStateInteval, maxDHClientStopWait)
+	err := dhclient.Stop(eniMACAddress, ipRev4, checkDHClientStateInteval, maxDHClientStopWait)
 	assert.Error(t, err)
 }
 
@@ -412,7 +412,7 @@ func TestStopDHClientRunFailsWhenDHClientProcessCannotBeKilled(t *testing.T) {
 		ioutil:      mockIOUtil,
 		pidFilePath: dhclientPIDFilePathDefault,
 	}
-	pidFilePath := dhclientPIDFilePathDefault + "/ns-" + deviceName + "-dhclient4.pid"
+	pidFilePath := dhclientPIDFilePathDefault + "/ns-" + eniMACAddress + "-dhclient4.pid"
 	mockDHClientProcess := mock_oswrapper.NewMockOSProcess(ctrl)
 
 	gomock.InOrder(
@@ -428,6 +428,6 @@ func TestStopDHClientRunFailsWhenDHClientProcessCannotBeKilled(t *testing.T) {
 	mockDHClientProcess.EXPECT().Signal(syscall.Signal(0)).Return(nil).AnyTimes()
 	mockDHClientProcess.EXPECT().Signal(syscall.SIGKILL).Return(errors.New("error"))
 
-	err := dhclient.Stop(deviceName, ipRev4, checkDHClientStateInteval, maxDHClientStopWait)
+	err := dhclient.Stop(eniMACAddress, ipRev4, checkDHClientStateInteval, maxDHClientStopWait)
 	assert.Error(t, err)
 }
