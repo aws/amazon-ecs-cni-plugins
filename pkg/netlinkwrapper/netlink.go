@@ -31,7 +31,7 @@ type NetLink interface {
 	LinkAdd(link netlink.Link) error
 	// LinkSetMaster is equivalent to `ip link set $link master $master`
 	LinkSetMaster(link netlink.Link, master *netlink.Bridge) error
-	//LinkSetName sets the interface name
+	// LinkSetName sets the interface name
 	LinkSetName(link netlink.Link, name string) error
 	// LinkSetUp is equivalent to `ip link set $link up`
 	LinkSetUp(link netlink.Link) error
