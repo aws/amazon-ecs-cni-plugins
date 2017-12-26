@@ -14,9 +14,12 @@
 package commands
 
 import (
+	"context"
 	"fmt"
 	"net"
+	"time"
 
+	"github.com/aws/amazon-ecs-cni-plugins/pkg/utils"
 	"github.com/aws/amazon-ecs-cni-plugins/plugins/eni/engine"
 	"github.com/aws/amazon-ecs-cni-plugins/plugins/eni/types"
 
@@ -25,6 +28,14 @@ import (
 	cnitypes "github.com/containernetworking/cni/pkg/types"
 	"github.com/containernetworking/cni/pkg/types/current"
 	"github.com/pkg/errors"
+)
+
+const (
+	ec2InstanceMetadataBackoffMin      = 100 * time.Millisecond
+	ec2InstanceMetadataBackoffMax      = 1 * time.Second
+	ec2InstanceMetadataBackoffMultiple = 2
+	ec2InstanceMetadataBackoffJitter   = 0.2
+	ec2InstanceMetadataTimeout         = 5 * time.Second
 )
 
 var (
@@ -62,7 +73,7 @@ func add(args *skel.CmdArgs, engine engine.Engine, dhclient engine.DHClient) err
 		return dhclientNotFoundError
 	}
 
-	macAddressOfENI, err := getMACAddressOfENI(conf, engine)
+	macAddressOfENI, err := getAndVerifyENIMetadata(conf, engine, ec2InstanceMetadataTimeout)
 	if err != nil {
 		return err
 	}
@@ -152,6 +163,63 @@ func add(args *skel.CmdArgs, engine engine.Engine, dhclient engine.DHClient) err
 	return cnitypes.PrintResult(result, conf.CNIVersion)
 }
 
+// getAndVerifyENIMetadata acquires the mac address of eni and verify the ip address information
+func getAndVerifyENIMetadata(conf *types.NetConf, engine engine.Engine, timeout time.Duration) (string, error) {
+	retriever := &ec2MetadataRetriever{
+		timeout: timeout,
+		conf:    conf,
+		engine:  engine,
+	}
+
+	mac, err := retriever.retrieveMacAddress()
+	if err != nil {
+		return "", err
+	}
+
+	err = validateIPAddressOfENI(conf, mac, engine)
+	if err != nil {
+		return "", err
+	}
+
+	return mac, nil
+}
+
+// ec2MetadataRetriever is used to retrieve the information of the eni from ec2 instance metadata
+type ec2MetadataRetriever struct {
+	macAddress string
+	timeout    time.Duration
+	conf       *types.NetConf
+	engine     engine.Engine
+}
+
+func (retriever *ec2MetadataRetriever) retrieveMacAddress() (string, error) {
+	backoff := utils.NewSimpleBackoff(ec2InstanceMetadataBackoffMin, ec2InstanceMetadataBackoffMax, ec2InstanceMetadataBackoffJitter, ec2InstanceMetadataBackoffMultiple)
+	ctx, cancel := context.WithTimeout(context.TODO(), retriever.timeout)
+	defer cancel()
+
+	err := utils.RetryWithBackoffCtx(ctx, backoff, func() error {
+		mac, err := getMACAddressOfENI(retriever.conf, retriever.engine)
+		if err == nil {
+			retriever.macAddress = mac
+			return nil
+		}
+
+		_, ok := err.(engine.IsUnmappedMACAddressError)
+		if ok {
+			// Retry if the mac address isn't in the ec2 instance metadata
+			return utils.NewRetriableError(utils.NewRetriable(true), err)
+		}
+
+		return utils.NewRetriableError(utils.NewRetriable(false), err)
+	})
+
+	if err != nil {
+		return "", err
+	}
+
+	return retriever.macAddress, nil
+}
+
 func getMACAddressOfENI(conf *types.NetConf, engine engine.Engine) (string, error) {
 	// TODO: If we can get this information from the config, we can optimize
 	// the workflow by getting rid of this, or by making this optional (only
@@ -171,13 +239,18 @@ func getMACAddressOfENI(conf *types.NetConf, engine engine.Engine) (string, erro
 		return "", err
 	}
 	log.Debugf("Found mac address for the ENI (id=%s): %s", conf.ENIID, macAddressOfENI)
+	return macAddressOfENI, nil
+}
 
+// validateIPAddressOfENI verifies the ip address information in configuration matches the
+// information from EC2 instance metadata
+func validateIPAddressOfENI(conf *types.NetConf, macAddressOfENI string, engine engine.Engine) error {
 	// Validation to ensure that we've been given the correct parameters.
 	// Check if the ipv4 address of the ENI maps to the mac address of the
 	// ENI.
-	err = validateMACMapsToIPV4Address(engine, macAddressOfENI, conf.IPV4Address)
+	err := validateMACMapsToIPV4Address(engine, macAddressOfENI, conf.IPV4Address)
 	if err != nil {
-		return "", err
+		return err
 	}
 	log.Debugf("Found ipv4Address for the ENI (id=%s): %s", conf.ENIID, macAddressOfENI)
 
@@ -186,12 +259,12 @@ func getMACAddressOfENI(conf *types.NetConf, engine engine.Engine) (string, erro
 	if conf.IPV6Address != "" {
 		err = validateMACMapsToIPV6Address(engine, macAddressOfENI, conf.IPV6Address)
 		if err != nil {
-			return "", err
+			return err
 		}
 		log.Debugf("Found ipv6Address for the ENI (id=%s): %v", conf.ENIID, macAddressOfENI)
 	}
 
-	return macAddressOfENI, nil
+	return nil
 }
 
 func validateMACMapsToIPV4Address(engine engine.Engine, macAddressOfENI string, ipv4Address string) error {

@@ -120,7 +120,7 @@ func TestGetMACAddressOfENIReturnsErrorOnGetMetadataError(t *testing.T) {
 
 	_, err := engine.GetMACAddressOfENI([]string{firstMACAddress}, firstENIID)
 	assert.Error(t, err)
-	_, ok := err.(*unmappedMACAddressError)
+	_, ok := err.(*UnmappedMACAddressError)
 	assert.True(t, ok)
 }
 
@@ -133,7 +133,7 @@ func TestGetMACAddressOfENIReturnsErrorWhenNotFound(t *testing.T) {
 
 	_, err := engine.GetMACAddressOfENI([]string{firstMACAddress}, secondENIID)
 	assert.Error(t, err)
-	_, ok := err.(*unmappedMACAddressError)
+	_, ok := err.(*UnmappedMACAddressError)
 	assert.True(t, ok)
 }
 
