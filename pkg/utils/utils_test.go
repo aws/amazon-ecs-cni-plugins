@@ -14,7 +14,10 @@
 package utils
 
 import (
+	"context"
+	"errors"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -52,4 +55,66 @@ func TestZeroOrNil(t *testing.T) {
 			assert.Equal(t, tc.expected, ZeroOrNil(tc.param), tc.name)
 		})
 	}
+}
+
+func TestRetryWithBackoff(t *testing.T) {
+	t.Run("retries", func(t *testing.T) {
+		counter := 3
+		RetryWithBackoff(NewSimpleBackoff(10*time.Millisecond, 10*time.Millisecond, 0, 1), func() error {
+			if counter == 0 {
+				return nil
+			}
+			counter--
+			return errors.New("err")
+		})
+		assert.Equal(t, 0, counter, "Counter didn't go to 0; didn't get retried enough")
+	})
+
+	t.Run("no retries", func(t *testing.T) {
+		counter := 3
+		RetryWithBackoff(NewSimpleBackoff(10*time.Second, 20*time.Second, 0, 2), func() error {
+			counter--
+			return NewRetriableError(NewRetriable(false), errors.New("can't retry"))
+		})
+		assert.Equal(t, 2, counter, "Counter should only be operated once without retry")
+	})
+}
+
+func TestRetryWithBackoffCtx(t *testing.T) {
+	t.Run("retries", func(t *testing.T) {
+		counter := 3
+		RetryWithBackoffCtx(context.TODO(), NewSimpleBackoff(100*time.Millisecond, 100*time.Millisecond, 0, 1), func() error {
+			if counter == 0 {
+				return nil
+			}
+			counter--
+			return errors.New("err")
+		})
+		assert.Equal(t, 0, counter, "Counter didn't go to 0; didn't get retried enough")
+	})
+
+	t.Run("no retries", func(t *testing.T) {
+		counter := 3
+		ctx, cancel := context.WithCancel(context.TODO())
+		cancel()
+		err := RetryWithBackoffCtx(ctx, NewSimpleBackoff(10*time.Second, 20*time.Second, 0, 2), func() error {
+			counter--
+			return NewRetriableError(NewRetriable(false), errors.New("can't retry"))
+		})
+		assert.Equal(t, 3, counter, "Counter should not be operated with context canceled")
+		assert.Error(t, err)
+	})
+
+	t.Run("cancel context", func(t *testing.T) {
+		counter := 2
+		ctx, cancel := context.WithCancel(context.TODO())
+		RetryWithBackoffCtx(ctx, NewSimpleBackoff(100*time.Millisecond, 100*time.Millisecond, 0, 1), func() error {
+			counter--
+			if counter == 0 {
+				cancel()
+			}
+			return errors.New("err")
+		})
+		assert.Equal(t, 0, counter, "Counter not 0; went the wrong number of times")
+	})
 }
