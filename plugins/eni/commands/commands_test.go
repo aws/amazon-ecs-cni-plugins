@@ -20,8 +20,11 @@ import (
 	"io/ioutil"
 	"os"
 	"testing"
+	"time"
 
+	"github.com/aws/amazon-ecs-cni-plugins/plugins/eni/engine"
 	"github.com/aws/amazon-ecs-cni-plugins/plugins/eni/engine/mocks"
+	"github.com/aws/amazon-ecs-cni-plugins/plugins/eni/types"
 	"github.com/cihub/seelog"
 	"github.com/containernetworking/cni/pkg/skel"
 	"github.com/containernetworking/cni/pkg/types/current"
@@ -565,4 +568,67 @@ func TestDelNoIPV6(t *testing.T) {
 	mockEngine.EXPECT().TeardownContainerNamespace(nsName, mac, false, mockDHClient).Return(nil)
 	err := del(eniArgsNoIPV6, mockEngine, mockDHClient)
 	assert.NoError(t, err)
+}
+
+func TestGetMacAddressWithRetry(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockEngine := mock_engine.NewMockEngine(ctrl)
+	conf := &types.NetConf{
+		ENIID:       "eni",
+		MACAddress:  "mac",
+		IPV4Address: "ipv4",
+	}
+
+	mockEngine.EXPECT().GetAllMACAddresses().Return([]string{"mac1", "mac2"}, nil).Times(3)
+	mockEngine.EXPECT().GetMACAddressOfENI([]string{"mac1", "mac2"}, "eni").Return("", engine.NewUnmappedMACAddressError("command", "TestGetMacAddressWithRetry", "mac address not found")).Times(2)
+	mockEngine.EXPECT().GetMACAddressOfENI([]string{"mac1", "mac2"}, "eni").Return("mac", nil)
+	mockEngine.EXPECT().DoesMACAddressMapToIPV4Address("mac", "ipv4").Return(true, nil)
+
+	mac, err := getAndVerifyENIMetadata(conf, mockEngine, ec2InstanceMetadataTimeout)
+
+	assert.NoError(t, err)
+	assert.Equal(t, "mac", mac)
+}
+
+func TestGetMacAddressWithRetryTimeout(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockEngine := mock_engine.NewMockEngine(ctrl)
+	conf := &types.NetConf{
+		ENIID:       "eni",
+		MACAddress:  "mac",
+		IPV4Address: "ipv4",
+	}
+
+	mockEngine.EXPECT().GetAllMACAddresses().Return([]string{"mac1", "mac2"}, nil)
+	mockEngine.EXPECT().GetMACAddressOfENI([]string{"mac1", "mac2"}, "eni").Do(func(macs []string, eni string) {
+		time.Sleep(10 * time.Millisecond)
+	}).Return("", engine.NewUnmappedMACAddressError("command", "TestGetMacAddressWithRetry", "mac address not found"))
+
+	mac, err := getAndVerifyENIMetadata(conf, mockEngine, 1*time.Millisecond)
+
+	assert.Error(t, err)
+	assert.Equal(t, "", mac)
+}
+
+func TestGetMacAddressWithoutRetryForError(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockEngine := mock_engine.NewMockEngine(ctrl)
+	conf := &types.NetConf{
+		ENIID:       "eni",
+		MACAddress:  "mac",
+		IPV4Address: "ipv4",
+	}
+
+	mockEngine.EXPECT().GetAllMACAddresses().Return([]string{"mac1", "mac2"}, nil)
+	mockEngine.EXPECT().GetMACAddressOfENI([]string{"mac1", "mac2"}, "eni").Return("", errors.New("err"))
+
+	mac, err := getAndVerifyENIMetadata(conf, mockEngine, ec2InstanceMetadataTimeout)
+	assert.Error(t, err)
+	assert.Equal(t, "", mac)
 }

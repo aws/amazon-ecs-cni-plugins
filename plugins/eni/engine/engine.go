@@ -143,7 +143,7 @@ func (engine *engine) GetMACAddressOfENI(macAddresses []string, eniID string) (s
 		}
 	}
 
-	return "", newUnmappedMACAddressError("getMACAddressOfENI", "engine",
+	return "", NewUnmappedMACAddressError("getMACAddressOfENI", "engine",
 		fmt.Sprintf("mac address of ENI '%s' not found", eniID))
 }
 
