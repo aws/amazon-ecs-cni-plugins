@@ -21,23 +21,35 @@ type _error struct {
 	message   string
 }
 
+// Error returns user friendly description of the error
 func (err *_error) Error() string {
 	return err.operation + " " + err.origin + ": " + err.message
 }
 
-// unmappedMACAddressError is used to indicate that the MAC address of the ENI
+// IsUnmappedMACAddressError defines the interface representing the error UnmappedMACAddressError
+type IsUnmappedMACAddressError interface {
+	IsUnmappedMACAddressError() bool
+}
+
+// UnmappedMACAddressError is used to indicate that the MAC address of the ENI
 // cannot be mapped to any of the network interfaces attached to the host as
 // determined by the instance metadata
-type unmappedMACAddressError struct {
+type UnmappedMACAddressError struct {
 	err *_error
 }
 
-func (macErr *unmappedMACAddressError) Error() string {
+func (macErr *UnmappedMACAddressError) Error() string {
 	return macErr.err.Error()
 }
 
-func newUnmappedMACAddressError(operation string, origin string, message string) error {
-	return &unmappedMACAddressError{
+// IsUnmappedMACAddressError returns whether the error is UnmappedMACAddressError
+func (macErr *UnmappedMACAddressError) IsUnmappedMACAddressError() bool {
+	return true
+}
+
+// NewUnmappedMACAddressError creates the error UnmappedMACAddressError
+func NewUnmappedMACAddressError(operation string, origin string, message string) error {
+	return &UnmappedMACAddressError{
 		err: &_error{
 			operation: operation,
 			origin:    origin,
