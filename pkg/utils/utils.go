@@ -14,7 +14,9 @@
 package utils
 
 import (
+	"context"
 	"reflect"
+	"time"
 )
 
 // ZeroOrNil checks if the passed in interface is empty
@@ -45,4 +47,37 @@ func ZeroOrNil(obj interface{}) bool {
 		return true
 	}
 	return false
+}
+
+// RetryWithBackoff takes a Backoff and a function to call that returns an error
+// If the error is nil then the function will no longer be called
+// If the error is Retriable then that will be used to determine if it should be
+// retried
+func RetryWithBackoff(backoff Backoff, fn func() error) error {
+	return RetryWithBackoffCtx(context.Background(), backoff, fn)
+}
+
+// RetryWithBackoffCtx takes a context, a Backoff, and a function to call that returns an error
+// If the context is done, nil will be returned
+// If the error is nil then the function will no longer be called
+// If the error is Retriable then that will be used to determine if it should be
+// retried
+func RetryWithBackoffCtx(ctx context.Context, backoff Backoff, fn func() error) error {
+	var err error
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
+
+		err = fn()
+		retriableErr, isRetriableErr := err.(Retriable)
+		if err == nil || (isRetriableErr && !retriableErr.Retry()) {
+			return err
+		}
+
+		time.Sleep(backoff.Duration())
+	}
+	return err
 }
