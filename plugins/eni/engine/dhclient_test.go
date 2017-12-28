@@ -246,7 +246,7 @@ func TestWaitForStopWaitsForDuration(t *testing.T) {
 		mockDHClientProcess.EXPECT().Signal(syscall.Signal(0)).Return(nil),
 		mockDHClientProcess.EXPECT().Signal(syscall.Signal(0)).Do(func(_ syscall.Signal) {
 			cancel()
-		}).Return(nil),
+		}).Return(nil).MaxTimes(2),
 	)
 
 	err := dhclient.waitForProcesToFinish(ctx, cancel, time.Microsecond, mockDHClientProcess)
