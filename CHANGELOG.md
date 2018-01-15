@@ -1,3 +1,7 @@
+## 2018.01.1
+* Enhancement - Increase the timeout to 1 minute for `ecs-eni` to retrieve MAC
+  address of eni from instance metadata. [#69](https://github.com/aws/amazon-ecs-cni-plugins/pull/69)
+
 ## 2018.01.0
 * Enhancement - Increase the timeout for `ecs-eni` to retrieve MAC address of
   eni from instance metadata. [#66](https://github.com/aws/amazon-ecs-cni-plugins/pull/66)
