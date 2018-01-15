@@ -35,7 +35,7 @@ const (
 	ec2InstanceMetadataBackoffMax      = 1 * time.Second
 	ec2InstanceMetadataBackoffMultiple = 2
 	ec2InstanceMetadataBackoffJitter   = 0.2
-	ec2InstanceMetadataTimeout         = 30 * time.Second
+	ec2InstanceMetadataTimeout         = 1 * time.Minute
 )
 
 var (
