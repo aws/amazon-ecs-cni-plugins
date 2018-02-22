@@ -375,11 +375,20 @@ func TestConfigureContainerVethInterfaceConfigureIfaceError(t *testing.T) {
 	ctrl, _, mockNetLink, mockIP, mockIPAM, _ := setup(t)
 	defer ctrl.Finish()
 
-	result := &current.Result{}
+	ip, ipnet, err := net.ParseCIDR("10.0.0.1/22")
+	assert.NoError(t, err)
+	result := &current.Result{
+		IPs: []*current.IPConfig{
+			{
+				Address: *ipnet,
+				Gateway: ip,
+			},
+		},
+	}
 	mockIPAM.EXPECT().ConfigureIface(interfaceName, result).Return(errors.New("error"))
 	configContext := newConfigureVethContext(
 		interfaceName, result, mockIP, mockIPAM, mockNetLink)
-	err := configContext.run(nil)
+	err = configContext.run(nil)
 	assert.Error(t, err)
 }
 
