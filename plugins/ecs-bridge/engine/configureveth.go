@@ -14,10 +14,13 @@
 package engine
 
 import (
+	"net"
+
 	"github.com/aws/amazon-ecs-cni-plugins/pkg/cniipamwrapper"
 	"github.com/aws/amazon-ecs-cni-plugins/pkg/cniipwrapper"
 	"github.com/aws/amazon-ecs-cni-plugins/pkg/netlinkwrapper"
 	"github.com/containernetworking/cni/pkg/ns"
+	"github.com/containernetworking/cni/pkg/types"
 	"github.com/containernetworking/cni/pkg/types/current"
 	"github.com/pkg/errors"
 	"github.com/vishvananda/netlink"
@@ -51,6 +54,16 @@ func newConfigureVethContext(interfaceName string,
 // run defines the closure to execute within the container's namespace to
 // configure the veth interface
 func (configContext *configureVethContext) run(hostNS ns.NetNS) error {
+	// Add route for arp query request from host
+	// same as: ip route add 169.254.172.1 via 169.254.172.1 dev ecs-eth0
+	route := &types.Route{
+		Dst: net.IPNet{
+			IP:   configContext.result.IPs[0].Gateway,
+			Mask: net.CIDRMask(32, 32),
+		},
+	}
+	configContext.result.Routes = append(configContext.result.Routes, route)
+
 	// Configure routes in the container
 	err := configContext.ipam.ConfigureIface(
 		configContext.interfaceName, configContext.result)
