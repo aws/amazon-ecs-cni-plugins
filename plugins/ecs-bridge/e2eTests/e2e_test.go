@@ -39,6 +39,7 @@ const (
 	expectedGateway       = "169.254.172.1"
 	expectedVethAddress   = "169.254.172.2/22"
 	dst                   = "169.254.170.2/32"
+	bridgeDst             = "169.254.172.1/32"
 	netConf               = `
 {
     "type":"ecs-bridge",
@@ -309,6 +310,7 @@ func validateVethAddress(t *testing.T, veth netlink.Link) {
 func validateRouteForVethInTargetNetNS(t *testing.T, veth netlink.Link) {
 	routes, err := netlink.RouteList(veth, netlink.FAMILY_V4)
 	require.NoError(t, err, "Unable to list routes for: %s", veth.Attrs().Name)
+	gwRouteFound := false
 	routeFound := false
 	defaultRouteFound := false
 	for _, route := range routes {
@@ -318,12 +320,16 @@ func validateRouteForVethInTargetNetNS(t *testing.T, veth netlink.Link) {
 			route.Src == nil &&
 			route.Gw.String() == expectedGateway {
 			routeFound = true
+		} else if route.Dst.String() == bridgeDst && route.Gw.String() == expectedGateway {
+			gwRouteFound = true
 		}
 	}
 	require.False(t, defaultRouteFound,
 		"Unexpected default route found for: %s", veth.Attrs().Name)
 	require.True(t, routeFound, "Route with gateway '%s' not found for: %s",
 		expectedGateway, veth.Attrs().Name)
+	require.True(t, gwRouteFound,
+		"route for the gateway is not found")
 }
 
 // validateLinkDoesNotExist validates that the named link does not exist in the
