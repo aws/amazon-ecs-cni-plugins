@@ -1,3 +1,9 @@
+## 2018.02.0
+* Bug - Fixed an issue where container wasn't able to talk to agent endpoint.
+[#73](https://github.com/aws/amazon-ecs-cni-plugins/pull/73)
+* Enhancement - Use the `CNI_IFNAME` in `ecs-eni` plugin as the ENI interface
+name. [#59](https://github.com/aws/amazon-ecs-cni-plugins/pull/59)
+
 ## 2018.01.1
 * Enhancement - Increase the timeout to 1 minute for `ecs-eni` to retrieve MAC
   address of eni from instance metadata. [#69](https://github.com/aws/amazon-ecs-cni-plugins/pull/69)
