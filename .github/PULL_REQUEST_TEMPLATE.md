@@ -25,8 +25,5 @@ Feature - Upgrade the something library to the latest stable version 1.2.3
 -->
 
 ### Licensing
-<!--
-Please confirm that this contribution is under the terms of the Apache 2.0
-License.
--->
-This contribution is under the terms of the Apache 2.0 License: <!-- yes -->
+
+By submitting this pull request, I confirm that my contribution is made under the terms of the Apache 2.0 license.
