@@ -11,7 +11,7 @@ GO_EXECUTABLE=$(shell command -v go 2> /dev/null)
 # these details from the environment in order support builds outside
 # of a git working copy. If they're not given explicitly, we'll try to
 # use git to directly inspect the repository state...
-GIT_SHORT_HASH ?= $(shell git rev-parse --short HEAD 2> /dev/null)
+GIT_SHORT_HASH ?= $(shell git rev-parse --short=8 HEAD 2> /dev/null)
 GIT_PORCELAIN ?= $(shell git status --porcelain 2> /dev/null | wc -l)
 
 # ...and if we can't inspect the repo state, we'll fall back to some
