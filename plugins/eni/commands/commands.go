@@ -73,12 +73,14 @@ func add(args *skel.CmdArgs, engine engine.Engine, dhclient engine.DHClient) err
 		return dhclientNotFoundError
 	}
 
+	// WIP - get rid of call to imds
 	macAddressOfENI, err := getAndVerifyENIMetadata(conf, engine, ec2InstanceMetadataTimeout)
 	if err != nil {
 		return err
 	}
 	log.Infof("Found ENI with mac address on the host (id=%s): %s", conf.ENIID, macAddressOfENI)
 
+	// WIP - get rid of call to imds
 	// Get the interface name of the device by scanning links
 	networkDeviceName, err := engine.GetInterfaceDeviceName(macAddressOfENI)
 	if err != nil {
@@ -137,6 +139,9 @@ func add(args *skel.CmdArgs, engine engine.Engine, dhclient engine.DHClient) err
 			Address: *ipv6net,
 		})
 	}
+
+	// WIP - validate that "everything prepped", eni is up and can ping s/n gw
+	// address
 
 	// Everything's prepped. We have all the parameters needed to configure
 	// the network namespace of the ENI. Invoke SetupContainerNamespace to
