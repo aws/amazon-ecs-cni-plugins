@@ -27,11 +27,12 @@ import (
 // with an ENI
 type NetConf struct {
 	types.NetConf
-	ENIID       string `json:"eni"`
-	IPV4Address string `json:"ipv4-address"`
-	MACAddress  string `json:"mac"`
-	IPV6Address string `json:"ipv6-address"`
-	BlockIMDS   bool   `json:"block-instance-metadata"`
+	ENIID                    string `json:"eni"`
+	IPV4Address              string `json:"ipv4-address"`
+	MACAddress               string `json:"mac"`
+	IPV6Address              string `json:"ipv6-address"`
+	BlockIMDS                bool   `json:"block-instance-metadata"`
+	SubnetGatewayIPV4Address string `json:"subnetgateway-ipv4-address"`
 }
 
 // NewConf creates a new NetConf object by parsing the arguments supplied

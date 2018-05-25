@@ -25,6 +25,7 @@ Primary private IPV4 address of the interface
 * `ipv6-address` (string, optional): the ipv6 address of the ENI
 * `block-instance-metadata` (bool, optional): specifies if the route to EC2 
 instance metadata should be blocked
+* `subnetgateway-ipv4-address` (string, optional): specifies the ipv4 address, with the CIDR block for the subnet gateway. Example: `10.15.145.128/25`
 
 ## Environment Variables
 * `ENI_DHCLIENT_LEASES_PATH` (string, optional): the dhclient leases file path.

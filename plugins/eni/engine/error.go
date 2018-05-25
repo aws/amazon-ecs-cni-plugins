@@ -57,23 +57,3 @@ func NewUnmappedMACAddressError(operation string, origin string, message string)
 		},
 	}
 }
-
-// parseIPV4GatewayNetmaskError is used to indicate any error with parsing the
-// IPV4 address and the netmask of the ENI
-type parseIPV4GatewayNetmaskError struct {
-	err *_error
-}
-
-func (parseErr *parseIPV4GatewayNetmaskError) Error() string {
-	return parseErr.err.Error()
-}
-
-func newParseIPV4GatewayNetmaskError(operation string, origin string, message string) error {
-	return &parseIPV4GatewayNetmaskError{
-		err: &_error{
-			operation: operation,
-			origin:    origin,
-			message:   message,
-		},
-	}
-}
