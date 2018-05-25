@@ -1,4 +1,4 @@
-// Copyright 2017 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+// Copyright 2017-2018 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License"). You may
 // not use this file except in compliance with the License. A copy of the
@@ -14,7 +14,6 @@
 package commands
 
 import (
-	"context"
 	"fmt"
 	"net"
 	"time"
@@ -73,12 +72,7 @@ func add(args *skel.CmdArgs, engine engine.Engine, dhclient engine.DHClient) err
 		return dhclientNotFoundError
 	}
 
-	macAddressOfENI, err := getAndVerifyENIMetadata(conf, engine, ec2InstanceMetadataTimeout)
-	if err != nil {
-		return err
-	}
-	log.Infof("Found ENI with mac address on the host (id=%s): %s", conf.ENIID, macAddressOfENI)
-
+	macAddressOfENI := conf.MACAddress
 	// Get the interface name of the device by scanning links
 	networkDeviceName, err := engine.GetInterfaceDeviceName(macAddressOfENI)
 	if err != nil {
@@ -87,19 +81,36 @@ func add(args *skel.CmdArgs, engine engine.Engine, dhclient engine.DHClient) err
 	}
 	log.Infof("Found network device for the ENI (mac address=%s): %s", macAddressOfENI, networkDeviceName)
 
-	// Get the ipv4 gateway and subnet mask for the ENI. This will be
-	// required for adding routes in the container's namespace
-	ipv4Gateway, ipv4Netmask, err := engine.GetIPV4GatewayNetmask(macAddressOfENI)
-	if err != nil {
-		log.Errorf("Unable to get ipv4 gateway and netmask for ENI (device name=%s): %v", networkDeviceName, err)
-		return err
-	}
-	log.Infof("Found ipv4 gateway and netmask for ENI (device name=%s): %s %s", networkDeviceName, ipv4Gateway, ipv4Netmask)
+	ipv4Gateway := ""
+	ipv4Netmask := ""
+	var ipv4Net *net.IPNet
 
+	if conf.SubnetGatewayIPV4Address == "" {
+		// Get the ipv4 gateway and subnet mask for the ENI. This will be
+		// required for adding routes in the container's namespace
+		ipv4Gateway, ipv4Netmask, err = engine.GetIPV4GatewayNetmask(conf.MACAddress)
+
+		if err != nil {
+			log.Errorf("Unable to get ipv4 gateway and netmask for ENI (device name=%s): %v",
+				networkDeviceName, err)
+			return err
+		}
+		log.Infof("Found ipv4 gateway and netmask for ENI (device name=%s): %s %s",
+			networkDeviceName, ipv4Gateway, ipv4Netmask)
+	} else {
+		ipv4Gateway, ipv4Netmask, err = utils.ParseIPV4GatewayNetmask(conf.SubnetGatewayIPV4Address)
+		if err != nil {
+			log.Errorf("Unable to parse ipv4 gateway and netmask for ENI (device name=%s): %v",
+				networkDeviceName, err)
+			return err
+		}
+		log.Infof("Read ipv4 gateway and netmask from config for ENI (device name=%s): %s %s",
+			networkDeviceName, ipv4Gateway, ipv4Netmask)
+	}
 	ipv4Address := fmt.Sprintf("%s/%s", ipv4Gateway, ipv4Netmask)
-	_, ipv4Net, err := net.ParseCIDR(ipv4Address)
+	_, ipv4Net, err = net.ParseCIDR(ipv4Address)
 	if err != nil {
-		return errors.Wrapf(err, "add eni: failed to parse ipv4 gateway netmask: %s", fmt.Sprintf("%s/%s", ipv4Gateway, ipv4Netmask))
+		return errors.Wrapf(err, "add eni: failed to parse ipv4 gateway netmask: %s", ipv4Address)
 	}
 	ips := []*current.IPConfig{
 		{
@@ -161,142 +172,6 @@ func add(args *skel.CmdArgs, engine engine.Engine, dhclient engine.DHClient) err
 	}
 
 	return cnitypes.PrintResult(result, conf.CNIVersion)
-}
-
-// getAndVerifyENIMetadata acquires the mac address of eni and verify the ip address information
-func getAndVerifyENIMetadata(conf *types.NetConf, engine engine.Engine, timeout time.Duration) (string, error) {
-	retriever := &ec2MetadataRetriever{
-		timeout: timeout,
-		conf:    conf,
-		engine:  engine,
-	}
-
-	mac, err := retriever.retrieveMacAddress()
-	if err != nil {
-		return "", err
-	}
-
-	err = validateIPAddressOfENI(conf, mac, engine)
-	if err != nil {
-		return "", err
-	}
-
-	return mac, nil
-}
-
-// ec2MetadataRetriever is used to retrieve the information of the eni from ec2 instance metadata
-type ec2MetadataRetriever struct {
-	macAddress string
-	timeout    time.Duration
-	conf       *types.NetConf
-	engine     engine.Engine
-}
-
-func (retriever *ec2MetadataRetriever) retrieveMacAddress() (string, error) {
-	backoff := utils.NewSimpleBackoff(ec2InstanceMetadataBackoffMin, ec2InstanceMetadataBackoffMax, ec2InstanceMetadataBackoffJitter, ec2InstanceMetadataBackoffMultiple)
-	ctx, cancel := context.WithTimeout(context.TODO(), retriever.timeout)
-	defer cancel()
-
-	err := utils.RetryWithBackoffCtx(ctx, backoff, func() error {
-		mac, err := getMACAddressOfENI(retriever.conf, retriever.engine)
-		if err == nil {
-			retriever.macAddress = mac
-			return nil
-		}
-
-		_, ok := err.(engine.IsUnmappedMACAddressError)
-		if ok {
-			// Retry if the mac address isn't in the ec2 instance metadata
-			return utils.NewRetriableError(utils.NewRetriable(true), err)
-		}
-
-		return utils.NewRetriableError(utils.NewRetriable(false), err)
-	})
-
-	if err != nil {
-		return "", err
-	}
-
-	return retriever.macAddress, nil
-}
-
-func getMACAddressOfENI(conf *types.NetConf, engine engine.Engine) (string, error) {
-	// TODO: If we can get this information from the config, we can optimize
-	// the workflow by getting rid of this, or by making this optional (only
-	// in cases where mac address hasn't been specified)
-	allMACAddresses, err := engine.GetAllMACAddresses()
-	if err != nil {
-		log.Errorf("Unable to get the list of mac addresses on the host: %v", err)
-		return "", err
-	}
-	log.Debugf("Found mac addresses: %v", allMACAddresses)
-
-	// Get the mac address of the ENI based on the ENIID by matching it
-	// against the list of all mac addresses obtained in the previous step.
-	macAddressOfENI, err := engine.GetMACAddressOfENI(allMACAddresses, conf.ENIID)
-	if err != nil {
-		log.Errorf("Unable to find the mac address for the ENI (id=%s): %v", conf.ENIID, err)
-		return "", err
-	}
-	log.Debugf("Found mac address for the ENI (id=%s): %s", conf.ENIID, macAddressOfENI)
-	return macAddressOfENI, nil
-}
-
-// validateIPAddressOfENI verifies the ip address information in configuration matches the
-// information from EC2 instance metadata
-func validateIPAddressOfENI(conf *types.NetConf, macAddressOfENI string, engine engine.Engine) error {
-	// Validation to ensure that we've been given the correct parameters.
-	// Check if the ipv4 address of the ENI maps to the mac address of the
-	// ENI.
-	err := validateMACMapsToIPV4Address(engine, macAddressOfENI, conf.IPV4Address)
-	if err != nil {
-		return err
-	}
-	log.Debugf("Found ipv4Address for the ENI (id=%s): %s", conf.ENIID, macAddressOfENI)
-
-	// Check if the ipv6 address of the ENI maps to the mac address of the
-	// ENI.
-	if conf.IPV6Address != "" {
-		err = validateMACMapsToIPV6Address(engine, macAddressOfENI, conf.IPV6Address)
-		if err != nil {
-			return err
-		}
-		log.Debugf("Found ipv6Address for the ENI (id=%s): %v", conf.ENIID, macAddressOfENI)
-	}
-
-	return nil
-}
-
-func validateMACMapsToIPV4Address(engine engine.Engine, macAddressOfENI string, ipv4Address string) error {
-	ok, err := engine.DoesMACAddressMapToIPV4Address(macAddressOfENI, ipv4Address)
-	if err != nil {
-		log.Errorf("Error validating ipv4 addresses for ENI (mac address=%s,ipv4 address=%s): %v",
-			macAddressOfENI, ipv4Address, err)
-		return err
-	}
-	if !ok {
-		log.Errorf("Unable to validate ipv4 address for ENI (mac address=%s,ipv4 address=%s): %v",
-			macAddressOfENI, ipv4Address, unmappedIPV4AddressError)
-		return unmappedIPV4AddressError
-	}
-
-	return nil
-}
-
-func validateMACMapsToIPV6Address(engine engine.Engine, macAddressOfENI string, ipv6Address string) error {
-	ok, err := engine.DoesMACAddressMapToIPV6Address(macAddressOfENI, ipv6Address)
-	if err != nil {
-		log.Errorf("Error validating ipv6 addresses for ENI (mac address=%s,ipv4 address=%s): %v",
-			macAddressOfENI, ipv6Address, err)
-		return err
-	}
-	if !ok {
-		log.Errorf("Unable to validate ipv6 address for ENI (mac address=%s,ipv4 address=%s): %v",
-			macAddressOfENI, ipv6Address, unmappedIPV6AddressError)
-		return unmappedIPV6AddressError
-	}
-
-	return nil
 }
 
 // del removes the ENI setup within the container's namespace. It stops the dhclient

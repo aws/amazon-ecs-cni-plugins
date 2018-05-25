@@ -15,19 +15,21 @@ package engine
 
 import (
 	"fmt"
+	"net"
+	"strings"
+	"time"
+
 	"github.com/aws/amazon-ecs-cni-plugins/pkg/cninswrapper"
 	"github.com/aws/amazon-ecs-cni-plugins/pkg/ec2metadata"
 	"github.com/aws/amazon-ecs-cni-plugins/pkg/execwrapper"
 	"github.com/aws/amazon-ecs-cni-plugins/pkg/ioutilwrapper"
 	"github.com/aws/amazon-ecs-cni-plugins/pkg/netlinkwrapper"
 	"github.com/aws/amazon-ecs-cni-plugins/pkg/oswrapper"
+	"github.com/aws/amazon-ecs-cni-plugins/pkg/utils"
 	log "github.com/cihub/seelog"
 	"github.com/containernetworking/cni/pkg/skel"
 	"github.com/pkg/errors"
 	"github.com/vishvananda/netlink"
-	"net"
-	"strings"
-	"time"
 )
 
 const (
@@ -50,9 +52,6 @@ const (
 	checkDHClientStateInteval = 50 * time.Millisecond
 	maxDHClientStopWait       = 1 * time.Second
 
-	minIPV4CIDRBlockSize = 28
-	maxIPV4CIDRBlockSize = 16
-
 	instanceMetadataMaxRetryCount          = 20
 	instanceMetadataDurationBetweenRetries = 1 * time.Second
 )
@@ -68,7 +67,9 @@ type Engine interface {
 	GetIPV6Gateway(deviceName string) (string, error)
 	DoesMACAddressMapToIPV4Address(macAddress string, ipv4Address string) (bool, error)
 	DoesMACAddressMapToIPV6Address(macAddress string, ipv4Address string) (bool, error)
-	SetupContainerNamespace(args *skel.CmdArgs, deviceName string, macAddress string, ipv4Address string, ipv6Address string, ipv4Gateway string, ipv6Gateway string, dhclient DHClient, blockIMDS bool) error
+	SetupContainerNamespace(args *skel.CmdArgs, deviceName string, macAddress string,
+		ipv4Address string, ipv6Address string,
+		ipv4Gateway string, ipv6Gateway string, dhclient DHClient, blockIMDS bool) error
 	TeardownContainerNamespace(netns string, macAddress string, stopDHClient6 bool, dhclient DHClient) error
 }
 
@@ -173,38 +174,7 @@ func (engine *engine) GetIPV4GatewayNetmask(macAddress string) (string, string, 
 			"getIPV4GatewayNetmask engine: unable to get ipv4 subnet and cidr block for '%s' from instance metadata", macAddress)
 	}
 
-	return getIPV4GatewayNetmask(cidrBlock)
-}
-
-func getIPV4GatewayNetmask(cidrBlock string) (string, string, error) {
-	// The IPV4 CIDR block is of the format ip-addr/netmask
-	ip, ipNet, err := net.ParseCIDR(cidrBlock)
-	if err != nil {
-		return "", "", errors.Wrapf(err,
-			"getIPV4GatewayNetmask engine: unable to parse response for ipv4 cidr: '%s' from instance metadata", cidrBlock)
-	}
-
-	ip4 := ip.To4()
-	if ip4 == nil {
-		return "", "", newParseIPV4GatewayNetmaskError("getIPV4GatewayNetmask", "engine",
-			fmt.Sprintf("unable to parse ipv4 gateway from cidr block '%s'", cidrBlock))
-	}
-
-	maskOnes, _ := ipNet.Mask.Size()
-	// As per
-	// http://docs.aws.amazon.com/AmazonVPC/latest/UserGuide/VPC_Subnets.html#VPC_Sizing
-	// You can assign a single CIDR block to a VPC. The allowed block size
-	// is between a /16 netmask and /28 netmask. Verify that
-	if maskOnes > minIPV4CIDRBlockSize {
-		return "", "", errors.Errorf("eni ipv4 netmask: invalid ipv4 cidr block, %d > 28", maskOnes)
-	}
-	if maskOnes < maxIPV4CIDRBlockSize {
-		return "", "", errors.Errorf("eni ipv4 netmask: invalid ipv4 cidr block, %d <= 16", maskOnes)
-	}
-
-	// ipv4 gateway is the first available IP address in the subnet
-	ip4[3] = ip4[3] + 1
-	return ip4.String(), fmt.Sprintf("%d", maskOnes), nil
+	return utils.ComputeIPV4GatewayNetmask(cidrBlock)
 }
 
 // GetIPV6PrefixLength gets the ipv6 subnet mask from the instance

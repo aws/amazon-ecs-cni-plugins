@@ -1,6 +1,6 @@
 // +build !integration,!e2e
 
-// Copyright 2017 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+// Copyright 2017-2018 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License"). You may
 // not use this file except in compliance with the License. A copy of the
@@ -18,11 +18,12 @@ package engine
 import (
 	"errors"
 	"fmt"
-	"github.com/containernetworking/cni/pkg/skel"
 	"net"
 	"syscall"
 	"testing"
 	"time"
+
+	"github.com/containernetworking/cni/pkg/skel"
 
 	"github.com/aws/amazon-ecs-cni-plugins/pkg/cninswrapper/mocks"
 	"github.com/aws/amazon-ecs-cni-plugins/pkg/cninswrapper/mocks_netns"
@@ -32,6 +33,7 @@ import (
 	"github.com/aws/amazon-ecs-cni-plugins/pkg/netlinkwrapper/mocks"
 	"github.com/aws/amazon-ecs-cni-plugins/pkg/netlinkwrapper/mocks_link"
 	"github.com/aws/amazon-ecs-cni-plugins/pkg/oswrapper/mocks"
+	"github.com/aws/amazon-ecs-cni-plugins/pkg/utils"
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
 	"github.com/vishvananda/netlink"
@@ -225,45 +227,6 @@ func TestGetInterfaceDeviceNameReturnsDeviceWhenFound(t *testing.T) {
 	assert.Equal(t, eniDeviceName, deviceName)
 }
 
-func TestGetIPV4GatewayNetMaskInternalReturnsErrorOnMalformedCIDR(t *testing.T) {
-	_, _, err := getIPV4GatewayNetmask("1.1.1.1")
-	assert.Error(t, err)
-}
-
-func TestGetIPV4GatewayNetMaskInternalReturnsErrorOnMalformedNetmaskInCIDR(t *testing.T) {
-	_, _, err := getIPV4GatewayNetmask("1.1.1.1/")
-	assert.Error(t, err)
-}
-
-func TestGetIPV4GatewayNetMaskInternalReturnsErrorOnMalformedCIDRBlockInCIDR(t *testing.T) {
-	_, _, err := getIPV4GatewayNetmask("1.1.1/1")
-	assert.Error(t, err)
-}
-
-func TestGetIPV4GatewayNetMaskInternalReturnsErrorOnEmptyRouterInCIDR(t *testing.T) {
-	_, _, err := getIPV4GatewayNetmask("1.1.1./1")
-	assert.Error(t, err)
-}
-
-func TestGetIPV4GatewayNetMaskInternalReturnsErrorOnInvalidRouterInCIDR(t *testing.T) {
-	_, _, err := getIPV4GatewayNetmask("1.1.1.foo/1")
-	assert.Error(t, err)
-}
-
-func TestGetIPV4GatewayNetMaskInternalReturnsErrorOnInvalidCIDRBlock(t *testing.T) {
-	_, _, err := getIPV4GatewayNetmask("10.0.64.0/29")
-	assert.Error(t, err)
-	_, _, err = getIPV4GatewayNetmask("10.0.64.0/15")
-	assert.Error(t, err)
-}
-
-func TestGetIPV4GatewayNetMaskInternal(t *testing.T) {
-	gateway, netmask, err := getIPV4GatewayNetmask("10.0.1.64/26")
-	assert.NoError(t, err)
-	assert.Equal(t, gateway, "10.0.1.65")
-	assert.Equal(t, netmask, "26")
-}
-
 func TestGetIPV4GatewayNetMaskReturnsErrorOnGetMetadataError(t *testing.T) {
 	ctrl, mockMetadata, _, _, _, _, _ := setup(t)
 	defer ctrl.Finish()
@@ -274,7 +237,7 @@ func TestGetIPV4GatewayNetMaskReturnsErrorOnGetMetadataError(t *testing.T) {
 
 	_, _, err := engine.GetIPV4GatewayNetmask(firstMACAddressSanitized)
 	assert.Error(t, err)
-	_, ok := err.(*parseIPV4GatewayNetmaskError)
+	_, ok := err.(*utils.ParseIPV4GatewayNetmaskError)
 	assert.False(t, ok)
 }
 
@@ -287,7 +250,7 @@ func TestGetIPV4GatewayNetMaskReturnsErrorWhenUnableToParseCIDRNetmaskResponse(t
 		metadataNetworkInterfacesPath+firstMACAddressSanitized+metadataNetworkInterfaceIPV4CIDRPathSuffix).Return("1.1.1.1", nil)
 	_, _, err := engine.GetIPV4GatewayNetmask(firstMACAddressSanitized)
 	assert.Error(t, err)
-	_, ok := err.(*parseIPV4GatewayNetmaskError)
+	_, ok := err.(*utils.ParseIPV4GatewayNetmaskError)
 	assert.False(t, ok)
 }
 
@@ -301,7 +264,7 @@ func TestGetIPV4GatewayNetMaskWhenUnableToParseIPV6CIDRNetmaskResponse(t *testin
 
 	_, _, err := engine.GetIPV4GatewayNetmask(firstMACAddressSanitized)
 	assert.Error(t, err)
-	_, ok := err.(*parseIPV4GatewayNetmaskError)
+	_, ok := err.(*utils.ParseIPV4GatewayNetmaskError)
 	assert.True(t, ok)
 }
 
