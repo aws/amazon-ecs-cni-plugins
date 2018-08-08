@@ -1,7 +1,7 @@
-## 2018.06.1-dev 
+## 2018.08.0
 * Enhancement - Reduced the ENI plugin execution time by removing the 
   dependency on instance metadata service (by adding the `subnetgateway-ipv4-address`
-  config flag)
+  config flag). [#81](https://github.com/aws/amazon-ecs-cni-plugins/pull/81)
  
 ## 2018.02.0
 * Bug - Fixed an issue where container wasn't able to talk to agent endpoint.
