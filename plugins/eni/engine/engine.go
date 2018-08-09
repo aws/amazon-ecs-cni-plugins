@@ -49,9 +49,6 @@ const (
 	// after 10 ticks, which corresponds to 10 seconds
 	maxTicksForRetrievingIPV6Gateway = 10
 
-	checkDHClientStateInteval = 50 * time.Millisecond
-	maxDHClientStopWait       = 1 * time.Second
-
 	instanceMetadataMaxRetryCount          = 20
 	instanceMetadataDurationBetweenRetries = 1 * time.Second
 )
@@ -69,8 +66,8 @@ type Engine interface {
 	DoesMACAddressMapToIPV6Address(macAddress string, ipv4Address string) (bool, error)
 	SetupContainerNamespace(args *skel.CmdArgs, deviceName string, macAddress string,
 		ipv4Address string, ipv6Address string,
-		ipv4Gateway string, ipv6Gateway string, dhclient DHClient, blockIMDS bool) error
-	TeardownContainerNamespace(netns string, macAddress string, stopDHClient6 bool, dhclient DHClient) error
+		ipv4Gateway string, ipv6Gateway string, blockIMDS bool) error
+	TeardownContainerNamespace(netns string, macAddress string) error
 }
 
 type engine struct {
@@ -336,7 +333,6 @@ func (engine *engine) SetupContainerNamespace(args *skel.CmdArgs,
 	ipv6Address string,
 	ipv4Gateway string,
 	ipv6Gateway string,
-	dhclient DHClient,
 	blockIMDS bool) error {
 	// Get the device link for the ENI
 	eniLink, err := engine.netLink.LinkByName(deviceName)
@@ -360,7 +356,7 @@ func (engine *engine) SetupContainerNamespace(args *skel.CmdArgs,
 	}
 
 	// Generate the closure to execute within the container's namespace
-	toRun, err := newSetupNamespaceClosureContext(engine.netLink, dhclient, args.IfName, deviceName, macAddress,
+	toRun, err := newSetupNamespaceClosureContext(engine.netLink, args.IfName, deviceName, macAddress,
 		ipv4Address, ipv6Address, ipv4Gateway, ipv6Gateway, blockIMDS)
 	if err != nil {
 		return errors.Wrap(err,
@@ -377,10 +373,10 @@ func (engine *engine) SetupContainerNamespace(args *skel.CmdArgs,
 }
 
 // TeardownContainerNamespace brings down the ENI device in the container's namespace
-func (engine *engine) TeardownContainerNamespace(netns string, macAddress string, stopDHClient6 bool, dhclient DHClient) error {
+func (engine *engine) TeardownContainerNamespace(netns string, macAddress string) error {
 	// Generate the closure to execute within the container's namespace
-	toRun, err := newTeardownNamespaceClosureContext(engine.netLink, dhclient,
-		macAddress, stopDHClient6, checkDHClientStateInteval, maxDHClientStopWait)
+	toRun, err := newTeardownNamespaceClosureContext(engine.netLink,
+		macAddress)
 	if err != nil {
 		return errors.Wrap(err,
 			"teardownContainerNamespace engine: unable to create closure to execute in container namespace")

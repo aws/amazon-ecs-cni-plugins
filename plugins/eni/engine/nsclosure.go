@@ -16,10 +16,8 @@ package engine
 import (
 	"net"
 	"syscall"
-	"time"
 
 	"github.com/aws/amazon-ecs-cni-plugins/pkg/netlinkwrapper"
-	log "github.com/cihub/seelog"
 	"github.com/containernetworking/cni/pkg/ns"
 	"github.com/pkg/errors"
 	"github.com/vishvananda/netlink"
@@ -34,7 +32,6 @@ var linkWithMACNotFoundError = errors.New("engine: device with mac address not f
 // setupNamespaceClosureContext wraps the parameters and the method to configure the container's namespace
 type setupNamespaceClosureContext struct {
 	netLink     netlinkwrapper.NetLink
-	dhclient    DHClient
 	ifName      string
 	deviceName  string
 	macAddress  string
@@ -48,16 +45,12 @@ type setupNamespaceClosureContext struct {
 // teardownNamespaceClosureContext wraps the parameters and the method to teardown the
 // container's namespace
 type teardownNamespaceClosureContext struct {
-	netLink                   netlinkwrapper.NetLink
-	dhclient                  DHClient
-	hardwareAddr              net.HardwareAddr
-	stopDHClient6             bool
-	checkDHClientStateInteval time.Duration
-	maxDHClientStopWait       time.Duration
+	netLink      netlinkwrapper.NetLink
+	hardwareAddr net.HardwareAddr
 }
 
 // newSetupNamespaceClosureContext creates a new setupNamespaceClosure object
-func newSetupNamespaceClosureContext(netLink netlinkwrapper.NetLink, dhclient DHClient,
+func newSetupNamespaceClosureContext(netLink netlinkwrapper.NetLink,
 	ifName string, deviceName string, macAddress string, ipv4Address string, ipv6Address string,
 	ipv4Gateway string, ipv6Gateway string, blockIMDS bool) (*setupNamespaceClosureContext, error) {
 	nlIPV4Addr, err := netLink.ParseAddr(ipv4Address)
@@ -74,7 +67,6 @@ func newSetupNamespaceClosureContext(netLink netlinkwrapper.NetLink, dhclient DH
 
 	nsClosure := &setupNamespaceClosureContext{
 		netLink:     netLink,
-		dhclient:    dhclient,
 		ifName:      ifName,
 		deviceName:  deviceName,
 		macAddress:  macAddress,
@@ -101,9 +93,8 @@ func newSetupNamespaceClosureContext(netLink netlinkwrapper.NetLink, dhclient DH
 }
 
 // newTeardownNamespaceClosureContext creates a new teardownNamespaceClosure object
-func newTeardownNamespaceClosureContext(netLink netlinkwrapper.NetLink, dhclient DHClient,
-	mac string, stopDHClient6 bool,
-	checkDHClientStateInteval time.Duration, maxDHClientStopWait time.Duration) (*teardownNamespaceClosureContext, error) {
+func newTeardownNamespaceClosureContext(netLink netlinkwrapper.NetLink,
+	mac string) (*teardownNamespaceClosureContext, error) {
 	hardwareAddr, err := net.ParseMAC(mac)
 	if err != nil {
 		return nil, errors.Wrapf(err,
@@ -111,12 +102,8 @@ func newTeardownNamespaceClosureContext(netLink netlinkwrapper.NetLink, dhclient
 	}
 
 	return &teardownNamespaceClosureContext{
-		netLink:                   netLink,
-		dhclient:                  dhclient,
-		hardwareAddr:              hardwareAddr,
-		stopDHClient6:             stopDHClient6,
-		checkDHClientStateInteval: checkDHClientStateInteval,
-		maxDHClientStopWait:       maxDHClientStopWait,
+		netLink:      netLink,
+		hardwareAddr: hardwareAddr,
 	}, nil
 }
 
@@ -183,12 +170,6 @@ func (closureContext *setupNamespaceClosureContext) run(_ ns.NetNS) error {
 			"setupNamespaceClosure engine: unable to add the route for the ipv4 gateway")
 	}
 
-	// Start dhclient for IPV4 address
-	err = closureContext.dhclient.Start(closureContext.ifName, closureContext.macAddress, ipRev4)
-	if err != nil {
-		return err
-	}
-
 	if closureContext.ipv6Addr != nil {
 		// Setup ipv6 route for the gateway
 		err = closureContext.netLink.RouteAdd(&netlink.Route{
@@ -199,9 +180,6 @@ func (closureContext *setupNamespaceClosureContext) run(_ ns.NetNS) error {
 			return errors.Wrap(err,
 				"setupNamespaceClosure engine: unable to add the route for the ipv6 gateway")
 		}
-
-		// Start dhclient for IPV6 address
-		return closureContext.dhclient.Start(closureContext.ifName, closureContext.macAddress, ipRev6)
 	}
 
 	return nil
@@ -220,33 +198,6 @@ func isRouteExistsError(err error) bool {
 
 // run defines the closure to execute within the container's namespace to tear it down
 func (closureContext *teardownNamespaceClosureContext) run(_ ns.NetNS) error {
-	link, err := getLinkByHardwareAddress(closureContext.netLink, closureContext.hardwareAddr)
-	if err != nil {
-		return errors.Wrapf(err,
-			"teardownNamespaceClosure engine: unable to get device with hardware address '%s'",
-			closureContext.hardwareAddr.String())
-	}
-
-	deviceName := link.Attrs().Name
-	log.Debugf("Found link device as (hardware address=%s): %s", closureContext.hardwareAddr, deviceName)
-
-	// Stop the dhclient process for IPV4 address
-	err = closureContext.dhclient.Stop(closureContext.hardwareAddr.String(), ipRev4,
-		closureContext.checkDHClientStateInteval, closureContext.maxDHClientStopWait)
-	if err != nil {
-		return err
-	}
-
-	if closureContext.stopDHClient6 {
-		// Stop the dhclient process for IPV6 address
-		err = closureContext.dhclient.Stop(closureContext.hardwareAddr.String(), ipRev6,
-			closureContext.checkDHClientStateInteval, closureContext.maxDHClientStopWait)
-		if err != nil {
-			return err
-		}
-	}
-
-	log.Infof("Cleaned up dhclient for device(hardware address=%s): %s", closureContext.hardwareAddr, deviceName)
 	return nil
 }
 

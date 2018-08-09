@@ -42,34 +42,27 @@ var (
 		"add commands: unable to map ipv4 address of ENI to a mac address")
 	unmappedIPV6AddressError = errors.New(
 		"add commands: unable to map ipv6 address of ENI to a mac address")
-	dhclientNotFoundError = errors.New(
-		"add commands: unable to find the dhclient executable in PATH")
 )
 
 // Add invokes the command to add ENI to a container's namespace
 func Add(args *skel.CmdArgs) error {
 	defer log.Flush()
-	return add(args, engine.New(), engine.NewDHClient())
+	return add(args, engine.New())
 }
 
 // Del invokes the command to remove ENI from a container's namespace
 func Del(args *skel.CmdArgs) error {
 	defer log.Flush()
-	return del(args, engine.New(), engine.NewDHClient())
+	return del(args, engine.New())
 }
 
-func add(args *skel.CmdArgs, engine engine.Engine, dhclient engine.DHClient) error {
+func add(args *skel.CmdArgs, engine engine.Engine) error {
 	conf, err := types.NewConf(args)
 	if err != nil {
 		// TODO: We log and return errors throughout this function.
 		// Either should be sufficient.
 		log.Errorf("Error loading config from args: %v", err)
 		return err
-	}
-
-	if ok := dhclient.IsExecutableInPath(); !ok {
-		log.Errorf("Unable to find the dhclient executable")
-		return dhclientNotFoundError
 	}
 
 	macAddressOfENI := conf.MACAddress
@@ -154,7 +147,7 @@ func add(args *skel.CmdArgs, engine engine.Engine, dhclient engine.DHClient) err
 	// do the same
 	err = engine.SetupContainerNamespace(args, networkDeviceName, macAddressOfENI,
 		fmt.Sprintf("%s/%s", conf.IPV4Address, ipv4Netmask),
-		ipv6Address, ipv4Gateway, ipv6Gateway, dhclient, conf.BlockIMDS)
+		ipv6Address, ipv4Gateway, ipv6Gateway, conf.BlockIMDS)
 	if err != nil {
 		log.Errorf("Unable to setup container's namespace (device name=%s): %v", networkDeviceName, err)
 		return err
@@ -174,27 +167,7 @@ func add(args *skel.CmdArgs, engine engine.Engine, dhclient engine.DHClient) err
 	return cnitypes.PrintResult(result, conf.CNIVersion)
 }
 
-// del removes the ENI setup within the container's namespace. It stops the dhclient
-// process so that the ENI device can be brought down properly
-func del(args *skel.CmdArgs, engine engine.Engine, dhclient engine.DHClient) error {
-	conf, err := types.NewConf(args)
-	if err != nil {
-		// TODO: We log and return errors throughout this function.
-		// Either should be sufficient.
-		log.Errorf("Error loading config from args: %v", err)
-		return err
-	}
-
-	stopDHClient6 := false
-	if conf.IPV6Address != "" {
-		stopDHClient6 = true
-	}
-	// Valid config. Tear it down!
-	err = engine.TeardownContainerNamespace(args.Netns, conf.MACAddress, stopDHClient6, dhclient)
-	if err != nil {
-		log.Errorf("Unable to teardown container's namespace (mac address=%s): %v", conf.MACAddress, err)
-		return err
-	}
-
+// del removes the ENI setup within the container's namespace.
+func del(args *skel.CmdArgs, engine engine.Engine) error {
 	return nil
 }
