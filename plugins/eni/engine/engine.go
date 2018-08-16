@@ -21,10 +21,7 @@ import (
 
 	"github.com/aws/amazon-ecs-cni-plugins/pkg/cninswrapper"
 	"github.com/aws/amazon-ecs-cni-plugins/pkg/ec2metadata"
-	"github.com/aws/amazon-ecs-cni-plugins/pkg/execwrapper"
-	"github.com/aws/amazon-ecs-cni-plugins/pkg/ioutilwrapper"
 	"github.com/aws/amazon-ecs-cni-plugins/pkg/netlinkwrapper"
-	"github.com/aws/amazon-ecs-cni-plugins/pkg/oswrapper"
 	"github.com/aws/amazon-ecs-cni-plugins/pkg/utils"
 	log "github.com/cihub/seelog"
 	"github.com/containernetworking/cni/pkg/skel"
@@ -72,11 +69,8 @@ type Engine interface {
 
 type engine struct {
 	metadata                         ec2metadata.EC2Metadata
-	ioutil                           ioutilwrapper.IOUtil
 	netLink                          netlinkwrapper.NetLink
 	ns                               cninswrapper.NS
-	exec                             execwrapper.Exec
-	os                               oswrapper.OS
 	ipv6GatewayTickDuration          time.Duration
 	maxTicksForRetrievingIPV6Gateway int
 	metadataMaxRetryCount            int
@@ -87,27 +81,18 @@ type engine struct {
 func New() Engine {
 	return create(
 		ec2metadata.NewEC2Metadata(),
-		ioutilwrapper.NewIOUtil(),
 		netlinkwrapper.NewNetLink(),
-		cninswrapper.NewNS(),
-		execwrapper.NewExec(),
-		oswrapper.NewOS())
+		cninswrapper.NewNS())
 }
 
 func create(metadata ec2metadata.EC2Metadata,
-	ioutil ioutilwrapper.IOUtil,
 	netLink netlinkwrapper.NetLink,
 	ns cninswrapper.NS,
-	exec execwrapper.Exec,
-	os oswrapper.OS,
 ) Engine {
 	return &engine{
 		metadata: metadata,
-		ioutil:   ioutil,
 		netLink:  netLink,
 		ns:       ns,
-		exec:     exec,
-		os:       os,
 		ipv6GatewayTickDuration:          ipv6GatewayTickDuration,
 		maxTicksForRetrievingIPV6Gateway: maxTicksForRetrievingIPV6Gateway,
 		metadataMaxRetryCount:            instanceMetadataMaxRetryCount,
