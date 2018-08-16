@@ -13,4 +13,4 @@
 
 package engine
 
-//go:generate go run ../../../scripts/mockgen.go github.com/aws/amazon-ecs-cni-plugins/plugins/eni/engine Engine,DHClient mocks/engine_mocks.go
+//go:generate go run ../../../scripts/mockgen.go github.com/aws/amazon-ecs-cni-plugins/plugins/eni/engine Engine mocks/engine_mocks.go
