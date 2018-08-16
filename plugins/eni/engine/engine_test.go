@@ -28,11 +28,8 @@ import (
 	"github.com/aws/amazon-ecs-cni-plugins/pkg/cninswrapper/mocks"
 	"github.com/aws/amazon-ecs-cni-plugins/pkg/cninswrapper/mocks_netns"
 	"github.com/aws/amazon-ecs-cni-plugins/pkg/ec2metadata/mocks"
-	"github.com/aws/amazon-ecs-cni-plugins/pkg/execwrapper/mocks"
-	"github.com/aws/amazon-ecs-cni-plugins/pkg/ioutilwrapper/mocks_ioutilwrapper"
 	"github.com/aws/amazon-ecs-cni-plugins/pkg/netlinkwrapper/mocks"
 	"github.com/aws/amazon-ecs-cni-plugins/pkg/netlinkwrapper/mocks_link"
-	"github.com/aws/amazon-ecs-cni-plugins/pkg/oswrapper/mocks"
 	"github.com/aws/amazon-ecs-cni-plugins/pkg/utils"
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
@@ -62,31 +59,25 @@ const (
 
 func setup(t *testing.T) (*gomock.Controller,
 	*mock_ec2metadata.MockEC2Metadata,
-	*mock_ioutilwrapper.MockIOUtil,
 	*mock_cninswrapper.MockNS,
-	*mock_netlinkwrapper.MockNetLink,
-	*mock_execwrapper.MockExec,
-	*mock_oswrapper.MockOS) {
+	*mock_netlinkwrapper.MockNetLink) {
 	ctrl := gomock.NewController(t)
 	return ctrl,
 		mock_ec2metadata.NewMockEC2Metadata(ctrl),
-		mock_ioutilwrapper.NewMockIOUtil(ctrl),
 		mock_cninswrapper.NewMockNS(ctrl),
-		mock_netlinkwrapper.NewMockNetLink(ctrl),
-		mock_execwrapper.NewMockExec(ctrl),
-		mock_oswrapper.NewMockOS(ctrl)
+		mock_netlinkwrapper.NewMockNetLink(ctrl)
 }
 
 func TestCreate(t *testing.T) {
-	ctrl, mockMetadata, mockIOUtil, mockNS, mockNetLink, mockExec, mockOS := setup(t)
+	ctrl, mockMetadata, mockNS, mockNetLink := setup(t)
 	defer ctrl.Finish()
 
-	engine := create(mockMetadata, mockIOUtil, mockNetLink, mockNS, mockExec, mockOS)
+	engine := create(mockMetadata, mockNetLink, mockNS)
 	assert.NotNil(t, engine)
 }
 
 func TestGetAllMACAddressesReturnsErrorOnGetMetadataError(t *testing.T) {
-	ctrl, mockMetadata, _, _, _, _, _ := setup(t)
+	ctrl, mockMetadata, _, _ := setup(t)
 	defer ctrl.Finish()
 
 	mockMetadata.EXPECT().GetMetadata(metadataNetworkInterfacesPath).Return("", errors.New("error"))
@@ -97,7 +88,7 @@ func TestGetAllMACAddressesReturnsErrorOnGetMetadataError(t *testing.T) {
 }
 
 func TestGetAllMACAddresses(t *testing.T) {
-	ctrl, mockMetadata, _, _, _, _, _ := setup(t)
+	ctrl, mockMetadata, _, _ := setup(t)
 	defer ctrl.Finish()
 
 	mockMetadata.EXPECT().GetMetadata(metadataNetworkInterfacesPath).Return("a\nb", nil)
@@ -110,7 +101,7 @@ func TestGetAllMACAddresses(t *testing.T) {
 }
 
 func TestGetMACAddressOfENIReturnsErrorOnGetMetadataError(t *testing.T) {
-	ctrl, mockMetadata, _, _, _, _, _ := setup(t)
+	ctrl, mockMetadata, _, _ := setup(t)
 	defer ctrl.Finish()
 
 	mockMetadata.EXPECT().GetMetadata(metadataNetworkInterfacesPath+firstMACAddress+metadataNetworkInterfaceIDPathSuffix).Return("", errors.New("error"))
@@ -123,7 +114,7 @@ func TestGetMACAddressOfENIReturnsErrorOnGetMetadataError(t *testing.T) {
 }
 
 func TestGetMACAddressOfENIReturnsErrorWhenNotFound(t *testing.T) {
-	ctrl, mockMetadata, _, _, _, _, _ := setup(t)
+	ctrl, mockMetadata, _, _ := setup(t)
 	defer ctrl.Finish()
 
 	mockMetadata.EXPECT().GetMetadata(metadataNetworkInterfacesPath+firstMACAddress+metadataNetworkInterfaceIDPathSuffix).Return(firstENIID, nil)
@@ -136,7 +127,7 @@ func TestGetMACAddressOfENIReturnsErrorWhenNotFound(t *testing.T) {
 }
 
 func TestGetMACAddressOfENI(t *testing.T) {
-	ctrl, mockMetadata, _, _, _, _, _ := setup(t)
+	ctrl, mockMetadata, _, _ := setup(t)
 	defer ctrl.Finish()
 
 	gomock.InOrder(
@@ -151,7 +142,7 @@ func TestGetMACAddressOfENI(t *testing.T) {
 }
 
 func TestGetInterfaceDeviceNameReturnsErrorOnInvalidMACAddress(t *testing.T) {
-	ctrl, _, _, _, _, _, _ := setup(t)
+	ctrl, _, _, _ := setup(t)
 	defer ctrl.Finish()
 
 	engine := &engine{}
@@ -161,7 +152,7 @@ func TestGetInterfaceDeviceNameReturnsErrorOnInvalidMACAddress(t *testing.T) {
 }
 
 func TestGetInterfaceDeviceNameReturnsErrorOnLinkListErrort(t *testing.T) {
-	ctrl, _, _, _, mockNetLink, _, _ := setup(t)
+	ctrl, _, _, mockNetLink := setup(t)
 	defer ctrl.Finish()
 
 	mockNetLink.EXPECT().LinkList().Return(nil, errors.New("error"))
@@ -172,7 +163,7 @@ func TestGetInterfaceDeviceNameReturnsErrorOnLinkListErrort(t *testing.T) {
 }
 
 func TestGetInterfaceDeviceNameReturnsErrorWhenDeviceNotFound(t *testing.T) {
-	ctrl, _, _, _, mockNetLink, _, _ := setup(t)
+	ctrl, _, _, mockNetLink := setup(t)
 	defer ctrl.Finish()
 
 	lo := mock_netlink.NewMockLink(ctrl)
@@ -195,7 +186,7 @@ func TestGetInterfaceDeviceNameReturnsErrorWhenDeviceNotFound(t *testing.T) {
 }
 
 func TestGetInterfaceDeviceNameReturnsDeviceWhenFound(t *testing.T) {
-	ctrl, _, _, _, mockNetLink, _, _ := setup(t)
+	ctrl, _, _, mockNetLink := setup(t)
 	defer ctrl.Finish()
 
 	lo := mock_netlink.NewMockLink(ctrl)
@@ -223,7 +214,7 @@ func TestGetInterfaceDeviceNameReturnsDeviceWhenFound(t *testing.T) {
 }
 
 func TestGetIPV4GatewayNetMaskReturnsErrorOnGetMetadataError(t *testing.T) {
-	ctrl, mockMetadata, _, _, _, _, _ := setup(t)
+	ctrl, mockMetadata, _, _ := setup(t)
 	defer ctrl.Finish()
 
 	mockMetadata.EXPECT().GetMetadata(
@@ -237,7 +228,7 @@ func TestGetIPV4GatewayNetMaskReturnsErrorOnGetMetadataError(t *testing.T) {
 }
 
 func TestGetIPV4GatewayNetMaskReturnsErrorWhenUnableToParseCIDRNetmaskResponse(t *testing.T) {
-	ctrl, mockMetadata, _, _, _, _, _ := setup(t)
+	ctrl, mockMetadata, _, _ := setup(t)
 	defer ctrl.Finish()
 
 	engine := &engine{metadata: mockMetadata}
@@ -250,7 +241,7 @@ func TestGetIPV4GatewayNetMaskReturnsErrorWhenUnableToParseCIDRNetmaskResponse(t
 }
 
 func TestGetIPV4GatewayNetMaskWhenUnableToParseIPV6CIDRNetmaskResponse(t *testing.T) {
-	ctrl, mockMetadata, _, _, _, _, _ := setup(t)
+	ctrl, mockMetadata, _, _ := setup(t)
 	defer ctrl.Finish()
 
 	mockMetadata.EXPECT().GetMetadata(
@@ -264,7 +255,7 @@ func TestGetIPV4GatewayNetMaskWhenUnableToParseIPV6CIDRNetmaskResponse(t *testin
 }
 
 func TestGetIPV4GatewayNetMask(t *testing.T) {
-	ctrl, mockMetadata, _, _, _, _, _ := setup(t)
+	ctrl, mockMetadata, _, _ := setup(t)
 	defer ctrl.Finish()
 
 	mockMetadata.EXPECT().GetMetadata(
@@ -299,7 +290,7 @@ func TestGetIPV6NetMaskInternal(t *testing.T) {
 }
 
 func TestGetIPV6NetMaskReturnsErrorOnGetMetadataError(t *testing.T) {
-	ctrl, mockMetadata, _, _, _, _, _ := setup(t)
+	ctrl, mockMetadata, _, _ := setup(t)
 	defer ctrl.Finish()
 
 	mockMetadata.EXPECT().GetMetadata(
@@ -311,7 +302,7 @@ func TestGetIPV6NetMaskReturnsErrorOnGetMetadataError(t *testing.T) {
 }
 
 func TestGetIPV6NetMaskReturnsErrorWhenUnableToParseCIDRNetmaskResponse(t *testing.T) {
-	ctrl, mockMetadata, _, _, _, _, _ := setup(t)
+	ctrl, mockMetadata, _, _ := setup(t)
 	defer ctrl.Finish()
 
 	engine := &engine{metadata: mockMetadata}
@@ -322,7 +313,7 @@ func TestGetIPV6NetMaskReturnsErrorWhenUnableToParseCIDRNetmaskResponse(t *testi
 }
 
 func TestGetIPV6NetMask(t *testing.T) {
-	ctrl, mockMetadata, _, _, _, _, _ := setup(t)
+	ctrl, mockMetadata, _, _ := setup(t)
 	defer ctrl.Finish()
 
 	mockMetadata.EXPECT().GetMetadata(
@@ -335,7 +326,7 @@ func TestGetIPV6NetMask(t *testing.T) {
 }
 
 func TestGetIPV6GatewayIPFromRoutesOnceRouteListReturnsError(t *testing.T) {
-	ctrl, _, _, _, mockNetLink, _, _ := setup(t)
+	ctrl, _, _, mockNetLink := setup(t)
 	defer ctrl.Finish()
 
 	mockLink := mock_netlink.NewMockLink(ctrl)
@@ -347,7 +338,7 @@ func TestGetIPV6GatewayIPFromRoutesOnceRouteListReturnsError(t *testing.T) {
 }
 
 func TestGetIPV6GatewayIPFromRoutesOnceRouteListReturnsFalseWhenNotFound(t *testing.T) {
-	ctrl, _, _, _, mockNetLink, _, _ := setup(t)
+	ctrl, _, _, mockNetLink := setup(t)
 	defer ctrl.Finish()
 
 	mockLink := mock_netlink.NewMockLink(ctrl)
@@ -383,7 +374,7 @@ func TestGetIPV6GatewayIPFromRoutesOnceRouteListReturnsFalseWhenNotFound(t *test
 }
 
 func TestGetIPV6GatewayIPFromRoutesOnceRouteListReturnsTrueWhenFound(t *testing.T) {
-	ctrl, _, _, _, mockNetLink, _, _ := setup(t)
+	ctrl, _, _, mockNetLink := setup(t)
 	defer ctrl.Finish()
 
 	mockLink := mock_netlink.NewMockLink(ctrl)
@@ -424,7 +415,7 @@ func TestGetIPV6GatewayIPFromRoutesOnceRouteListReturnsTrueWhenFound(t *testing.
 }
 
 func TestGetIPV6GatewayIPFromRoutesDoesNotRetryOnError(t *testing.T) {
-	ctrl, _, _, _, mockNetLink, _, _ := setup(t)
+	ctrl, _, _, mockNetLink := setup(t)
 	defer ctrl.Finish()
 
 	mockLink := mock_netlink.NewMockLink(ctrl)
@@ -438,7 +429,7 @@ func TestGetIPV6GatewayIPFromRoutesDoesNotRetryOnError(t *testing.T) {
 }
 
 func TestGetIPV6GatewayIPFromRoutesRetriesWhenNotFound(t *testing.T) {
-	ctrl, _, _, _, mockNetLink, _, _ := setup(t)
+	ctrl, _, _, mockNetLink := setup(t)
 	defer ctrl.Finish()
 
 	mockLink := mock_netlink.NewMockLink(ctrl)
@@ -451,7 +442,7 @@ func TestGetIPV6GatewayIPFromRoutesRetriesWhenNotFound(t *testing.T) {
 }
 
 func TestGetIPV6GatewayIPFromRoutes(t *testing.T) {
-	ctrl, _, _, _, mockNetLink, _, _ := setup(t)
+	ctrl, _, _, mockNetLink := setup(t)
 	defer ctrl.Finish()
 
 	mockLink := mock_netlink.NewMockLink(ctrl)
@@ -474,7 +465,7 @@ func TestGetIPV6GatewayIPFromRoutes(t *testing.T) {
 }
 
 func TestGetIPV6GatewayOnLinkByNameError(t *testing.T) {
-	ctrl, _, _, _, mockNetLink, _, _ := setup(t)
+	ctrl, _, _, mockNetLink := setup(t)
 	defer ctrl.Finish()
 
 	mockNetLink.EXPECT().LinkByName(deviceName).Return(nil, errors.New("error"))
@@ -489,7 +480,7 @@ func TestGetIPV6GatewayOnLinkByNameError(t *testing.T) {
 }
 
 func TestGetIPV6GatewayOnGetIPV6GatewayIPFromRoutesError(t *testing.T) {
-	ctrl, _, _, _, mockNetLink, _, _ := setup(t)
+	ctrl, _, _, mockNetLink := setup(t)
 	defer ctrl.Finish()
 
 	mockLink := mock_netlink.NewMockLink(ctrl)
@@ -508,7 +499,7 @@ func TestGetIPV6GatewayOnGetIPV6GatewayIPFromRoutesError(t *testing.T) {
 }
 
 func TestGetIPV6GatewayOnGetIPV6GatewayIPFromRoutesNotFound(t *testing.T) {
-	ctrl, _, _, _, mockNetLink, _, _ := setup(t)
+	ctrl, _, _, mockNetLink := setup(t)
 	defer ctrl.Finish()
 
 	mockLink := mock_netlink.NewMockLink(ctrl)
@@ -527,7 +518,7 @@ func TestGetIPV6GatewayOnGetIPV6GatewayIPFromRoutesNotFound(t *testing.T) {
 }
 
 func TestGetIPV6GatewayOnGetIPV6GatewayIPFromRoutesFound(t *testing.T) {
-	ctrl, _, _, _, mockNetLink, _, _ := setup(t)
+	ctrl, _, _, mockNetLink := setup(t)
 	defer ctrl.Finish()
 
 	mockLink := mock_netlink.NewMockLink(ctrl)
@@ -553,7 +544,7 @@ func TestGetIPV6GatewayOnGetIPV6GatewayIPFromRoutesFound(t *testing.T) {
 }
 
 func TestIsValidGetIPAddressReturnsErrorOnGetMetadataError(t *testing.T) {
-	ctrl, mockMetadata, _, _, _, _, _ := setup(t)
+	ctrl, mockMetadata, _, _ := setup(t)
 	defer ctrl.Finish()
 
 	suffix := "/suffix"
@@ -565,7 +556,7 @@ func TestIsValidGetIPAddressReturnsErrorOnGetMetadataError(t *testing.T) {
 }
 
 func TestDoesMACAddressMapToIPAddressReturnsFalseWhenNotFound(t *testing.T) {
-	ctrl, mockMetadata, _, _, _, _, _ := setup(t)
+	ctrl, mockMetadata, _, _ := setup(t)
 	defer ctrl.Finish()
 
 	suffix := "/suffix"
@@ -583,7 +574,7 @@ func TestDoesMACAddressMapToIPAddressReturnsFalseWhenNotFound(t *testing.T) {
 }
 
 func TestDoesMACAddressMapToIPAddressReturnsTrueWhenFound(t *testing.T) {
-	ctrl, mockMetadata, _, _, _, _, _ := setup(t)
+	ctrl, mockMetadata, _, _ := setup(t)
 	defer ctrl.Finish()
 
 	suffix := "/suffix"
@@ -601,7 +592,7 @@ func TestDoesMACAddressMapToIPAddressReturnsTrueWhenFound(t *testing.T) {
 }
 
 func TestIsValidGetIPAddressRetriesOnGetMetadataError(t *testing.T) {
-	ctrl, mockMetadata, _, _, _, _, _ := setup(t)
+	ctrl, mockMetadata, _, _ := setup(t)
 	defer ctrl.Finish()
 
 	suffix := "/suffix"
@@ -625,7 +616,7 @@ func TestIsValidGetIPAddressRetriesOnGetMetadataError(t *testing.T) {
 }
 
 func TestIsValidGetIPV4AddressReturnsError(t *testing.T) {
-	ctrl, mockMetadata, _, _, _, _, _ := setup(t)
+	ctrl, mockMetadata, _, _ := setup(t)
 	defer ctrl.Finish()
 
 	mockMetadata.EXPECT().GetMetadata(metadataNetworkInterfacesPath+firstMACAddressSanitized+metadataNetworkInterfaceIPV4AddressesSuffix).Return("", errors.New("error"))
@@ -636,7 +627,7 @@ func TestIsValidGetIPV4AddressReturnsError(t *testing.T) {
 }
 
 func TestIsValidGetIPV4Address(t *testing.T) {
-	ctrl, mockMetadata, _, _, _, _, _ := setup(t)
+	ctrl, mockMetadata, _, _ := setup(t)
 	defer ctrl.Finish()
 
 	mockMetadata.EXPECT().GetMetadata(metadataNetworkInterfacesPath+firstMACAddressSanitized+metadataNetworkInterfaceIPV4AddressesSuffix).Return(eniIPV4Address, nil)
@@ -648,7 +639,7 @@ func TestIsValidGetIPV4Address(t *testing.T) {
 }
 
 func TestIsValidGetIPV6AddressReturnsError(t *testing.T) {
-	ctrl, mockMetadata, _, _, _, _, _ := setup(t)
+	ctrl, mockMetadata, _, _ := setup(t)
 	defer ctrl.Finish()
 
 	mockMetadata.EXPECT().GetMetadata(metadataNetworkInterfacesPath+firstMACAddressSanitized+metadataNetworkInterfaceIPV6AddressesSuffix).Return("", errors.New("error"))
@@ -659,7 +650,7 @@ func TestIsValidGetIPV6AddressReturnsError(t *testing.T) {
 }
 
 func TestIsValidGetIPV6Address(t *testing.T) {
-	ctrl, mockMetadata, _, _, _, _, _ := setup(t)
+	ctrl, mockMetadata, _, _ := setup(t)
 	defer ctrl.Finish()
 
 	mockMetadata.EXPECT().GetMetadata(metadataNetworkInterfacesPath+firstMACAddressSanitized+metadataNetworkInterfaceIPV6AddressesSuffix).Return(eniIPV6Address, nil)
@@ -671,7 +662,7 @@ func TestIsValidGetIPV6Address(t *testing.T) {
 }
 
 func TestSetupContainerNamespaceFailsOnLinkByNameError(t *testing.T) {
-	ctrl, _, _, _, mockNetLink, _, _ := setup(t)
+	ctrl, _, _, mockNetLink := setup(t)
 	defer ctrl.Finish()
 
 	mockNetLink.EXPECT().LinkByName(deviceName).Return(nil, errors.New("error"))
@@ -684,7 +675,7 @@ func TestSetupContainerNamespaceFailsOnLinkByNameError(t *testing.T) {
 }
 
 func TestSetupContainerNamespaceFailsOnGetNSError(t *testing.T) {
-	ctrl, _, _, mockNS, mockNetLink, _, _ := setup(t)
+	ctrl, _, mockNS, mockNetLink := setup(t)
 	defer ctrl.Finish()
 
 	mockLink := mock_netlink.NewMockLink(ctrl)
@@ -701,7 +692,7 @@ func TestSetupContainerNamespaceFailsOnGetNSError(t *testing.T) {
 }
 
 func TestSetupContainerNamespaceFailsOnLinksetNsFdError(t *testing.T) {
-	ctrl, _, _, mockNS, mockNetLink, _, _ := setup(t)
+	ctrl, _, mockNS, mockNetLink := setup(t)
 	defer ctrl.Finish()
 
 	mockENILink := mock_netlink.NewMockLink(ctrl)
@@ -722,7 +713,7 @@ func TestSetupContainerNamespaceFailsOnLinksetNsFdError(t *testing.T) {
 }
 
 func TestSetupContainerNamespaceFailsOnParseAddrError(t *testing.T) {
-	ctrl, _, _, mockNS, mockNetLink, _, _ := setup(t)
+	ctrl, _, mockNS, mockNetLink := setup(t)
 	defer ctrl.Finish()
 
 	mockENILink := mock_netlink.NewMockLink(ctrl)
@@ -744,7 +735,7 @@ func TestSetupContainerNamespaceFailsOnParseAddrError(t *testing.T) {
 }
 
 func TestSetupContainerNamespaceFailsOnWithNetNSPathError(t *testing.T) {
-	ctrl, _, _, mockNS, mockNetLink, _, _ := setup(t)
+	ctrl, _, mockNS, mockNetLink := setup(t)
 	defer ctrl.Finish()
 
 	mockENILink := mock_netlink.NewMockLink(ctrl)
@@ -768,7 +759,7 @@ func TestSetupContainerNamespaceFailsOnWithNetNSPathError(t *testing.T) {
 }
 
 func TestSetupContainerNamespaceNoIPV6(t *testing.T) {
-	ctrl, _, _, mockNS, mockNetLink, _, _ := setup(t)
+	ctrl, _, mockNS, mockNetLink := setup(t)
 	defer ctrl.Finish()
 
 	mockENILink := mock_netlink.NewMockLink(ctrl)
@@ -792,7 +783,7 @@ func TestSetupContainerNamespaceNoIPV6(t *testing.T) {
 }
 
 func TestSetupContainerNamespace(t *testing.T) {
-	ctrl, _, _, mockNS, mockNetLink, _, _ := setup(t)
+	ctrl, _, mockNS, mockNetLink := setup(t)
 	defer ctrl.Finish()
 
 	mockENILink := mock_netlink.NewMockLink(ctrl)
@@ -818,7 +809,7 @@ func TestSetupContainerNamespace(t *testing.T) {
 }
 
 func TestSetupNamespaceClosureCreationFailsOnIPV4ParseAddrError(t *testing.T) {
-	ctrl, _, _, _, mockNetLink, _, _ := setup(t)
+	ctrl, _, _, mockNetLink := setup(t)
 	defer ctrl.Finish()
 
 	mockNetLink.EXPECT().ParseAddr(eniIPV4CIDRBlock).Return(nil, errors.New("error"))
@@ -827,7 +818,7 @@ func TestSetupNamespaceClosureCreationFailsOnIPV4ParseAddrError(t *testing.T) {
 }
 
 func TestSetupNamespaceClosureCreationFailsOnIPV4ParseGatewayError(t *testing.T) {
-	ctrl, _, _, _, mockNetLink, _, _ := setup(t)
+	ctrl, _, _, mockNetLink := setup(t)
 	defer ctrl.Finish()
 
 	ipv4Addr := &netlink.Addr{}
@@ -838,7 +829,7 @@ func TestSetupNamespaceClosureCreationFailsOnIPV4ParseGatewayError(t *testing.T)
 }
 
 func TestSetupNamespaceClosureCreationFailsOnIPV6ParseAddrError(t *testing.T) {
-	ctrl, _, _, _, mockNetLink, _, _ := setup(t)
+	ctrl, _, _, mockNetLink := setup(t)
 	defer ctrl.Finish()
 
 	ipv4Addr := &netlink.Addr{}
@@ -851,7 +842,7 @@ func TestSetupNamespaceClosureCreationFailsOnIPV6ParseAddrError(t *testing.T) {
 }
 
 func TestSetupNamespaceClosureCreationFailsOnIPV6ParseGatewayError(t *testing.T) {
-	ctrl, _, _, _, mockNetLink, _, _ := setup(t)
+	ctrl, _, _, mockNetLink := setup(t)
 	defer ctrl.Finish()
 
 	ipv4Addr := &netlink.Addr{}
@@ -866,7 +857,7 @@ func TestSetupNamespaceClosureCreationFailsOnIPV6ParseGatewayError(t *testing.T)
 }
 
 func TestSetupNamespaceClosureRunFailsOnLinkByNameError(t *testing.T) {
-	ctrl, _, _, _, mockNetLink, _, _ := setup(t)
+	ctrl, _, _, mockNetLink := setup(t)
 	defer ctrl.Finish()
 
 	mockNetNS := mock_ns.NewMockNetNS(ctrl)
@@ -883,7 +874,7 @@ func TestSetupNamespaceClosureRunFailsOnLinkByNameError(t *testing.T) {
 }
 
 func TestSetupNamespaceClosureRunFailsOnIPV4AddrAddError(t *testing.T) {
-	ctrl, _, _, _, mockNetLink, _, _ := setup(t)
+	ctrl, _, _, mockNetLink := setup(t)
 	defer ctrl.Finish()
 
 	mockNetNS := mock_ns.NewMockNetNS(ctrl)
@@ -903,7 +894,7 @@ func TestSetupNamespaceClosureRunFailsOnIPV4AddrAddError(t *testing.T) {
 }
 
 func TestSetupNamespaceClosureRunFailsOnIPV6AddrAddError(t *testing.T) {
-	ctrl, _, _, _, mockNetLink, _, _ := setup(t)
+	ctrl, _, _, mockNetLink := setup(t)
 	defer ctrl.Finish()
 
 	mockNetNS := mock_ns.NewMockNetNS(ctrl)
@@ -926,7 +917,7 @@ func TestSetupNamespaceClosureRunFailsOnIPV6AddrAddError(t *testing.T) {
 }
 
 func TestSetupNamespaceClosureRunFailsOnLinkSetupError(t *testing.T) {
-	ctrl, _, _, _, mockNetLink, _, _ := setup(t)
+	ctrl, _, _, mockNetLink := setup(t)
 	defer ctrl.Finish()
 
 	mockNetNS := mock_ns.NewMockNetNS(ctrl)
@@ -947,7 +938,7 @@ func TestSetupNamespaceClosureRunFailsOnLinkSetupError(t *testing.T) {
 }
 
 func TestSetupNamespaceClosureRunFailsOnBlackholeRouteAddError(t *testing.T) {
-	ctrl, _, _, _, mockNetLink, _, _ := setup(t)
+	ctrl, _, _, mockNetLink := setup(t)
 	defer ctrl.Finish()
 
 	mockNetNS := mock_ns.NewMockNetNS(ctrl)
@@ -975,7 +966,7 @@ func TestSetupNamespaceClosureRunFailsOnBlackholeRouteAddError(t *testing.T) {
 }
 
 func TestSetupNamespaceClosureRunFailsOnIPV4RouteAddError(t *testing.T) {
-	ctrl, _, _, _, mockNetLink, _, _ := setup(t)
+	ctrl, _, _, mockNetLink := setup(t)
 	defer ctrl.Finish()
 
 	mockNetNS := mock_ns.NewMockNetNS(ctrl)
@@ -999,7 +990,7 @@ func TestSetupNamespaceClosureRunFailsOnIPV4RouteAddError(t *testing.T) {
 }
 
 func TestSetupNamespaceClosureRunFailsOnIPV6RouteAddError(t *testing.T) {
-	ctrl, _, _, _, mockNetLink, _, _ := setup(t)
+	ctrl, _, _, mockNetLink := setup(t)
 	defer ctrl.Finish()
 
 	mockNetNS := mock_ns.NewMockNetNS(ctrl)
@@ -1046,7 +1037,7 @@ func TestIsRouteExistsError(t *testing.T) {
 }
 
 func TestSetupNamespaceClosureRunNoIPV6(t *testing.T) {
-	ctrl, _, _, _, mockNetLink, _, _ := setup(t)
+	ctrl, _, _, mockNetLink := setup(t)
 	defer ctrl.Finish()
 
 	mockNetNS := mock_ns.NewMockNetNS(ctrl)
@@ -1070,7 +1061,7 @@ func TestSetupNamespaceClosureRunNoIPV6(t *testing.T) {
 }
 
 func TestSetupNamespaceClosureRunBlockIMDS(t *testing.T) {
-	ctrl, _, _, _, mockNetLink, _, _ := setup(t)
+	ctrl, _, _, mockNetLink := setup(t)
 	defer ctrl.Finish()
 
 	mockNetNS := mock_ns.NewMockNetNS(ctrl)
@@ -1110,7 +1101,7 @@ func TestSetupNamespaceClosureRunBlockIMDS(t *testing.T) {
 }
 
 func TestSetupNamespaceClosureRun(t *testing.T) {
-	ctrl, _, _, _, mockNetLink, _, _ := setup(t)
+	ctrl, _, _, mockNetLink := setup(t)
 	defer ctrl.Finish()
 
 	mockNetNS := mock_ns.NewMockNetNS(ctrl)
@@ -1143,7 +1134,7 @@ func TestSetupNamespaceClosureRun(t *testing.T) {
 }
 
 func TestGetLinkByHardwareAddressFailsOnListLinkError(t *testing.T) {
-	ctrl, _, _, _, mockNetLink, _, _ := setup(t)
+	ctrl, _, _, mockNetLink := setup(t)
 	defer ctrl.Finish()
 
 	hwAddress := net.HardwareAddr{}
@@ -1154,7 +1145,7 @@ func TestGetLinkByHardwareAddressFailsOnListLinkError(t *testing.T) {
 }
 
 func TestGetLinkByHardwareAddressFailsWhenLinkNotFound(t *testing.T) {
-	ctrl, _, _, _, mockNetLink, _, _ := setup(t)
+	ctrl, _, _, mockNetLink := setup(t)
 	defer ctrl.Finish()
 
 	lo := mock_netlink.NewMockLink(ctrl)
@@ -1177,7 +1168,7 @@ func TestGetLinkByHardwareAddressFailsWhenLinkNotFound(t *testing.T) {
 }
 
 func TestGetLinkByHardwareAddress(t *testing.T) {
-	ctrl, _, _, _, mockNetLink, _, _ := setup(t)
+	ctrl, _, _, mockNetLink := setup(t)
 	defer ctrl.Finish()
 
 	lo := mock_netlink.NewMockLink(ctrl)
