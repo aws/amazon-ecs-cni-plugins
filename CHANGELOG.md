@@ -1,3 +1,6 @@
+## 2018.10.0
+* Enhancement - Remove dependency on DHCP client. [#83](https://github.com/aws/amazon-ecs-cni-plugins/pull/83)
+
 ## 2018.08.0
 * Enhancement - Reduced the ENI plugin execution time by removing the 
   dependency on instance metadata service (by adding the `subnetgateway-ipv4-address`
