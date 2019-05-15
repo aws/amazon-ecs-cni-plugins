@@ -13,3 +13,6 @@ For more information about Plugins in this project, see the individual READMEs.
 * [ECS ENI Plugin](plugins/eni/README.md): configures the network namespace of the container with an ENI device
 * [ECS Bridge Plugin](plugins/ecs-bridge/README.md): configures the network namespace of the container to be able to communicate with the credentials endpoint of the ECS Agent
 * [ECS IPAM Plugin](plugins/ipam/README.md): allocates an IP address and constructs Gateway and Route structures used by the ECS Bridge plugin to configure the bridge and veth pair in the container network namespace
+
+## Security disclosures
+If you think you’ve found a potential security issue, please do not post it in the Issues.  Instead, please follow the instructions [here](https://aws.amazon.com/security/vulnerability-reporting/) or [email AWS security directly](mailto:aws-security@amazon.com).
