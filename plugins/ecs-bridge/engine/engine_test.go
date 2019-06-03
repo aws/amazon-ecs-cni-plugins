@@ -133,7 +133,23 @@ func TestCreateBridgeLookupBridgeError(t *testing.T) {
 	assert.Error(t, err)
 }
 
-func TestCreateBridgeLinkAddError(t *testing.T) {
+func TestCreateBridgeLinkAddExistErrorLinkSetUpSuccess(t *testing.T) {
+	ctrl, _, mockNetLink, _, _, _ := setup(t)
+	defer ctrl.Finish()
+
+	bridgeLink := &netlink.Bridge{}
+	gomock.InOrder(
+		mockNetLink.EXPECT().LinkByName(bridgeName).Return(nil, netlink.LinkNotFoundError{}),
+		mockNetLink.EXPECT().LinkAdd(gomock.Any()).Return(errors.New("file exists")),
+		mockNetLink.EXPECT().LinkByName(bridgeName).Return(bridgeLink, nil),
+		mockNetLink.EXPECT().LinkSetUp(bridgeLink).Return(nil),
+	)
+	engine := &engine{netLink: mockNetLink}
+	_, err := engine.CreateBridge(bridgeName, mtu)
+	assert.NoError(t, err)
+}
+
+func TestCreateBridgeLinkAddOtherError(t *testing.T) {
 	ctrl, _, mockNetLink, _, _, _ := setup(t)
 	defer ctrl.Finish()
 
@@ -640,7 +656,39 @@ func TestConfigureBridgeAddrListWhenNotFound(t *testing.T) {
 	assert.Error(t, err)
 }
 
-func TestConfigureBridgeAddrAddError(t *testing.T) {
+func TestConfigureBridgeAddrAddFileExistsError(t *testing.T) {
+	ctrl, _, mockNetLink, _, _, _ := setup(t)
+	defer ctrl.Finish()
+
+	bridgeLink := &netlink.Bridge{}
+	gatewayIPAddr := net.ParseIP(gatewayIPCIDR)
+	ipConfig := &current.IPConfig{
+		Address: net.IPNet{
+			Mask: net.CIDRMask(31, 32),
+		},
+		Gateway: gatewayIPAddr,
+	}
+
+	result := &current.Result{
+		IPs: []*current.IPConfig{ipConfig},
+	}
+
+	bridgeAddr := &netlink.Addr{
+		IPNet: &net.IPNet{
+			IP:   gatewayIPAddr,
+			Mask: net.CIDRMask(31, 32),
+		},
+	}
+	gomock.InOrder(
+		mockNetLink.EXPECT().AddrList(bridgeLink, syscall.AF_INET).Return(nil, nil),
+		mockNetLink.EXPECT().AddrAdd(bridgeLink, bridgeAddr).Return(errors.New("file exists")),
+	)
+	engine := &engine{netLink: mockNetLink}
+	err := engine.ConfigureBridge(result, bridgeLink)
+	assert.NoError(t, err)
+}
+
+func TestConfigureBridgeAddrAddOtherError(t *testing.T) {
 	ctrl, _, mockNetLink, _, _, _ := setup(t)
 	defer ctrl.Finish()
 
