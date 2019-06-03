@@ -27,21 +27,28 @@ import (
 // connect container's namespace with the bridge
 func Add(args *skel.CmdArgs) error {
 	defer log.Flush()
-	return add(args, engine.New())
+	err := add(args, engine.New())
+	if err != nil {
+		log.Errorf("Error executing ADD command: %v", err)
+	}
+
+	return err
 }
 
 // Del invokes the command to tear down the bridge and the veth pair
 func Del(args *skel.CmdArgs) error {
 	defer log.Flush()
-	return del(args, engine.New())
+	err := del(args, engine.New())
+	if err != nil {
+		log.Errorf("Error executing DEL command: %v", err)
+	}
+
+	return err
 }
 
 func add(args *skel.CmdArgs, engine engine.Engine) error {
 	conf, err := types.NewConf(args)
 	if err != nil {
-		// TODO: We log and return errors throughout this function.
-		// Either should be sufficient.
-		log.Errorf("Error loading config from args: %v", err)
 		return err
 	}
 
@@ -108,9 +115,6 @@ func add(args *skel.CmdArgs, engine engine.Engine) error {
 func del(args *skel.CmdArgs, engine engine.Engine) error {
 	conf, err := types.NewConf(args)
 	if err != nil {
-		// TODO: We log and return errors throughout this function.
-		// Either should be sufficient.
-		log.Errorf("Error loading config from args: %v", err)
 		return err
 	}
 

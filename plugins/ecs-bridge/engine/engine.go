@@ -15,6 +15,7 @@ package engine
 
 import (
 	"net"
+	"strings"
 	"syscall"
 
 	"github.com/aws/amazon-ecs-cni-plugins/pkg/cniipamwrapper"
@@ -26,10 +27,14 @@ import (
 	"github.com/vishvananda/netlink"
 )
 
-// zeroLengthIPString is what we expect net.IP.String() to return if the
-// ip has length 0. We use this to determing if an IP is empty.
-// Refer https://golang.org/pkg/net/#IP.String
-const zeroLengthIPString = "<nil>"
+const  (
+	// zeroLengthIPString is what we expect net.IP.String() to return if the
+	// ip has length 0. We use this to determing if an IP is empty.
+	// Refer https://golang.org/pkg/net/#IP.String
+	zeroLengthIPString = "<nil>"
+
+	fileExistsErrMsg = "file exists"
+)
 
 // Engine represents the execution engine for the ECS Bridge plugin.
 // It defines all the operations performed during the execution of the
@@ -73,7 +78,12 @@ func (engine *engine) CreateBridge(bridgeName string, mtu int) (*netlink.Bridge,
 	if bridge == nil {
 		err = engine.createBridge(bridgeName, mtu)
 		if err != nil {
-			return nil, err
+			if !strings.Contains(err.Error(), fileExistsErrMsg) {
+				return nil, err
+			}
+			// If the error returned by createBridge is that the bridge already exists, proceed to
+			// lookupBridge because that means the bridge was created by someone else right before
+			// we tried creating it, which is fine
 		}
 
 		// We need to lookup the bridge link again because LinkAdd
@@ -241,14 +251,21 @@ func (engine *engine) ConfigureBridge(result *current.Result, bridge *netlink.Br
 	bridgeAddr := &netlink.Addr{
 		IPNet: resultBridgeNetwork,
 	}
-	err = engine.netLink.AddrAdd(bridge, bridgeAddr)
-	if err != nil {
-		return errors.Wrapf(err,
-			"bridge configure: unable to assign ip address to bridge %s",
-			bridge.Attrs().Name)
+
+	addrAddErr := engine.netLink.AddrAdd(bridge, bridgeAddr)
+	if addrAddErr == nil {
+		return nil
 	}
 
-	return nil
+	if strings.Contains(addrAddErr.Error(), fileExistsErrMsg) {
+		// if we fail to assign ip address because of a file exist error, the error is probably caused by someone else
+		// assigned the address right before we assigned it, which is fine
+		return nil
+	}
+
+	return errors.Wrapf(addrAddErr,
+		"bridge configure: unable to assign ip address to bridge %s",
+		bridge.Attrs().Name)
 }
 
 // GetInterfaceIPV4Address gets the ipv4 address of a given interface
