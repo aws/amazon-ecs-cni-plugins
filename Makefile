@@ -71,6 +71,9 @@ unit-test: $(SOURCES)
 integration-test: $(SOURCE)
 	go test -v -tags integration -race -timeout 10s ./pkg/... ./plugins/...
 
+sudo-integration-test: $(SOURCE)
+	sudo -E ${GO_EXECUTABLE} test -v -tags "sudo integration" -race -timeout 10s ./plugins/...
+
 e2e-test:  $(SOURCE) plugins
 	sudo -E CNI_PATH=${ROOT}/bin/plugins ${GO_EXECUTABLE} test -v -tags e2e -race -timeout 120s ./plugins/...
 
