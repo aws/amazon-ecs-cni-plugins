@@ -1,3 +1,6 @@
+## 2019.06.0
+* Bug - Fixed race condition in ecs-bridge plugin. [#90](https://github.com/aws/amazon-ecs-cni-plugins/pull/90)
+
 ## 2018.10.0
 * Enhancement - Remove dependency on DHCP client. [#83](https://github.com/aws/amazon-ecs-cni-plugins/pull/83)
 
