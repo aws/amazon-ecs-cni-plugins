@@ -1,7 +1,7 @@
 {
 	"ImportPath": "github.com/aws/amazon-ecs-cni-plugins",
 	"GoVersion": "go1.7",
-	"GodepVersion": "v79",
+	"GodepVersion": "v80",
 	"Packages": [
 		"./..."
 	],
@@ -243,7 +243,8 @@
 		},
 		{
 			"ImportPath": "github.com/golang/mock/gomock",
-			"Rev": "bd3c8e81be01eef76d4b503f5e687d2d1354d2d9"
+			"Comment": "v1.3.1-2-gdd8d2a2",
+			"Rev": "dd8d2a22370e4c8a334e80ca8477f71356c8e4bb"
 		},
 		{
 			"ImportPath": "github.com/jmespath/go-jmespath",
