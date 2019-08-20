@@ -33,6 +33,7 @@ type NetConf struct {
 	IPV6Address              string `json:"ipv6-address"`
 	BlockIMDS                bool   `json:"block-instance-metadata"`
 	SubnetGatewayIPV4Address string `json:"subnetgateway-ipv4-address"`
+	StayDown                 bool   `json:"stay-down"`
 }
 
 // NewConf creates a new NetConf object by parsing the arguments supplied

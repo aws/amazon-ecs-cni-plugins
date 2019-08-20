@@ -22,116 +22,86 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-var validConfigNoIPV6 = `{"eni":"eni1", "ipv4-address":"10.11.12.13", "mac":"01:23:45:67:89:ab"}`
-var configNoENIID = `{"ipv4-address":"10.11.12.13", "mac":"01:23:45:67:89:ab"}`
-var configNoIPV4Address = `{"eni":"eni1", "mac":"01:23:45:67:89:ab"}`
-var configNoMAC = `{"eni":"eni1", "ipv4-address":"10.11.12.13"}`
-var configInvalidIPV4AddressMalformed = `{"eni":"eni1", "ipv4-address":"1", "mac":"01:23:45:67:89:ab"}`
-var configInvalidIPV4AddressIPV6 = `{"eni":"eni1", "ipv4-address":"2001:db8::68", "mac":"01:23:45:67:89:ab"}`
-var configMalformedMAC = `{"eni":"eni1", "ipv4-address":"10.11.12.13", "mac":"01:23:45:67:89"}`
-var validConfigWithIPV6 = `{
+var (
+	validConfigNoIPV6                 = `{"eni":"eni1", "ipv4-address":"10.11.12.13", "mac":"01:23:45:67:89:ab"}`
+	configNoENIID                     = `{"ipv4-address":"10.11.12.13", "mac":"01:23:45:67:89:ab"}`
+	configNoIPV4Address               = `{"eni":"eni1", "mac":"01:23:45:67:89:ab"}`
+	configNoMAC                       = `{"eni":"eni1", "ipv4-address":"10.11.12.13"}`
+	configInvalidIPV4AddressMalformed = `{"eni":"eni1", "ipv4-address":"1", "mac":"01:23:45:67:89:ab"}`
+	configInvalidIPV4AddressIPV6      = `{"eni":"eni1", "ipv4-address":"2001:db8::68", "mac":"01:23:45:67:89:ab"}`
+	configMalformedMAC                = `{"eni":"eni1", "ipv4-address":"10.11.12.13", "mac":"01:23:45:67:89"}`
+	validConfigWithIPV6               = `{
 	"eni":"eni1",
 	"ipv4-address":"10.11.12.13",
 	"mac":"01:23:45:67:89:ab",
 	"ipv6-address":"2001:db8::68"
 }`
-var configInvalidIPV6AddressMalformed = `{
+	validConfigWithAllFields = `{
+	"eni":"eni1",
+	"ipv4-address":"10.11.12.13",
+	"mac":"01:23:45:67:89:ab",
+	"ipv6-address":"2001:db8::68",
+	"block-instance-metadata":true,
+	"subnetgateway-ipv4-address":"10.11.0.1/24",
+	"stay-down":true
+}`
+	configInvalidIPV6AddressMalformed = `{
 	"eni":"eni1",
 	"ipv4-address":"10.11.12.13",
 	"mac":"01:23:45:67:89:ab",
 	"ipv6-address":"2001:::68"
 }`
-var configInvalidIPV6AddressIPV4 = `{
+	configInvalidIPV6AddressIPV4 = `{
 	"eni":"eni1",
 	"ipv4-address":"10.11.12.13",
 	"mac":"01:23:45:67:89:ab",
 	"ipv6-address":"10.11.12.13"
 }`
+)
 
 func TestNewConfWithValidConfig(t *testing.T) {
-	args := &skel.CmdArgs{
-		StdinData: []byte(validConfigWithIPV6),
+	testCases := []struct {
+		input string
+		name  string
+	}{
+		{validConfigNoIPV6, "no ipv6"},
+		{validConfigWithIPV6, "with ipv6"},
+		{validConfigWithAllFields, "all fields"},
 	}
-	_, err := NewConf(args)
-	assert.NoError(t, err)
-}
-
-func TestNewConfWithEmptyConfig(t *testing.T) {
-	args := &skel.CmdArgs{
-		StdinData: []byte(""),
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			args := &skel.CmdArgs{
+				StdinData: []byte(tc.input),
+			}
+			_, err := NewConf(args)
+			assert.NoError(t, err)
+		})
 	}
-	_, err := NewConf(args)
-	assert.Error(t, err)
 }
 
 func TestNewConfWithInvalidConfig(t *testing.T) {
-	args := &skel.CmdArgs{
-		StdinData: []byte(`{"foo":"eni1"}`),
+	testCases := []struct {
+		input string
+		name  string
+	}{
+		{`{"foo":"eni1"}`, "invalid keys"},
+		{configNoENIID, "no eni id"},
+		{configNoIPV4Address, "no ipv4 addr"},
+		{configNoMAC, "no mac"},
+		{configInvalidIPV4AddressMalformed, "malformed ipv4 addr"},
+		{configInvalidIPV4AddressIPV6, "invalid ipv4 address"},
+		{configMalformedMAC, "malformed mac"},
+		{configInvalidIPV6AddressMalformed, "malformed ipv5 address"},
+		{configInvalidIPV6AddressIPV4, "valid ipv4 malformed ipv6"},
+		{"", "empty config"},
 	}
-	_, err := NewConf(args)
-	assert.Error(t, err)
-}
-
-func TestNewConfWithMissingENIIDConfig(t *testing.T) {
-	args := &skel.CmdArgs{
-		StdinData: []byte(configNoENIID),
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			args := &skel.CmdArgs{
+				StdinData: []byte(tc.input),
+			}
+			_, err := NewConf(args)
+			assert.Error(t, err)
+		})
 	}
-	_, err := NewConf(args)
-	assert.Error(t, err)
-}
-
-func TestNewConfWithMissingIPV4AddressConfig(t *testing.T) {
-	args := &skel.CmdArgs{
-		StdinData: []byte(configNoIPV4Address),
-	}
-	_, err := NewConf(args)
-	assert.Error(t, err)
-}
-
-func TestNewConfWithMissingMACConfig(t *testing.T) {
-	args := &skel.CmdArgs{
-		StdinData: []byte(configNoMAC),
-	}
-	_, err := NewConf(args)
-	assert.Error(t, err)
-}
-
-func TestNewConfWithInvalidMalformedIPV4AddressConfig(t *testing.T) {
-	args := &skel.CmdArgs{
-		StdinData: []byte(configInvalidIPV4AddressMalformed),
-	}
-	_, err := NewConf(args)
-	assert.Error(t, err)
-}
-
-func TestNewConfWithInvalidIPV4AddressIPV6Config(t *testing.T) {
-	args := &skel.CmdArgs{
-		StdinData: []byte(configInvalidIPV4AddressIPV6),
-	}
-	_, err := NewConf(args)
-	assert.Error(t, err)
-}
-
-func TestNewConfWithInvalidMACConfig(t *testing.T) {
-	args := &skel.CmdArgs{
-		StdinData: []byte(configMalformedMAC),
-	}
-	_, err := NewConf(args)
-	assert.Error(t, err)
-}
-
-func TestNewConfWithInvalidIPV4AddressMalformed(t *testing.T) {
-	args := &skel.CmdArgs{
-		StdinData: []byte(configInvalidIPV6AddressMalformed),
-	}
-	_, err := NewConf(args)
-	assert.Error(t, err)
-}
-
-func TestNewConfWithInvalidIPV4AddressIPv4(t *testing.T) {
-	args := &skel.CmdArgs{
-		StdinData: []byte(configInvalidIPV6AddressIPV4),
-	}
-	_, err := NewConf(args)
-	assert.Error(t, err)
 }
