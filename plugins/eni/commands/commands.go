@@ -147,7 +147,7 @@ func add(args *skel.CmdArgs, engine engine.Engine) error {
 	// do the same
 	err = engine.SetupContainerNamespace(args, networkDeviceName, macAddressOfENI,
 		fmt.Sprintf("%s/%s", conf.IPV4Address, ipv4Netmask),
-		ipv6Address, ipv4Gateway, ipv6Gateway, conf.BlockIMDS)
+		ipv6Address, ipv4Gateway, ipv6Gateway, conf.BlockIMDS, conf.StayDown)
 	if err != nil {
 		log.Errorf("Unable to setup container's namespace (device name=%s): %v", networkDeviceName, err)
 		return err

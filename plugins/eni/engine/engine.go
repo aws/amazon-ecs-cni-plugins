@@ -63,7 +63,8 @@ type Engine interface {
 	DoesMACAddressMapToIPV6Address(macAddress string, ipv4Address string) (bool, error)
 	SetupContainerNamespace(args *skel.CmdArgs, deviceName string, macAddress string,
 		ipv4Address string, ipv6Address string,
-		ipv4Gateway string, ipv6Gateway string, blockIMDS bool) error
+		ipv4Gateway string, ipv6Gateway string,
+		blockIMDS bool, stayDown bool) error
 	TeardownContainerNamespace(netns string, macAddress string) error
 }
 
@@ -90,9 +91,9 @@ func create(metadata ec2metadata.EC2Metadata,
 	ns cninswrapper.NS,
 ) Engine {
 	return &engine{
-		metadata: metadata,
-		netLink:  netLink,
-		ns:       ns,
+		metadata:                         metadata,
+		netLink:                          netLink,
+		ns:                               ns,
 		ipv6GatewayTickDuration:          ipv6GatewayTickDuration,
 		maxTicksForRetrievingIPV6Gateway: maxTicksForRetrievingIPV6Gateway,
 		metadataMaxRetryCount:            instanceMetadataMaxRetryCount,
@@ -318,7 +319,8 @@ func (engine *engine) SetupContainerNamespace(args *skel.CmdArgs,
 	ipv6Address string,
 	ipv4Gateway string,
 	ipv6Gateway string,
-	blockIMDS bool) error {
+	blockIMDS bool,
+	stayDown bool) error {
 	// Get the device link for the ENI
 	eniLink, err := engine.netLink.LinkByName(deviceName)
 	if err != nil {
@@ -340,6 +342,10 @@ func (engine *engine) SetupContainerNamespace(args *skel.CmdArgs,
 			"setupContainerNamespace engine: unable to move device '%s' to container namespace '%s'", deviceName, args.Netns)
 	}
 
+	if stayDown {
+		// The 'stay-down' config is set. No need to configure anything else.
+		return nil
+	}
 	// Generate the closure to execute within the container's namespace
 	toRun, err := newSetupNamespaceClosureContext(engine.netLink, args.IfName, deviceName, macAddress,
 		ipv4Address, ipv6Address, ipv4Gateway, ipv6Gateway, blockIMDS)
