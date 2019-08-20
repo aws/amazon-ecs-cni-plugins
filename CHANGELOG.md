@@ -1,3 +1,6 @@
+## 2019.09.0
+* Enhancement - Add `stay-down` config to ENI plugin. [#94](https://github.com/aws/amazon-ecs-cni-plugins/pull/94)
+
 ## 2019.06.0
 * Bug - Fixed race condition in ecs-bridge plugin. [#90](https://github.com/aws/amazon-ecs-cni-plugins/pull/90)
 
