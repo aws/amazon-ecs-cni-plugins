@@ -25,11 +25,11 @@ import (
 
 	"github.com/containernetworking/cni/pkg/skel"
 
-	"github.com/aws/amazon-ecs-cni-plugins/pkg/cninswrapper/mocks"
-	"github.com/aws/amazon-ecs-cni-plugins/pkg/cninswrapper/mocks_netns"
-	"github.com/aws/amazon-ecs-cni-plugins/pkg/ec2metadata/mocks"
-	"github.com/aws/amazon-ecs-cni-plugins/pkg/netlinkwrapper/mocks"
-	"github.com/aws/amazon-ecs-cni-plugins/pkg/netlinkwrapper/mocks_link"
+	mock_cninswrapper "github.com/aws/amazon-ecs-cni-plugins/pkg/cninswrapper/mocks"
+	mock_ns "github.com/aws/amazon-ecs-cni-plugins/pkg/cninswrapper/mocks_netns"
+	mock_ec2metadata "github.com/aws/amazon-ecs-cni-plugins/pkg/ec2metadata/mocks"
+	mock_netlinkwrapper "github.com/aws/amazon-ecs-cni-plugins/pkg/netlinkwrapper/mocks"
+	mock_netlink "github.com/aws/amazon-ecs-cni-plugins/pkg/netlinkwrapper/mocks_link"
 	"github.com/aws/amazon-ecs-cni-plugins/pkg/utils"
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
@@ -670,7 +670,7 @@ func TestSetupContainerNamespaceFailsOnLinkByNameError(t *testing.T) {
 	err := engine.SetupContainerNamespace(&skel.CmdArgs{
 		Netns:  "ns1",
 		IfName: "eth0",
-	}, deviceName, eniMACAddress, eniIPV4CIDRBlock, eniIPV6CIDRBlock, eniIPV4Gateway, eniIPV6Gateway, false)
+	}, deviceName, eniMACAddress, eniIPV4CIDRBlock, eniIPV6CIDRBlock, eniIPV4Gateway, eniIPV6Gateway, false, false)
 	assert.Error(t, err)
 }
 
@@ -687,7 +687,7 @@ func TestSetupContainerNamespaceFailsOnGetNSError(t *testing.T) {
 	err := engine.SetupContainerNamespace(&skel.CmdArgs{
 		Netns:  "ns1",
 		IfName: "eth0",
-	}, deviceName, eniMACAddress, eniIPV4CIDRBlock, eniIPV6CIDRBlock, eniIPV4Gateway, eniIPV6Gateway, false)
+	}, deviceName, eniMACAddress, eniIPV4CIDRBlock, eniIPV6CIDRBlock, eniIPV4Gateway, eniIPV6Gateway, false, false)
 	assert.Error(t, err)
 }
 
@@ -708,7 +708,7 @@ func TestSetupContainerNamespaceFailsOnLinksetNsFdError(t *testing.T) {
 	err := engine.SetupContainerNamespace(&skel.CmdArgs{
 		Netns:  "ns1",
 		IfName: "eth0",
-	}, deviceName, eniMACAddress, eniIPV4CIDRBlock, eniIPV6CIDRBlock, eniIPV4Gateway, eniIPV6Gateway, false)
+	}, deviceName, eniMACAddress, eniIPV4CIDRBlock, eniIPV6CIDRBlock, eniIPV4Gateway, eniIPV6Gateway, false, false)
 	assert.Error(t, err)
 }
 
@@ -730,7 +730,7 @@ func TestSetupContainerNamespaceFailsOnParseAddrError(t *testing.T) {
 	err := engine.SetupContainerNamespace(&skel.CmdArgs{
 		Netns:  "ns1",
 		IfName: "eth0",
-	}, deviceName, eniMACAddress, eniIPV4CIDRBlock, eniIPV6CIDRBlock, eniIPV4Gateway, eniIPV6Gateway, false)
+	}, deviceName, eniMACAddress, eniIPV4CIDRBlock, eniIPV6CIDRBlock, eniIPV4Gateway, eniIPV6Gateway, false, false)
 	assert.Error(t, err)
 }
 
@@ -754,7 +754,7 @@ func TestSetupContainerNamespaceFailsOnWithNetNSPathError(t *testing.T) {
 	err := engine.SetupContainerNamespace(&skel.CmdArgs{
 		Netns:  "ns1",
 		IfName: "eth0",
-	}, deviceName, eniMACAddress, eniIPV4CIDRBlock, "", eniIPV4Gateway, "", false)
+	}, deviceName, eniMACAddress, eniIPV4CIDRBlock, "", eniIPV4Gateway, "", false, false)
 	assert.Error(t, err)
 }
 
@@ -778,7 +778,7 @@ func TestSetupContainerNamespaceNoIPV6(t *testing.T) {
 	err := engine.SetupContainerNamespace(&skel.CmdArgs{
 		Netns:  "ns1",
 		IfName: "eth0",
-	}, deviceName, eniMACAddress, eniIPV4CIDRBlock, "", eniIPV4Gateway, "", false)
+	}, deviceName, eniMACAddress, eniIPV4CIDRBlock, "", eniIPV4Gateway, "", false, false)
 	assert.NoError(t, err)
 }
 
@@ -804,7 +804,28 @@ func TestSetupContainerNamespace(t *testing.T) {
 	err := engine.SetupContainerNamespace(&skel.CmdArgs{
 		Netns:  "ns1",
 		IfName: "eth0",
-	}, deviceName, eniMACAddress, eniIPV4CIDRBlock, eniIPV6CIDRBlock, eniIPV4Gateway, eniIPV6Gateway, false)
+	}, deviceName, eniMACAddress, eniIPV4CIDRBlock, eniIPV6CIDRBlock, eniIPV4Gateway, eniIPV6Gateway, false, false)
+	assert.NoError(t, err)
+}
+
+func TestSetupContainerNamespaceStayDown(t *testing.T) {
+	ctrl, _, mockNS, mockNetLink := setup(t)
+	defer ctrl.Finish()
+
+	mockENILink := mock_netlink.NewMockLink(ctrl)
+	mockNetNS := mock_ns.NewMockNetNS(ctrl)
+	var fd uintptr
+	gomock.InOrder(
+		mockNetLink.EXPECT().LinkByName(deviceName).Return(mockENILink, nil),
+		mockNS.EXPECT().GetNS("ns1").Return(mockNetNS, nil),
+		mockNetNS.EXPECT().Fd().Return(fd),
+		mockNetLink.EXPECT().LinkSetNsFd(mockENILink, int(fd)).Return(nil),
+	)
+	engine := &engine{ns: mockNS, netLink: mockNetLink}
+	err := engine.SetupContainerNamespace(&skel.CmdArgs{
+		Netns:  "ns1",
+		IfName: "eth0",
+	}, deviceName, eniMACAddress, eniIPV4CIDRBlock, eniIPV6CIDRBlock, eniIPV4Gateway, eniIPV6Gateway, false, true)
 	assert.NoError(t, err)
 }
 
