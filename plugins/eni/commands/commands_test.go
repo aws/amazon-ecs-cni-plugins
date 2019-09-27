@@ -187,7 +187,7 @@ func TestAddSetupContainerNamespaceFails(t *testing.T) {
 		mockEngine.EXPECT().GetIPV6PrefixLength(macAddress).Return(eniIPV6SubnetMask, nil),
 		mockEngine.EXPECT().GetIPV6Gateway(deviceName).Return(eniIPV6Gateway, nil),
 		mockEngine.EXPECT().SetupContainerNamespace(gomock.Any(), deviceName, macAddress, eniIPV4AddressWithSubnetMask,
-			eniIPV6AddressWithSubnetMask, eniIPV4Gateway, eniIPV6Gateway, false, false).Return(errors.New("error")),
+			eniIPV6AddressWithSubnetMask, eniIPV4Gateway, eniIPV6Gateway, false, false, 0).Return(errors.New("error")),
 	)
 
 	err := add(eniArgs, mockEngine)
@@ -203,7 +203,7 @@ func TestAddSetupContainerNamespaceFailsNoIPV6(t *testing.T) {
 		mockEngine.EXPECT().GetInterfaceDeviceName(macAddress).Return(deviceName, nil),
 		mockEngine.EXPECT().GetIPV4GatewayNetmask(macAddress).Return(eniIPV4Gateway, eniIPV4SubnetMask, nil),
 		mockEngine.EXPECT().SetupContainerNamespace(gomock.Any(), deviceName, macAddress, eniIPV4AddressWithSubnetMask, "",
-			eniIPV4Gateway, "", false, false).Return(errors.New("error")),
+			eniIPV4Gateway, "", false, false, 0).Return(errors.New("error")),
 	)
 
 	err := add(eniArgsNoIPV6, mockEngine)
@@ -219,7 +219,7 @@ func TestAddSubnetGatewayInConfig(t *testing.T) {
 		mockEngine.EXPECT().GetInterfaceDeviceName(macAddress).Return(deviceName, nil),
 		mockEngine.EXPECT().SetupContainerNamespace(gomock.Any(), deviceName, macAddress,
 			eniIPV4AddressWithSubnetMask, "",
-			eniIPV4Gateway, "", false, false).Return(nil),
+			eniIPV4Gateway, "", false, false, 0).Return(nil),
 	)
 
 	err := add(eniArgsSubnetGateway, mockEngine)
@@ -237,7 +237,7 @@ func TestAddNoError(t *testing.T) {
 		mockEngine.EXPECT().GetIPV6PrefixLength(macAddress).Return(eniIPV6SubnetMask, nil),
 		mockEngine.EXPECT().GetIPV6Gateway(deviceName).Return(eniIPV6Gateway, nil),
 		mockEngine.EXPECT().SetupContainerNamespace(gomock.Any(), deviceName, macAddress, eniIPV4AddressWithSubnetMask,
-			eniIPV6AddressWithSubnetMask, eniIPV4Gateway, eniIPV6Gateway, false, false).Return(nil),
+			eniIPV6AddressWithSubnetMask, eniIPV4Gateway, eniIPV6Gateway, false, false, 0).Return(nil),
 	)
 
 	err := add(eniArgs, mockEngine)
@@ -255,7 +255,7 @@ func TestAddStayDownNoError(t *testing.T) {
 		mockEngine.EXPECT().GetIPV6PrefixLength(macAddress).Return(eniIPV6SubnetMask, nil),
 		mockEngine.EXPECT().GetIPV6Gateway(deviceName).Return(eniIPV6Gateway, nil),
 		mockEngine.EXPECT().SetupContainerNamespace(gomock.Any(), deviceName, macAddress, eniIPV4AddressWithSubnetMask,
-			eniIPV6AddressWithSubnetMask, eniIPV4Gateway, eniIPV6Gateway, false, true).Return(nil),
+			eniIPV6AddressWithSubnetMask, eniIPV4Gateway, eniIPV6Gateway, false, true, 0).Return(nil),
 	)
 
 	err := add(eniArgsStayDown, mockEngine)
@@ -271,7 +271,7 @@ func TestAddNoErrorWhenIPV6AddressNotSpecifiedInConfig(t *testing.T) {
 		mockEngine.EXPECT().GetInterfaceDeviceName(macAddress).Return(deviceName, nil),
 		mockEngine.EXPECT().GetIPV4GatewayNetmask(macAddress).Return(eniIPV4Gateway, eniIPV4SubnetMask, nil),
 		mockEngine.EXPECT().SetupContainerNamespace(gomock.Any(), deviceName, macAddress, eniIPV4AddressWithSubnetMask, "",
-			eniIPV4Gateway, "", false, false).Return(nil),
+			eniIPV4Gateway, "", false, false, 0).Return(nil),
 	)
 
 	err := add(eniArgsNoIPV6, mockEngine)
@@ -299,7 +299,7 @@ func TestAddPrintResult(t *testing.T) {
 		mockEngine.EXPECT().GetIPV6PrefixLength(macAddress).Return(eniIPV6SubnetMask, nil),
 		mockEngine.EXPECT().GetIPV6Gateway(deviceName).Return(eniIPV6Gateway, nil),
 		mockEngine.EXPECT().SetupContainerNamespace(gomock.Any(), deviceName, macAddress, eniIPV4AddressWithSubnetMask,
-			eniIPV6AddressWithSubnetMask, eniIPV4Gateway, eniIPV6Gateway, false, false).Return(nil),
+			eniIPV6AddressWithSubnetMask, eniIPV4Gateway, eniIPV6Gateway, false, false, 0).Return(nil),
 	)
 
 	oldStdout := os.Stdout
@@ -342,7 +342,7 @@ func TestAddPrintResultNoIPV6(t *testing.T) {
 		mockEngine.EXPECT().GetInterfaceDeviceName(macAddress).Return(deviceName, nil),
 		mockEngine.EXPECT().GetIPV4GatewayNetmask(macAddress).Return(eniIPV4Gateway, eniIPV4SubnetMask, nil),
 		mockEngine.EXPECT().SetupContainerNamespace(gomock.Any(), deviceName, macAddress, eniIPV4AddressWithSubnetMask, "",
-			eniIPV4Gateway, "", false, false).Return(nil),
+			eniIPV4Gateway, "", false, false, 0).Return(nil),
 	)
 
 	oldStdout := os.Stdout

@@ -49,7 +49,8 @@ const (
     "ipv4-address":"%s",
     "mac":"%s",
     "block-instance-metadata":true,
-    "subnetgateway-ipv4-address":"%s"
+    "subnetgateway-ipv4-address":"%s",
+    "mtu":%d
 }`
 	imdsEndpoint = "169.254.169.254/32"
 )
@@ -144,7 +145,7 @@ func TestAddDel(t *testing.T) {
 		aws.StringValue(eni.NetworkInterfaceId),
 		aws.StringValue(eni.PrivateIpAddress),
 		aws.StringValue(eni.MacAddress),
-		ipv4SubnetGateway))
+		ipv4SubnetGateway, 9000))
 	t.Logf("Using config: %s", string(netConf))
 
 	testNS.Do(func(ns.NetNS) error {
@@ -174,6 +175,7 @@ func TestAddDel(t *testing.T) {
 		require.True(t, eniFound, "ENI not found in target network namespace")
 
 		validateTargetNSRoutes(t)
+		validateTargetNSENIMTU(t, 9000)
 		// TODO: Validate that dhclient process is running
 		return nil
 	})
@@ -375,6 +377,13 @@ func validateTargetNSRoutes(t *testing.T) {
 
 	require.True(t, imdsRouteFound, "Blocking route for instance metadata not found ")
 	require.True(t, gatewayRouteFound, "Route to use the vpc subnet gateway not found ")
+}
+
+// validateTargetNSENIMTU checks the eni interface MTU is set as configured
+func validateTargetNSENIMTU(t *testing.T, mtu int) {
+	eni, err := netlink.LinkByName(ifName)
+	require.NoError(t, err)
+	assert.Equal(t, eni.Attrs().MTU, mtu)
 }
 
 // getEnvOrDefault gets the value of an env var. It returns the fallback value
