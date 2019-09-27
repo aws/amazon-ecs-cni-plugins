@@ -40,6 +40,7 @@ type setupNamespaceClosureContext struct {
 	ipv4Gateway net.IP
 	ipv6Gateway net.IP
 	blockIMDS   bool
+	mtu         int
 }
 
 // teardownNamespaceClosureContext wraps the parameters and the method to teardown the
@@ -52,7 +53,7 @@ type teardownNamespaceClosureContext struct {
 // newSetupNamespaceClosureContext creates a new setupNamespaceClosure object
 func newSetupNamespaceClosureContext(netLink netlinkwrapper.NetLink,
 	ifName string, deviceName string, macAddress string, ipv4Address string, ipv6Address string,
-	ipv4Gateway string, ipv6Gateway string, blockIMDS bool) (*setupNamespaceClosureContext, error) {
+	ipv4Gateway string, ipv6Gateway string, blockIMDS bool, mtu int) (*setupNamespaceClosureContext, error) {
 	nlIPV4Addr, err := netLink.ParseAddr(ipv4Address)
 	if err != nil {
 		return nil, errors.Wrap(err,
@@ -73,6 +74,7 @@ func newSetupNamespaceClosureContext(netLink netlinkwrapper.NetLink,
 		ipv4Addr:    nlIPV4Addr,
 		ipv4Gateway: ipv4GatewayIP,
 		blockIMDS:   blockIMDS,
+		mtu:         mtu,
 	}
 	if ipv6Address != "" {
 		nlIPV6Addr, err := netLink.ParseAddr(ipv6Address)
@@ -143,6 +145,14 @@ func (closureContext *setupNamespaceClosureContext) run(_ ns.NetNS) error {
 	if err != nil {
 		return errors.Wrap(err,
 			"setupNamespaceClosure engine: unable to bring up the device")
+	}
+
+	// Change the MTU if it is customized
+	if closureContext.mtu != 0 {
+		err = closureContext.netLink.LinkSetMTU(eniLink, closureContext.mtu)
+		if err != nil {
+			return errors.Wrap(err, "setupNamespaceClosure engine: unable to set mtu of interface")
+		}
 	}
 
 	// Add a blackhole route for IMDS endpoint if required

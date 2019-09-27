@@ -64,7 +64,7 @@ type Engine interface {
 	SetupContainerNamespace(args *skel.CmdArgs, deviceName string, macAddress string,
 		ipv4Address string, ipv6Address string,
 		ipv4Gateway string, ipv6Gateway string,
-		blockIMDS bool, stayDown bool) error
+		blockIMDS bool, stayDown bool, mtu int) error
 	TeardownContainerNamespace(netns string, macAddress string) error
 }
 
@@ -320,7 +320,8 @@ func (engine *engine) SetupContainerNamespace(args *skel.CmdArgs,
 	ipv4Gateway string,
 	ipv6Gateway string,
 	blockIMDS bool,
-	stayDown bool) error {
+	stayDown bool,
+	mtu int) error {
 	// Get the device link for the ENI
 	eniLink, err := engine.netLink.LinkByName(deviceName)
 	if err != nil {
@@ -348,7 +349,7 @@ func (engine *engine) SetupContainerNamespace(args *skel.CmdArgs,
 	}
 	// Generate the closure to execute within the container's namespace
 	toRun, err := newSetupNamespaceClosureContext(engine.netLink, args.IfName, deviceName, macAddress,
-		ipv4Address, ipv6Address, ipv4Gateway, ipv6Gateway, blockIMDS)
+		ipv4Address, ipv6Address, ipv4Gateway, ipv6Gateway, blockIMDS, mtu)
 	if err != nil {
 		return errors.Wrap(err,
 			"setupContainerNamespace engine: unable to create closure to execute in container namespace")

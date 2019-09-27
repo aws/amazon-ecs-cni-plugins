@@ -169,17 +169,17 @@ func (mr *MockEngineMockRecorder) GetMACAddressOfENI(arg0, arg1 interface{}) *go
 }
 
 // SetupContainerNamespace mocks base method
-func (m *MockEngine) SetupContainerNamespace(arg0 *skel.CmdArgs, arg1, arg2, arg3, arg4, arg5, arg6 string, arg7, arg8 bool) error {
+func (m *MockEngine) SetupContainerNamespace(arg0 *skel.CmdArgs, arg1, arg2, arg3, arg4, arg5, arg6 string, arg7, arg8 bool, arg9 int) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SetupContainerNamespace", arg0, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8)
+	ret := m.ctrl.Call(m, "SetupContainerNamespace", arg0, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // SetupContainerNamespace indicates an expected call of SetupContainerNamespace
-func (mr *MockEngineMockRecorder) SetupContainerNamespace(arg0, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8 interface{}) *gomock.Call {
+func (mr *MockEngineMockRecorder) SetupContainerNamespace(arg0, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetupContainerNamespace", reflect.TypeOf((*MockEngine)(nil).SetupContainerNamespace), arg0, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetupContainerNamespace", reflect.TypeOf((*MockEngine)(nil).SetupContainerNamespace), arg0, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9)
 }
 
 // TeardownContainerNamespace mocks base method
