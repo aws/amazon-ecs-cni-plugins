@@ -13,7 +13,8 @@ An example configuration for invoking the plugin is listed next:
     "eni":"eni-eni01en1",
     "ipv4-address":"172.31.31.65/20",
     "mac":"01:23:45:67:89:ab",
-    "block-instance-metadata":true
+    "block-instance-metadata":true,
+    "stay-down":false,
 }
 ```
 
@@ -24,8 +25,11 @@ Primary private IPV4 address of the interface
 * `mac` (string, required): the MAC address of the ENI
 * `ipv6-address` (string, optional): the ipv6 address of the ENI
 * `block-instance-metadata` (bool, optional): specifies if the route to EC2 
-instance metadata should be blocked
-* `subnetgateway-ipv4-address` (string, optional): specifies the ipv4 address, with the CIDR block for the subnet gateway. Example: `10.15.145.128/25`
+  instance metadata should be blocked.
+* `subnetgateway-ipv4-address` (string, optional): specifies the ipv4 address, 
+  with the CIDR block for the subnet gateway. Example: `10.15.145.128/25`.
+* `stay-down` (bool, optional): specifies if the interface should stay down. If
+  this is set, routes, addresses etc for the interface will not be set.
 
 ## Environment Variables
 * `ENI_DHCLIENT_LEASES_PATH` (string, optional): the dhclient leases file path.

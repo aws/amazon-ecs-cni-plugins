@@ -35,6 +35,8 @@ type NetLink interface {
 	LinkSetName(link netlink.Link, name string) error
 	// LinkSetUp is equivalent to `ip link set $link up`
 	LinkSetUp(link netlink.Link) error
+	// LinkSetMTU is equivalent to `ip link set $link mtu $mtu`
+	LinkSetMTU(link netlink.Link, mtu int) error
 	// LinkList is equivalent to: `ip link show`
 	LinkList() ([]netlink.Link, error)
 	// LinkSetDown is equivalent to: `ip link set $link down`
@@ -83,6 +85,10 @@ func (*netLink) LinkSetUp(link netlink.Link) error {
 
 func (*netLink) LinkSetName(link netlink.Link, name string) error {
 	return netlink.LinkSetName(link, name)
+}
+
+func (*netLink) LinkSetMTU(link netlink.Link, mtu int) error {
+	return netlink.LinkSetMTU(link, mtu)
 }
 
 func (*netLink) LinkList() ([]netlink.Link, error) {
