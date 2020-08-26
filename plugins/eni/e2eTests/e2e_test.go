@@ -46,10 +46,10 @@ const (
     "type":"ecs-eni",
     "cniVersion":"0.3.0",
     "eni":"%s",
-    "ipv4-address":"%s",
     "mac":"%s",
+    "ip-addresses":["%s"],
+    "gateway-ip-addresses":["%s"],
     "block-instance-metadata":true,
-    "subnetgateway-ipv4-address":"%s",
     "mtu":%d
 }`
 	imdsEndpoint = "169.254.169.254/32"
@@ -95,8 +95,9 @@ func TestAddDel(t *testing.T) {
 
 	require.NoError(t, waitUntilNetworkInterfaceAttached(eni, 5*time.Second), "ENI was not attached to the instance")
 
-	ipv4SubnetGateway, err := computeIPV4SubnetGateway(ec2Client, cfg.subnet)
+	ipv4SubnetGateway, ipv4PrefixLength, err := computeIPv4SubnetGatewayAndPrefixLength(ec2Client, cfg.subnet)
 	require.NoError(t, err, "Unable to compute ipv4 subnet gateway for ENI")
+
 	// Create a directory for storing test logs
 	testLogDir, err := ioutil.TempDir("", "ecs-eni-e2e-test-")
 	require.NoError(t, err, "Unable to create directory for storing test logs")
@@ -143,8 +144,8 @@ func TestAddDel(t *testing.T) {
 	}
 	netConf := []byte(fmt.Sprintf(netConfFormat,
 		aws.StringValue(eni.NetworkInterfaceId),
-		aws.StringValue(eni.PrivateIpAddress),
 		aws.StringValue(eni.MacAddress),
+		aws.StringValue(eni.PrivateIpAddress)+"/"+ipv4PrefixLength,
 		ipv4SubnetGateway, 9000))
 	t.Logf("Using config: %s", string(netConf))
 
@@ -279,23 +280,22 @@ func createENI(ec2Client *ec2.EC2, cfg *config) (*ec2.NetworkInterface, error) {
 	return output.NetworkInterface, nil
 }
 
-// computeIPV4SubnetGateway computes the ipv4 address of the subnet gateway
-// for the ENI
-func computeIPV4SubnetGateway(ec2Client *ec2.EC2, subnetID string) (string, error) {
+// computeIPv4SubnetGatewayAndPrefixLength computes the IPv4 subnet gateway and prefix length of the ENI
+func computeIPv4SubnetGatewayAndPrefixLength(ec2Client *ec2.EC2, subnetID string) (string, string, error) {
 	resp, err := ec2Client.DescribeSubnets(&ec2.DescribeSubnetsInput{
 		SubnetIds: []*string{aws.String(subnetID)},
 	})
 	if err != nil {
-		return "", errors.Wrapf(err, "unable to describe the subnet")
+		return "", "", errors.Wrapf(err, "unable to describe the subnet")
 	}
 	if len(resp.Subnets) != 1 {
-		return "", errors.Errorf("unexpected number of subnets returned in describe: %d", len(resp.Subnets))
+		return "", "", errors.Errorf("unexpected number of subnets returned in describe: %d", len(resp.Subnets))
 	}
 	gatewayIPV4, mask, err := utils.ComputeIPV4GatewayNetmask(aws.StringValue(resp.Subnets[0].CidrBlock))
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
-	return fmt.Sprintf("%s/%s", gatewayIPV4, mask), nil
+	return gatewayIPV4, mask, nil
 }
 
 // waitUntilNetworkInterfaceAvailable waits until the ENI state == "available"

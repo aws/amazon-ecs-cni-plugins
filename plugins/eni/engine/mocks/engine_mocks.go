@@ -1,4 +1,4 @@
-// Copyright 2019 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+// Copyright 2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License"). You may
 // not use this file except in compliance with the License. A copy of the
@@ -169,17 +169,17 @@ func (mr *MockEngineMockRecorder) GetMACAddressOfENI(arg0, arg1 interface{}) *go
 }
 
 // SetupContainerNamespace mocks base method
-func (m *MockEngine) SetupContainerNamespace(arg0 *skel.CmdArgs, arg1, arg2, arg3, arg4, arg5, arg6 string, arg7, arg8 bool, arg9 int) error {
+func (m *MockEngine) SetupContainerNamespace(arg0 *skel.CmdArgs, arg1, arg2 string, arg3, arg4 []string, arg5, arg6 bool, arg7 int) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SetupContainerNamespace", arg0, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9)
+	ret := m.ctrl.Call(m, "SetupContainerNamespace", arg0, arg1, arg2, arg3, arg4, arg5, arg6, arg7)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // SetupContainerNamespace indicates an expected call of SetupContainerNamespace
-func (mr *MockEngineMockRecorder) SetupContainerNamespace(arg0, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9 interface{}) *gomock.Call {
+func (mr *MockEngineMockRecorder) SetupContainerNamespace(arg0, arg1, arg2, arg3, arg4, arg5, arg6, arg7 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetupContainerNamespace", reflect.TypeOf((*MockEngine)(nil).SetupContainerNamespace), arg0, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetupContainerNamespace", reflect.TypeOf((*MockEngine)(nil).SetupContainerNamespace), arg0, arg1, arg2, arg3, arg4, arg5, arg6, arg7)
 }
 
 // TeardownContainerNamespace mocks base method

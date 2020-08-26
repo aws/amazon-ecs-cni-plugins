@@ -62,8 +62,7 @@ type Engine interface {
 	DoesMACAddressMapToIPV4Address(macAddress string, ipv4Address string) (bool, error)
 	DoesMACAddressMapToIPV6Address(macAddress string, ipv4Address string) (bool, error)
 	SetupContainerNamespace(args *skel.CmdArgs, deviceName string, macAddress string,
-		ipv4Address string, ipv6Address string,
-		ipv4Gateway string, ipv6Gateway string,
+		ipAddresses []string, gatewayAddresses []string,
 		blockIMDS bool, stayDown bool, mtu int) error
 	TeardownContainerNamespace(netns string, macAddress string) error
 }
@@ -315,10 +314,8 @@ func (engine *engine) doesMACAddressMapToIPAddress(macAddress string, addressToF
 func (engine *engine) SetupContainerNamespace(args *skel.CmdArgs,
 	deviceName string,
 	macAddress string,
-	ipv4Address string,
-	ipv6Address string,
-	ipv4Gateway string,
-	ipv6Gateway string,
+	ipAddresses []string,
+	gatewayAddresses []string,
 	blockIMDS bool,
 	stayDown bool,
 	mtu int) error {
@@ -347,9 +344,10 @@ func (engine *engine) SetupContainerNamespace(args *skel.CmdArgs,
 		// The 'stay-down' config is set. No need to configure anything else.
 		return nil
 	}
+
 	// Generate the closure to execute within the container's namespace
 	toRun, err := newSetupNamespaceClosureContext(engine.netLink, args.IfName, deviceName, macAddress,
-		ipv4Address, ipv6Address, ipv4Gateway, ipv6Gateway, blockIMDS, mtu)
+		ipAddresses, gatewayAddresses, blockIMDS, mtu)
 	if err != nil {
 		return errors.Wrap(err,
 			"setupContainerNamespace engine: unable to create closure to execute in container namespace")
