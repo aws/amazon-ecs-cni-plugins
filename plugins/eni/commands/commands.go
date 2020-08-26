@@ -14,11 +14,9 @@
 package commands
 
 import (
-	"fmt"
 	"net"
 	"time"
 
-	"github.com/aws/amazon-ecs-cni-plugins/pkg/utils"
 	"github.com/aws/amazon-ecs-cni-plugins/plugins/eni/engine"
 	"github.com/aws/amazon-ecs-cni-plugins/plugins/eni/types"
 
@@ -74,80 +72,35 @@ func add(args *skel.CmdArgs, engine engine.Engine) error {
 	}
 	log.Infof("Found network device for the ENI (mac address=%s): %s", macAddressOfENI, networkDeviceName)
 
-	ipv4Gateway := ""
-	ipv4Netmask := ""
-	var ipv4Net *net.IPNet
+	ips := []*current.IPConfig{}
 
-	if conf.SubnetGatewayIPV4Address == "" {
-		// Get the ipv4 gateway and subnet mask for the ENI. This will be
-		// required for adding routes in the container's namespace
-		ipv4Gateway, ipv4Netmask, err = engine.GetIPV4GatewayNetmask(conf.MACAddress)
-
+	for _, addr := range conf.IPAddresses {
+		ipAddr, ipNet, err := net.ParseCIDR(addr)
 		if err != nil {
-			log.Errorf("Unable to get ipv4 gateway and netmask for ENI (device name=%s): %v",
-				networkDeviceName, err)
+			log.Errorf("Unable to parse IP address %s for ENI (mac address=%s): %v", addr, macAddressOfENI, err)
 			return err
 		}
-		log.Infof("Found ipv4 gateway and netmask for ENI (device name=%s): %s %s",
-			networkDeviceName, ipv4Gateway, ipv4Netmask)
-	} else {
-		ipv4Gateway, ipv4Netmask, err = utils.ParseIPV4GatewayNetmask(conf.SubnetGatewayIPV4Address)
-		if err != nil {
-			log.Errorf("Unable to parse ipv4 gateway and netmask for ENI (device name=%s): %v",
-				networkDeviceName, err)
-			return err
-		}
-		log.Infof("Read ipv4 gateway and netmask from config for ENI (device name=%s): %s %s",
-			networkDeviceName, ipv4Gateway, ipv4Netmask)
-	}
-	ipv4Address := fmt.Sprintf("%s/%s", ipv4Gateway, ipv4Netmask)
-	_, ipv4Net, err = net.ParseCIDR(ipv4Address)
-	if err != nil {
-		return errors.Wrapf(err, "add eni: failed to parse ipv4 gateway netmask: %s", ipv4Address)
-	}
-	ips := []*current.IPConfig{
-		{
-			Version: "4",
-			Address: *ipv4Net,
-		},
-	}
 
-	ipv6Address := ""
-	ipv6Gateway := ""
-	if conf.IPV6Address != "" {
-		// Config contains an ipv6 address, figure out the subnet mask
-		ipv6Netmask, err := engine.GetIPV6PrefixLength(macAddressOfENI)
-		if err != nil {
-			log.Errorf("Unable to get ipv6 netmask for ENI (device name=%s): %v", networkDeviceName, err)
-			return err
-		}
-		ipv6Address = fmt.Sprintf("%s/%s", conf.IPV6Address, ipv6Netmask)
-		log.Debugf("IPV6 address (device name=%s): %v", networkDeviceName, ipv6Address)
+		ipNet.IP = ipAddr
 
-		// Next, figure out the gateway ip
-		ipv6Gateway, err = engine.GetIPV6Gateway(networkDeviceName)
-		if err != nil {
-			log.Errorf("Unable to get ipv6 gateway for ENI (device name=%s): %v", networkDeviceName, err)
-			return err
-		}
-		log.Infof("IPV6 Gateway IP (device name=%s): %v", networkDeviceName, ipv6Gateway)
-		_, ipv6net, err := net.ParseCIDR(ipv6Address)
-		if err != nil {
-			return errors.Wrapf(err, "add eni: failed to parse ipv6 gateway: %s", ipv6Address)
+		ipv := "4"
+		if ipAddr.To4() == nil {
+			ipv = "6"
 		}
 
 		ips = append(ips, &current.IPConfig{
-			Version: "6",
-			Address: *ipv6net,
+			Version: ipv,
+			Address: *ipNet,
 		})
 	}
 
 	// Everything's prepped. We have all the parameters needed to configure
 	// the network namespace of the ENI. Invoke SetupContainerNamespace to
 	// do the same
-	err = engine.SetupContainerNamespace(args, networkDeviceName, macAddressOfENI,
-		fmt.Sprintf("%s/%s", conf.IPV4Address, ipv4Netmask),
-		ipv6Address, ipv4Gateway, ipv6Gateway, conf.BlockIMDS, conf.StayDown, conf.MTU)
+	err = engine.SetupContainerNamespace(
+		args, networkDeviceName, macAddressOfENI,
+		conf.IPAddresses, conf.GatewayIPAddresses,
+		conf.BlockIMDS, conf.StayDown, conf.MTU)
 	if err != nil {
 		log.Errorf("Unable to setup container's namespace (device name=%s): %v", networkDeviceName, err)
 		return err

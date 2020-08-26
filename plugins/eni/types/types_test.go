@@ -23,39 +23,25 @@ import (
 )
 
 var (
-	validConfigNoIPV6                 = `{"eni":"eni1", "ipv4-address":"10.11.12.13", "mac":"01:23:45:67:89:ab"}`
-	configNoENIID                     = `{"ipv4-address":"10.11.12.13", "mac":"01:23:45:67:89:ab"}`
-	configNoIPV4Address               = `{"eni":"eni1", "mac":"01:23:45:67:89:ab"}`
-	configNoMAC                       = `{"eni":"eni1", "ipv4-address":"10.11.12.13"}`
-	configInvalidIPV4AddressMalformed = `{"eni":"eni1", "ipv4-address":"1", "mac":"01:23:45:67:89:ab"}`
-	configInvalidIPV4AddressIPV6      = `{"eni":"eni1", "ipv4-address":"2001:db8::68", "mac":"01:23:45:67:89:ab"}`
-	configMalformedMAC                = `{"eni":"eni1", "ipv4-address":"10.11.12.13", "mac":"01:23:45:67:89"}`
-	validConfigWithIPV6               = `{
-	"eni":"eni1",
-	"ipv4-address":"10.11.12.13",
-	"mac":"01:23:45:67:89:ab",
-	"ipv6-address":"2001:db8::68"
-}`
+	// Invalid configs.
+	configNoENIID                     = `{"ip-addresses":["10.11.12.13/16"], "mac":"01:23:45:67:89:ab"}`
+	configNoIPAddresses               = `{"eni":"eni1", "mac":"01:23:45:67:89:ab"}`
+	configNoMAC                       = `{"eni":"eni1", "ip-addresses":["10.11.12.13/16"]}`
+	configInvalidIPv4AddressMalformed = `{"eni":"eni1", "ip-addresses":["1"], "mac":"01:23:45:67:89:ab"}`
+	configInvalidIPv6AddressMalformed = `{"eni":"eni1", "ip-addresses":["2001:::68/64"], "mac":"01:23:45:67:89:ab"}`
+	configInvalidMultiAddrsMalformed  = `{"eni":"eni1", "ip-addresses":["10.11.12.13","2001:::68/64"], "mac":"01:23:45:67:89:ab"}`
+	configMalformedMAC                = `{"eni":"eni1", "ip-addresses":["10.11.12.13/16"], "mac":"01:23:45:67:89"}`
+
+	// Valid configs.
+	validConfigWithIPv4      = `{"eni":"eni1", "ip-addresses":["10.11.12.13/16"], "mac":"01:23:45:67:89:ab"}`
+	validConfigWithIPv6      = `{"eni":"eni1",	"ip-addresses":["2001:db8::68/64"], "mac":"01:23:45:67:89:ab"}`
 	validConfigWithAllFields = `{
 	"eni":"eni1",
-	"ipv4-address":"10.11.12.13",
+	"ip-addresses":["10.11.12.13/16","2001:db8::68/64"],
 	"mac":"01:23:45:67:89:ab",
-	"ipv6-address":"2001:db8::68",
 	"block-instance-metadata":true,
-	"subnetgateway-ipv4-address":"10.11.0.1/24",
+	"gateway-ip-addresses":["10.11.0.1", "fe80:1234::abcd:ef01"],
 	"stay-down":true
-}`
-	configInvalidIPV6AddressMalformed = `{
-	"eni":"eni1",
-	"ipv4-address":"10.11.12.13",
-	"mac":"01:23:45:67:89:ab",
-	"ipv6-address":"2001:::68"
-}`
-	configInvalidIPV6AddressIPV4 = `{
-	"eni":"eni1",
-	"ipv4-address":"10.11.12.13",
-	"mac":"01:23:45:67:89:ab",
-	"ipv6-address":"10.11.12.13"
 }`
 )
 
@@ -64,8 +50,8 @@ func TestNewConfWithValidConfig(t *testing.T) {
 		input string
 		name  string
 	}{
-		{validConfigNoIPV6, "no ipv6"},
-		{validConfigWithIPV6, "with ipv6"},
+		{validConfigWithIPv4, "with ipv4"},
+		{validConfigWithIPv6, "with ipv6"},
 		{validConfigWithAllFields, "all fields"},
 	}
 	for _, tc := range testCases {
@@ -86,13 +72,12 @@ func TestNewConfWithInvalidConfig(t *testing.T) {
 	}{
 		{`{"foo":"eni1"}`, "invalid keys"},
 		{configNoENIID, "no eni id"},
-		{configNoIPV4Address, "no ipv4 addr"},
+		{configNoIPAddresses, "no ip addr"},
 		{configNoMAC, "no mac"},
-		{configInvalidIPV4AddressMalformed, "malformed ipv4 addr"},
-		{configInvalidIPV4AddressIPV6, "invalid ipv4 address"},
+		{configInvalidIPv4AddressMalformed, "malformed ipv4 addr"},
+		{configInvalidIPv6AddressMalformed, "malformed ipv6 address"},
+		{configInvalidMultiAddrsMalformed, "multiple IP addresses some invalid"},
 		{configMalformedMAC, "malformed mac"},
-		{configInvalidIPV6AddressMalformed, "malformed ipv5 address"},
-		{configInvalidIPV6AddressIPV4, "valid ipv4 malformed ipv6"},
 		{"", "empty config"},
 	}
 	for _, tc := range testCases {

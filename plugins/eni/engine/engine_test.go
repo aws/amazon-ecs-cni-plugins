@@ -670,7 +670,7 @@ func TestSetupContainerNamespaceFailsOnLinkByNameError(t *testing.T) {
 	err := engine.SetupContainerNamespace(&skel.CmdArgs{
 		Netns:  "ns1",
 		IfName: "eth0",
-	}, deviceName, eniMACAddress, eniIPV4CIDRBlock, eniIPV6CIDRBlock, eniIPV4Gateway, eniIPV6Gateway, false, false, 0)
+	}, deviceName, eniMACAddress, []string{eniIPV4CIDRBlock, eniIPV6CIDRBlock}, []string{eniIPV4Gateway, eniIPV6Gateway}, false, false, 0)
 	assert.Error(t, err)
 }
 
@@ -687,7 +687,7 @@ func TestSetupContainerNamespaceFailsOnGetNSError(t *testing.T) {
 	err := engine.SetupContainerNamespace(&skel.CmdArgs{
 		Netns:  "ns1",
 		IfName: "eth0",
-	}, deviceName, eniMACAddress, eniIPV4CIDRBlock, eniIPV6CIDRBlock, eniIPV4Gateway, eniIPV6Gateway, false, false, 0)
+	}, deviceName, eniMACAddress, []string{eniIPV4CIDRBlock, eniIPV6CIDRBlock}, []string{eniIPV4Gateway, eniIPV6Gateway}, false, false, 0)
 	assert.Error(t, err)
 }
 
@@ -708,7 +708,7 @@ func TestSetupContainerNamespaceFailsOnLinksetNsFdError(t *testing.T) {
 	err := engine.SetupContainerNamespace(&skel.CmdArgs{
 		Netns:  "ns1",
 		IfName: "eth0",
-	}, deviceName, eniMACAddress, eniIPV4CIDRBlock, eniIPV6CIDRBlock, eniIPV4Gateway, eniIPV6Gateway, false, false, 0)
+	}, deviceName, eniMACAddress, []string{eniIPV4CIDRBlock, eniIPV6CIDRBlock}, []string{eniIPV4Gateway, eniIPV6Gateway}, false, false, 0)
 	assert.Error(t, err)
 }
 
@@ -730,7 +730,7 @@ func TestSetupContainerNamespaceFailsOnParseAddrError(t *testing.T) {
 	err := engine.SetupContainerNamespace(&skel.CmdArgs{
 		Netns:  "ns1",
 		IfName: "eth0",
-	}, deviceName, eniMACAddress, eniIPV4CIDRBlock, eniIPV6CIDRBlock, eniIPV4Gateway, eniIPV6Gateway, false, false, 0)
+	}, deviceName, eniMACAddress, []string{eniIPV4CIDRBlock, eniIPV6CIDRBlock}, []string{eniIPV4Gateway, eniIPV6Gateway}, false, false, 0)
 	assert.Error(t, err)
 }
 
@@ -754,7 +754,7 @@ func TestSetupContainerNamespaceFailsOnWithNetNSPathError(t *testing.T) {
 	err := engine.SetupContainerNamespace(&skel.CmdArgs{
 		Netns:  "ns1",
 		IfName: "eth0",
-	}, deviceName, eniMACAddress, eniIPV4CIDRBlock, "", eniIPV4Gateway, "", false, false, 0)
+	}, deviceName, eniMACAddress, []string{eniIPV4CIDRBlock}, []string{eniIPV4Gateway}, false, false, 0)
 	assert.Error(t, err)
 }
 
@@ -778,7 +778,7 @@ func TestSetupContainerNamespaceNoIPV6(t *testing.T) {
 	err := engine.SetupContainerNamespace(&skel.CmdArgs{
 		Netns:  "ns1",
 		IfName: "eth0",
-	}, deviceName, eniMACAddress, eniIPV4CIDRBlock, "", eniIPV4Gateway, "", false, false, 0)
+	}, deviceName, eniMACAddress, []string{eniIPV4CIDRBlock}, []string{eniIPV4Gateway}, false, false, 0)
 	assert.NoError(t, err)
 }
 
@@ -804,7 +804,7 @@ func TestSetupContainerNamespace(t *testing.T) {
 	err := engine.SetupContainerNamespace(&skel.CmdArgs{
 		Netns:  "ns1",
 		IfName: "eth0",
-	}, deviceName, eniMACAddress, eniIPV4CIDRBlock, eniIPV6CIDRBlock, eniIPV4Gateway, eniIPV6Gateway, false, false, 0)
+	}, deviceName, eniMACAddress, []string{eniIPV4CIDRBlock, eniIPV6CIDRBlock}, []string{eniIPV4Gateway, eniIPV6Gateway}, false, false, 0)
 	assert.NoError(t, err)
 }
 
@@ -825,7 +825,7 @@ func TestSetupContainerNamespaceStayDown(t *testing.T) {
 	err := engine.SetupContainerNamespace(&skel.CmdArgs{
 		Netns:  "ns1",
 		IfName: "eth0",
-	}, deviceName, eniMACAddress, eniIPV4CIDRBlock, eniIPV6CIDRBlock, eniIPV4Gateway, eniIPV6Gateway, false, true, 0)
+	}, deviceName, eniMACAddress, []string{eniIPV4CIDRBlock, eniIPV6CIDRBlock}, []string{eniIPV4Gateway, eniIPV6Gateway}, false, true, 0)
 	assert.NoError(t, err)
 }
 
@@ -834,7 +834,8 @@ func TestSetupNamespaceClosureCreationFailsOnIPV4ParseAddrError(t *testing.T) {
 	defer ctrl.Finish()
 
 	mockNetLink.EXPECT().ParseAddr(eniIPV4CIDRBlock).Return(nil, errors.New("error"))
-	_, err := newSetupNamespaceClosureContext(mockNetLink, "eth0", deviceName, eniMACAddress, eniIPV4CIDRBlock, "", eniIPV4Gateway, "", false, 0)
+	_, err := newSetupNamespaceClosureContext(mockNetLink, "eth0", deviceName, eniMACAddress,
+		[]string{eniIPV4CIDRBlock}, []string{eniIPV4Gateway}, false, 0)
 	assert.Error(t, err)
 }
 
@@ -845,7 +846,8 @@ func TestSetupNamespaceClosureCreationFailsOnIPV4ParseGatewayError(t *testing.T)
 	ipv4Addr := &netlink.Addr{}
 	mockNetLink.EXPECT().ParseAddr(eniIPV4CIDRBlock).Return(ipv4Addr, nil)
 	// Gateway is an empty string, so we expect this method to fail
-	_, err := newSetupNamespaceClosureContext(mockNetLink, "eth0", deviceName, eniMACAddress, eniIPV4CIDRBlock, "", "", "", false, 0)
+	_, err := newSetupNamespaceClosureContext(mockNetLink, "eth0", deviceName, eniMACAddress,
+		[]string{eniIPV4CIDRBlock}, []string{""}, false, 0)
 	assert.Error(t, err)
 }
 
@@ -858,7 +860,8 @@ func TestSetupNamespaceClosureCreationFailsOnIPV6ParseAddrError(t *testing.T) {
 		mockNetLink.EXPECT().ParseAddr(eniIPV4CIDRBlock).Return(ipv4Addr, nil),
 		mockNetLink.EXPECT().ParseAddr(eniIPV6CIDRBlock).Return(nil, errors.New("error")),
 	)
-	_, err := newSetupNamespaceClosureContext(mockNetLink, "eth0", deviceName, eniMACAddress, eniIPV4CIDRBlock, eniIPV6CIDRBlock, eniIPV4Gateway, eniIPV6Gateway, false, 0)
+	_, err := newSetupNamespaceClosureContext(mockNetLink, "eth0", deviceName, eniMACAddress,
+		[]string{eniIPV4CIDRBlock, eniIPV6CIDRBlock}, []string{eniIPV4Gateway, eniIPV6Gateway}, false, 0)
 	assert.Error(t, err)
 }
 
@@ -873,7 +876,8 @@ func TestSetupNamespaceClosureCreationFailsOnIPV6ParseGatewayError(t *testing.T)
 		mockNetLink.EXPECT().ParseAddr(eniIPV6CIDRBlock).Return(ipv6Addr, nil),
 	)
 	// Gateway is an empty string, so we expect this method to fail
-	_, err := newSetupNamespaceClosureContext(mockNetLink, "eth0", deviceName, eniMACAddress, eniIPV4CIDRBlock, eniIPV6CIDRBlock, eniIPV4Gateway, "", false, 0)
+	_, err := newSetupNamespaceClosureContext(mockNetLink, "eth0", deviceName, eniMACAddress,
+		[]string{eniIPV4CIDRBlock, eniIPV6CIDRBlock}, []string{eniIPV4Gateway, ""}, false, 0)
 	assert.Error(t, err)
 }
 
@@ -887,7 +891,8 @@ func TestSetupNamespaceClosureRunFailsOnLinkByNameError(t *testing.T) {
 		mockNetLink.EXPECT().ParseAddr(eniIPV4CIDRBlock).Return(ipv4Addr, nil),
 		mockNetLink.EXPECT().LinkByName(deviceName).Return(nil, errors.New("error")),
 	)
-	closure, err := newSetupNamespaceClosureContext(mockNetLink, "eth0", deviceName, eniMACAddress, eniIPV4CIDRBlock, "", eniIPV4Gateway, "", false, 0)
+	closure, err := newSetupNamespaceClosureContext(mockNetLink, "eth0", deviceName, eniMACAddress,
+		[]string{eniIPV4CIDRBlock}, []string{eniIPV4Gateway}, false, 0)
 	assert.NoError(t, err)
 	assert.NotNil(t, closure)
 	err = closure.run(mockNetNS)
@@ -907,7 +912,8 @@ func TestSetupNamespaceClosureRunFailsOnIPV4AddrAddError(t *testing.T) {
 		mockNetLink.EXPECT().LinkSetName(mockENILink, "eth0").Return(nil),
 		mockNetLink.EXPECT().AddrAdd(mockENILink, ipv4Address).Return(errors.New("error")),
 	)
-	closure, err := newSetupNamespaceClosureContext(mockNetLink, "eth0", deviceName, eniMACAddress, eniIPV4CIDRBlock, "", eniIPV4Gateway, "", false, 0)
+	closure, err := newSetupNamespaceClosureContext(mockNetLink, "eth0", deviceName, eniMACAddress,
+		[]string{eniIPV4CIDRBlock}, []string{eniIPV4Gateway}, false, 0)
 	assert.NoError(t, err)
 	assert.NotNil(t, closure)
 	err = closure.run(mockNetNS)
@@ -930,7 +936,8 @@ func TestSetupNamespaceClosureRunFailsOnIPV6AddrAddError(t *testing.T) {
 		mockNetLink.EXPECT().AddrAdd(mockENILink, ipv4Address).Return(nil),
 		mockNetLink.EXPECT().AddrAdd(mockENILink, ipv6Address).Return(errors.New("error")),
 	)
-	closure, err := newSetupNamespaceClosureContext(mockNetLink, "eth0", deviceName, eniMACAddress, eniIPV4CIDRBlock, eniIPV6CIDRBlock, eniIPV4Gateway, eniIPV6Gateway, false, 0)
+	closure, err := newSetupNamespaceClosureContext(mockNetLink, "eth0", deviceName, eniMACAddress,
+		[]string{eniIPV4CIDRBlock, eniIPV6CIDRBlock}, []string{eniIPV4Gateway, eniIPV6Gateway}, false, 0)
 	assert.NoError(t, err)
 	assert.NotNil(t, closure)
 	err = closure.run(mockNetNS)
@@ -951,7 +958,8 @@ func TestSetupNamespaceClosureRunFailsOnLinkSetupError(t *testing.T) {
 		mockNetLink.EXPECT().AddrAdd(mockENILink, ipv4Address).Return(nil),
 		mockNetLink.EXPECT().LinkSetUp(mockENILink).Return(errors.New("error")),
 	)
-	closure, err := newSetupNamespaceClosureContext(mockNetLink, "eth0", deviceName, eniMACAddress, eniIPV4CIDRBlock, "", eniIPV4Gateway, "", false, 0)
+	closure, err := newSetupNamespaceClosureContext(mockNetLink, "eth0", deviceName, eniMACAddress,
+		[]string{eniIPV4CIDRBlock}, []string{eniIPV4Gateway}, false, 0)
 	assert.NoError(t, err)
 	assert.NotNil(t, closure)
 	err = closure.run(mockNetNS)
@@ -979,7 +987,8 @@ func TestSetupNamespaceClosureRunFailsOnBlackholeRouteAddError(t *testing.T) {
 			assert.Equal(t, syscall.RTN_BLACKHOLE, route.Type)
 		}).Return(errors.New("error")),
 	)
-	closure, err := newSetupNamespaceClosureContext(mockNetLink, "eth0", deviceName, eniMACAddress, eniIPV4CIDRBlock, "", eniIPV4Gateway, "", true, 0)
+	closure, err := newSetupNamespaceClosureContext(mockNetLink, "eth0", deviceName, eniMACAddress,
+		[]string{eniIPV4CIDRBlock}, []string{eniIPV4Gateway}, true, 0)
 	assert.NoError(t, err)
 	assert.NotNil(t, closure)
 	err = closure.run(mockNetNS)
@@ -993,17 +1002,20 @@ func TestSetupNamespaceClosureRunFailsOnIPV4RouteAddError(t *testing.T) {
 	mockNetNS := mock_ns.NewMockNetNS(ctrl)
 	mockENILink := mock_netlink.NewMockLink(ctrl)
 	ipv4Address := &netlink.Addr{}
+	eniLinkIndex := 1
 	gomock.InOrder(
 		mockNetLink.EXPECT().ParseAddr(eniIPV4CIDRBlock).Return(ipv4Address, nil),
 		mockNetLink.EXPECT().LinkByName(deviceName).Return(mockENILink, nil),
 		mockNetLink.EXPECT().LinkSetName(mockENILink, "eth0").Return(nil),
 		mockNetLink.EXPECT().AddrAdd(mockENILink, ipv4Address).Return(nil),
 		mockNetLink.EXPECT().LinkSetUp(mockENILink).Return(nil),
+		mockENILink.EXPECT().Attrs().Return(&netlink.LinkAttrs{Index: eniLinkIndex}),
 		mockNetLink.EXPECT().RouteAdd(gomock.Any()).Do(func(route *netlink.Route) {
 			assert.Equal(t, route.Gw.String(), eniIPV4Gateway)
 		}).Return(errors.New("error")),
 	)
-	closure, err := newSetupNamespaceClosureContext(mockNetLink, "eth0", deviceName, eniMACAddress, eniIPV4CIDRBlock, "", eniIPV4Gateway, "", false, 0)
+	closure, err := newSetupNamespaceClosureContext(mockNetLink, "eth0", deviceName, eniMACAddress,
+		[]string{eniIPV4CIDRBlock}, []string{eniIPV4Gateway}, false, 0)
 	assert.NoError(t, err)
 	assert.NotNil(t, closure)
 	err = closure.run(mockNetNS)
@@ -1027,6 +1039,7 @@ func TestSetupNamespaceClosureRunFailsOnIPV6RouteAddError(t *testing.T) {
 		mockNetLink.EXPECT().AddrAdd(mockENILink, ipv4Address).Return(nil),
 		mockNetLink.EXPECT().AddrAdd(mockENILink, ipv6Address).Return(nil),
 		mockNetLink.EXPECT().LinkSetUp(mockENILink).Return(nil),
+		mockENILink.EXPECT().Attrs().Return(&netlink.LinkAttrs{Index: eniLinkIndex}),
 		mockNetLink.EXPECT().RouteAdd(gomock.Any()).Do(func(route *netlink.Route) {
 			assert.Equal(t, route.Gw.String(), eniIPV4Gateway)
 		}).Return(nil),
@@ -1036,7 +1049,8 @@ func TestSetupNamespaceClosureRunFailsOnIPV6RouteAddError(t *testing.T) {
 			assert.Equal(t, route.LinkIndex, eniLinkIndex)
 		}).Return(errors.New("error")),
 	)
-	closure, err := newSetupNamespaceClosureContext(mockNetLink, "eth0", deviceName, eniMACAddress, eniIPV4CIDRBlock, eniIPV6CIDRBlock, eniIPV4Gateway, eniIPV6Gateway, false, 0)
+	closure, err := newSetupNamespaceClosureContext(mockNetLink, "eth0", deviceName, eniMACAddress,
+		[]string{eniIPV4CIDRBlock, eniIPV6CIDRBlock}, []string{eniIPV4Gateway, eniIPV6Gateway}, false, 0)
 	assert.NoError(t, err)
 	assert.NotNil(t, closure)
 	err = closure.run(mockNetNS)
@@ -1064,17 +1078,20 @@ func TestSetupNamespaceClosureRunNoIPV6(t *testing.T) {
 	mockNetNS := mock_ns.NewMockNetNS(ctrl)
 	mockENILink := mock_netlink.NewMockLink(ctrl)
 	ipv4Address := &netlink.Addr{}
+	eniLinkIndex := 1
 	gomock.InOrder(
 		mockNetLink.EXPECT().ParseAddr(eniIPV4CIDRBlock).Return(ipv4Address, nil),
 		mockNetLink.EXPECT().LinkByName(deviceName).Return(mockENILink, nil),
 		mockNetLink.EXPECT().LinkSetName(mockENILink, "eth0").Return(nil),
 		mockNetLink.EXPECT().AddrAdd(mockENILink, ipv4Address).Return(nil),
 		mockNetLink.EXPECT().LinkSetUp(mockENILink).Return(nil),
+		mockENILink.EXPECT().Attrs().Return(&netlink.LinkAttrs{Index: eniLinkIndex}),
 		mockNetLink.EXPECT().RouteAdd(gomock.Any()).Do(func(route *netlink.Route) {
 			assert.Equal(t, route.Gw.String(), eniIPV4Gateway)
 		}).Return(nil),
 	)
-	closure, err := newSetupNamespaceClosureContext(mockNetLink, "eth0", deviceName, eniMACAddress, eniIPV4CIDRBlock, "", eniIPV4Gateway, "", false, 0)
+	closure, err := newSetupNamespaceClosureContext(mockNetLink, "eth0", deviceName, eniMACAddress,
+		[]string{eniIPV4CIDRBlock}, []string{eniIPV4Gateway}, false, 0)
 	assert.NoError(t, err)
 	assert.NotNil(t, closure)
 	err = closure.run(mockNetNS)
@@ -1105,6 +1122,7 @@ func TestSetupNamespaceClosureRunBlockIMDS(t *testing.T) {
 			assert.Equal(t, imdsNetwork.String(), route.Dst.String())
 			assert.Equal(t, syscall.RTN_BLACKHOLE, route.Type)
 		}).Return(nil),
+		mockENILink.EXPECT().Attrs().Return(&netlink.LinkAttrs{Index: eniLinkIndex}),
 		mockNetLink.EXPECT().RouteAdd(gomock.Any()).Do(func(route *netlink.Route) {
 			assert.Equal(t, route.Gw.String(), eniIPV4Gateway)
 		}).Return(nil),
@@ -1114,7 +1132,8 @@ func TestSetupNamespaceClosureRunBlockIMDS(t *testing.T) {
 			assert.Equal(t, route.LinkIndex, eniLinkIndex)
 		}).Return(nil),
 	)
-	closure, err := newSetupNamespaceClosureContext(mockNetLink, "eth0", deviceName, eniMACAddress, eniIPV4CIDRBlock, eniIPV6CIDRBlock, eniIPV4Gateway, eniIPV6Gateway, true, 0)
+	closure, err := newSetupNamespaceClosureContext(mockNetLink, "eth0", deviceName, eniMACAddress,
+		[]string{eniIPV4CIDRBlock, eniIPV6CIDRBlock}, []string{eniIPV4Gateway, eniIPV6Gateway}, true, 0)
 	assert.NoError(t, err)
 	assert.NotNil(t, closure)
 	err = closure.run(mockNetNS)
@@ -1138,6 +1157,7 @@ func TestSetupNamespaceClosureRun(t *testing.T) {
 		mockNetLink.EXPECT().AddrAdd(mockENILink, ipv4Address).Return(nil),
 		mockNetLink.EXPECT().AddrAdd(mockENILink, ipv6Address).Return(nil),
 		mockNetLink.EXPECT().LinkSetUp(mockENILink).Return(nil),
+		mockENILink.EXPECT().Attrs().Return(&netlink.LinkAttrs{Index: eniLinkIndex}),
 		mockNetLink.EXPECT().RouteAdd(gomock.Any()).Do(func(route *netlink.Route) {
 			assert.Equal(t, route.Gw.String(), eniIPV4Gateway)
 		}).Return(nil),
@@ -1147,7 +1167,8 @@ func TestSetupNamespaceClosureRun(t *testing.T) {
 			assert.Equal(t, route.LinkIndex, eniLinkIndex)
 		}).Return(nil),
 	)
-	closure, err := newSetupNamespaceClosureContext(mockNetLink, "eth0", deviceName, eniMACAddress, eniIPV4CIDRBlock, eniIPV6CIDRBlock, eniIPV4Gateway, eniIPV6Gateway, false, 0)
+	closure, err := newSetupNamespaceClosureContext(mockNetLink, "eth0", deviceName, eniMACAddress,
+		[]string{eniIPV4CIDRBlock, eniIPV6CIDRBlock}, []string{eniIPV4Gateway, eniIPV6Gateway}, false, 0)
 	assert.NoError(t, err)
 	assert.NotNil(t, closure)
 	err = closure.run(mockNetNS)
@@ -1228,6 +1249,7 @@ func TestSetupNamespaceClosureRunWithMTU(t *testing.T) {
 		mockNetLink.EXPECT().AddrAdd(mockENILink, ipv6Address).Return(nil),
 		mockNetLink.EXPECT().LinkSetUp(mockENILink).Return(nil),
 		mockNetLink.EXPECT().LinkSetMTU(mockENILink, 9001).Return(nil),
+		mockENILink.EXPECT().Attrs().Return(&netlink.LinkAttrs{Index: eniLinkIndex}),
 		mockNetLink.EXPECT().RouteAdd(gomock.Any()).Do(func(route *netlink.Route) {
 			assert.Equal(t, route.Gw.String(), eniIPV4Gateway)
 		}).Return(nil),
@@ -1237,7 +1259,8 @@ func TestSetupNamespaceClosureRunWithMTU(t *testing.T) {
 			assert.Equal(t, route.LinkIndex, eniLinkIndex)
 		}).Return(nil),
 	)
-	closure, err := newSetupNamespaceClosureContext(mockNetLink, "eth0", deviceName, eniMACAddress, eniIPV4CIDRBlock, eniIPV6CIDRBlock, eniIPV4Gateway, eniIPV6Gateway, false, 9001)
+	closure, err := newSetupNamespaceClosureContext(mockNetLink, "eth0", deviceName, eniMACAddress,
+		[]string{eniIPV4CIDRBlock, eniIPV6CIDRBlock}, []string{eniIPV4Gateway, eniIPV6Gateway}, false, 9001)
 	assert.NoError(t, err)
 	assert.NotNil(t, closure)
 	err = closure.run(mockNetNS)
