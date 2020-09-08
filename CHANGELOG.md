@@ -1,3 +1,6 @@
+## 2020.09.0
+* Feature - Support multiple IP (v4 and v6) addresses per interface. [#98](https://github.com/aws/amazon-ecs-cni-plugins/pull/98)
+
 ## 2019.10.0
 * Enhancement - Add `MTU` field into ENI config. [#95](https://github.com/aws/amazon-ecs-cni-plugins/pull/95)
 * Enhancement - Add `stay-down` config to ENI plugin. [#94](https://github.com/aws/amazon-ecs-cni-plugins/pull/94)
