@@ -14,6 +14,8 @@
 package commands
 
 import (
+	"fmt"
+
 	"github.com/aws/amazon-ecs-cni-plugins/pkg/utils"
 	"github.com/aws/amazon-ecs-cni-plugins/plugins/ecs-bridge/engine"
 	"github.com/aws/amazon-ecs-cni-plugins/plugins/ecs-bridge/types"
@@ -46,32 +48,48 @@ func Del(args *skel.CmdArgs) error {
 	return err
 }
 
+func detailLog(msg string, args *skel.CmdArgs, conf *types.NetConf, hostVethName string) {
+	var ipamType string
+	if conf != nil {
+		ipamType = conf.IPAM.Type
+	}
+	msg = fmt.Sprintf("msg=\"%s\" netns=%s ifname=%s bridgeName=%s containerID=%s",
+		msg, args.Netns, args.IfName, conf.BridgeName, args.ContainerID)
+	if ipamType != "" {
+		msg = msg + " ipamType=" + ipamType
+	}
+	if hostVethName != "" {
+		msg = msg + " hostVethName=" + hostVethName
+	}
+	log.Infof(msg)
+}
+
 func add(args *skel.CmdArgs, engine engine.Engine) error {
 	conf, err := types.NewConf(args)
 	if err != nil {
 		return err
 	}
 
-	log.Infof("Creating the bridge: %s", conf.BridgeName)
+	detailLog("Creating the bridge", args, conf, "")
 	bridge, err := engine.CreateBridge(conf.BridgeName, conf.MTU)
 	if err != nil {
 		return err
 	}
 
-	log.Infof("Creating veth pair for namespace: %s", args.Netns)
+	detailLog("Creating veth pair for namespace", args, conf, "")
 	containerVethInterface, hostVethName, err := engine.CreateVethPair(
 		args.Netns, conf.MTU, args.IfName)
 	if err != nil {
 		return err
 	}
 
-	log.Infof("Attaching veth pair %s to bridge", hostVethName)
+	detailLog("Attaching veth pair to bridge", args, conf, hostVethName)
 	hostVethInterface, err := engine.AttachHostVethInterfaceToBridge(hostVethName, bridge)
 	if err != nil {
 		return err
 	}
 
-	log.Infof("Running IPAM plugin ADD: %s", conf.IPAM.Type)
+	detailLog("Running IPAM plugin ADD", args, conf, hostVethName)
 	result, err := engine.RunIPAMPluginAdd(conf.IPAM.Type, args.StdinData)
 	if err != nil {
 		return err
@@ -98,13 +116,13 @@ func add(args *skel.CmdArgs, engine engine.Engine) error {
 	// needs to know which interface should be used when adding routes
 	result.IPs[0].Interface = 2
 
-	log.Infof("Configuring container's interface: %s", args.Netns)
+	detailLog("Configuring container's interface", args, conf, hostVethName)
 	err = engine.ConfigureContainerVethInterface(args.Netns, result, args.IfName)
 	if err != nil {
 		return err
 	}
 
-	log.Infof("Configuring bridge: %s", conf.BridgeName)
+	detailLog("Configuring bridge", args, conf, hostVethName)
 	err = engine.ConfigureBridge(result, bridge)
 	if err != nil {
 		return err
@@ -117,18 +135,19 @@ func del(args *skel.CmdArgs, engine engine.Engine) error {
 	if err != nil {
 		return err
 	}
+	detailLog("Deleting veth interface", args, conf, "")
 
 	if utils.ZeroOrNil(conf.IPAM) {
-		log.Infof("IPAM configuration not found, skip DEL for IPAM")
+		detailLog("IPAM configuration not found, skip DEL for IPAM", args, conf, "")
 		return nil
 	}
 
-	log.Infof("Running IPAM plugin DEL: %s", conf.IPAM.Type)
+	detailLog("Running IPAM plugin DEL", args, conf, "")
 	err = engine.RunIPAMPluginDel(conf.IPAM.Type, args.StdinData)
 	if err != nil {
 		return err
 	}
 
-	log.Infof("Deleting container interface: %s", args.Netns)
+	detailLog("Deleting container interface", args, conf, "")
 	return engine.DeleteVeth(args.Netns, args.IfName)
 }
