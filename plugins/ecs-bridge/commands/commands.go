@@ -139,13 +139,12 @@ func del(args *skel.CmdArgs, engine engine.Engine) error {
 
 	if utils.ZeroOrNil(conf.IPAM) {
 		detailLog("IPAM configuration not found, skip DEL for IPAM", args, conf, "")
-		return nil
-	}
-
-	detailLog("Running IPAM plugin DEL", args, conf, "")
-	err = engine.RunIPAMPluginDel(conf.IPAM.Type, args.StdinData)
-	if err != nil {
-		return err
+	} else {
+		detailLog("Running IPAM plugin DEL", args, conf, "")
+		err = engine.RunIPAMPluginDel(conf.IPAM.Type, args.StdinData)
+		if err != nil {
+			return err
+		}
 	}
 
 	detailLog("Deleting container interface", args, conf, "")
