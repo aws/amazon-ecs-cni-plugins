@@ -14,6 +14,7 @@
 package commands
 
 import (
+	"fmt"
 	"net"
 
 	"github.com/aws/amazon-ecs-cni-plugins/plugins/ipam/config"
@@ -24,6 +25,38 @@ import (
 	"github.com/containernetworking/cni/pkg/types/current"
 	"github.com/pkg/errors"
 )
+
+func detailLogMsg(msg string, args *skel.CmdArgs, ipamConf *config.IPAMConfig) string {
+	var ipamType string
+	var ipamID string
+	if ipamConf != nil {
+		ipamType = ipamConf.Type
+		ipamID = ipamConf.ID
+	}
+	if args != nil {
+		msg = fmt.Sprintf("msg=\"%s\" netns=%s ifname=%s containerID=%s",
+			msg, args.Netns, args.IfName, args.ContainerID)
+	} else {
+		msg = fmt.Sprintf("msg=\"%s\"", msg)
+	}
+	if ipamType != "" {
+		msg = msg + " ipamType=" + ipamType
+	}
+	if ipamID != "" {
+		msg = msg + " ipamID=" + ipamID
+	}
+	return msg
+}
+
+// func detailLogError(msg string, args *skel.CmdArgs, ipamConf *config.IPAMConfig) {
+// 	msg = detailLogMsg(msg, args, ipamConf)
+// 	seelog.Error(msg)
+// }
+
+func detailLogInfo(msg string, args *skel.CmdArgs, ipamConf *config.IPAMConfig) {
+	msg = detailLogMsg(msg, args, ipamConf)
+	seelog.Info(msg)
+}
 
 // Add will return ip, gateway, routes which can be
 // used in bridge plugin to configure veth pair and bridge
@@ -38,6 +71,8 @@ func Add(args *skel.CmdArgs) error {
 	if err != nil {
 		return err
 	}
+
+	detailLogInfo("IPAM ADD", args, ipamConf)
 
 	// Create the ip manager
 	ipManager, err := ipstore.NewIPAllocator(dbConf, net.IPNet{
@@ -83,6 +118,7 @@ func Del(args *skel.CmdArgs) error {
 	if err != nil {
 		return err
 	}
+	detailLogInfo("IPAM DEL", args, ipamConf)
 
 	if err := validateDelConfiguration(ipamConf); err != nil {
 		return err
@@ -131,6 +167,7 @@ func del(ipManager ipstore.IPAllocator, ipamConf *config.IPAMConfig) error {
 		}
 		releasedIP = ip
 	}
+	detailLogInfo("Releasing IP addr "+releasedIP, nil, ipamConf)
 
 	// Update the last known ip
 	err := ipManager.Update("lastKnownIP", releasedIP)
