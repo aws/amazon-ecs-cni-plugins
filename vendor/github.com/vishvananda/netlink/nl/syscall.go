@@ -21,6 +21,13 @@ const (
 	FRA_TABLE  /* Extended table id */
 	FRA_FWMASK /* mask for netfilter mark */
 	FRA_OIFNAME
+	FRA_PAD
+	FRA_L3MDEV      /* iif or oif is l3mdev goto its table */
+	FRA_UID_RANGE   /* UID range */
+	FRA_PROTOCOL    /* Originator of the rule */
+	FRA_IP_PROTO    /* ip proto */
+	FRA_SPORT_RANGE /* sport */
+	FRA_DPORT_RANGE /* dport */
 )
 
 // ip rule netlink request types
@@ -42,16 +49,6 @@ const (
 	TCPDIAG_NOCOOKIE    = 0xFFFFFFFF /* TCPDIAG_NOCOOKIE in net/ipv4/tcp_diag.h*/
 )
 
-const (
-	AF_MPLS = 28
-)
-
-const (
-	RTA_NEWDST     = 0x13
-	RTA_ENCAP_TYPE = 0x15
-	RTA_ENCAP      = 0x16
-)
-
 // RTA_ENCAP subtype
 const (
 	MPLS_IPTUNNEL_UNSPEC = iota
@@ -65,4 +62,15 @@ const (
 	LWTUNNEL_ENCAP_IP
 	LWTUNNEL_ENCAP_ILA
 	LWTUNNEL_ENCAP_IP6
+	LWTUNNEL_ENCAP_SEG6
+	LWTUNNEL_ENCAP_BPF
+	LWTUNNEL_ENCAP_SEG6_LOCAL
+)
+
+// routing header types
+const (
+	IPV6_SRCRT_STRICT = 0x01 // Deprecated; will be removed
+	IPV6_SRCRT_TYPE_0 = 0    // Deprecated; will be removed
+	IPV6_SRCRT_TYPE_2 = 2    // IPv6 type 2 Routing Header
+	IPV6_SRCRT_TYPE_4 = 4    // Segment Routing with IPv6
 )

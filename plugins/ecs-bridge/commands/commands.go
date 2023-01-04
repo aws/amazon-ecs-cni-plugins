@@ -14,6 +14,8 @@
 package commands
 
 import (
+	"fmt"
+
 	"github.com/aws/amazon-ecs-cni-plugins/pkg/utils"
 	"github.com/aws/amazon-ecs-cni-plugins/plugins/ecs-bridge/engine"
 	"github.com/aws/amazon-ecs-cni-plugins/plugins/ecs-bridge/types"
@@ -96,7 +98,8 @@ func add(args *skel.CmdArgs, engine engine.Engine) error {
 	// list populated above.
 	// The `ipam.ConfigureIface` method needs this index to be set as it
 	// needs to know which interface should be used when adding routes
-	result.IPs[0].Interface = 2
+	two := 2
+	result.IPs[0].Interface = &two
 
 	log.Infof("Configuring container's interface: %s", args.Netns)
 	err = engine.ConfigureContainerVethInterface(args.Netns, result, args.IfName)
@@ -131,4 +134,8 @@ func del(args *skel.CmdArgs, engine engine.Engine) error {
 
 	log.Infof("Deleting container interface: %s", args.Netns)
 	return engine.DeleteVeth(args.Netns, args.IfName)
+}
+
+func Check(args *skel.CmdArgs) error {
+	return fmt.Errorf("not implemented")
 }

@@ -14,9 +14,9 @@
 package cniipamwrapper
 
 import (
-	cni_ipam "github.com/containernetworking/cni/pkg/ipam"
 	"github.com/containernetworking/cni/pkg/types"
 	"github.com/containernetworking/cni/pkg/types/current"
+	cni_ipam "github.com/containernetworking/plugins/pkg/ipam"
 )
 
 // IPAM wraps methods used from the the cni/pkg/ipam package

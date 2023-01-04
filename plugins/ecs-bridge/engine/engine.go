@@ -27,7 +27,7 @@ import (
 	"github.com/vishvananda/netlink"
 )
 
-const  (
+const (
 	// zeroLengthIPString is what we expect net.IP.String() to return if the
 	// ip has length 0. We use this to determing if an IP is empty.
 	// Refer https://golang.org/pkg/net/#IP.String
@@ -190,8 +190,7 @@ func (engine *engine) RunIPAMPluginAdd(plugin string, netConf []byte) (*current.
 
 	result, err := current.NewResultFromResult(ipamResult)
 	if err != nil {
-		return nil, errors.Wrapf(err,
-			"bridge IPAM ADD: unable to parse result '%s'", ipamResult.String())
+		return nil, errors.Wrapf(err, "bridge IPAM ADD: unable to parse result '%s'.", ipamResult)
 	}
 
 	// This version of the bridge plugin only considers the first IP Address

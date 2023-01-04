@@ -1,3 +1,4 @@
+//go:build !integration && !e2e
 // +build !integration,!e2e
 
 // Copyright 2017 Amazon.com, Inc. or its affiliates. All Rights Reserved.

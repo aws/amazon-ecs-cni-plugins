@@ -14,6 +14,7 @@
 package commands
 
 import (
+	"fmt"
 	"net"
 	"time"
 
@@ -123,4 +124,8 @@ func add(args *skel.CmdArgs, engine engine.Engine) error {
 // del removes the ENI setup within the container's namespace.
 func del(args *skel.CmdArgs, engine engine.Engine) error {
 	return nil
+}
+
+func Check(args *skel.CmdArgs) error {
+	return fmt.Errorf("not implemented")
 }

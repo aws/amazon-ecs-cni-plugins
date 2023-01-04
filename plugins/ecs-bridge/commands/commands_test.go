@@ -1,3 +1,4 @@
+//go:build !integration && !e2e
 // +build !integration,!e2e
 
 // Copyright 2017 Amazon.com, Inc. or its affiliates. All Rights Reserved.
@@ -150,7 +151,7 @@ func TestAddConfigureContainerVethInterfaceError(t *testing.T) {
 			func(netns string, res *current.Result, ifName string) {
 				assert.NotEmpty(t, res)
 				assert.Equal(t, 3, len(res.Interfaces))
-				assert.Equal(t, 2, res.IPs[0].Interface)
+				assert.Equal(t, 2, *res.IPs[0].Interface)
 				bridge := res.Interfaces[0]
 				assert.Equal(t, bridgeName, bridge.Name)
 				assert.Equal(t, mac, bridge.Mac)
@@ -220,7 +221,7 @@ func TestAddSuccess(t *testing.T) {
 			func(netns string, res *current.Result, ifName string) {
 				assert.NotEmpty(t, res)
 				assert.Equal(t, 3, len(res.Interfaces))
-				assert.Equal(t, 2, res.IPs[0].Interface)
+				assert.Equal(t, 2, *res.IPs[0].Interface)
 				bridge := res.Interfaces[0]
 				assert.Equal(t, bridgeName, bridge.Name)
 				assert.Equal(t, mac, bridge.Mac)

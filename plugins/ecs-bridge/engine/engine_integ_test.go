@@ -1,3 +1,4 @@
+//go:build sudo && integration
 // +build sudo,integration
 
 // Copyright 2019 Amazon.com, Inc. or its affiliates. All Rights Reserved.
