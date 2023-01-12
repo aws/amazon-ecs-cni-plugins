@@ -16,6 +16,7 @@ type Destination interface {
 	Decode([]byte) error
 	Encode() ([]byte, error)
 	String() string
+	Equal(Destination) bool
 }
 
 type Encap interface {
@@ -23,26 +24,47 @@ type Encap interface {
 	Decode([]byte) error
 	Encode() ([]byte, error)
 	String() string
+	Equal(Encap) bool
 }
+
+//Protocol describe what was the originator of the route
+type RouteProtocol int
 
 // Route represents a netlink route.
 type Route struct {
-	LinkIndex  int
-	ILinkIndex int
-	Scope      Scope
-	Dst        *net.IPNet
-	Src        net.IP
-	Gw         net.IP
-	MultiPath  []*NexthopInfo
-	Protocol   int
-	Priority   int
-	Table      int
-	Type       int
-	Tos        int
-	Flags      int
-	MPLSDst    *int
-	NewDst     Destination
-	Encap      Encap
+	LinkIndex        int
+	ILinkIndex       int
+	Scope            Scope
+	Dst              *net.IPNet
+	Src              net.IP
+	Gw               net.IP
+	MultiPath        []*NexthopInfo
+	Protocol         RouteProtocol
+	Priority         int
+	Table            int
+	Type             int
+	Tos              int
+	Flags            int
+	MPLSDst          *int
+	NewDst           Destination
+	Encap            Encap
+	Via              Destination
+	MTU              int
+	Window           int
+	Rtt              int
+	RttVar           int
+	Ssthresh         int
+	Cwnd             int
+	AdvMSS           int
+	Reordering       int
+	Hoplimit         int
+	InitCwnd         int
+	Features         int
+	RtoMin           int
+	InitRwnd         int
+	QuickACK         int
+	Congctl          string
+	FastOpenNoCookie int
 }
 
 func (r Route) String() string {
@@ -61,6 +83,9 @@ func (r Route) String() string {
 	if r.Encap != nil {
 		elems = append(elems, fmt.Sprintf("Encap: %s", r.Encap))
 	}
+	if r.Via != nil {
+		elems = append(elems, fmt.Sprintf("Via: %s", r.Via))
+	}
 	elems = append(elems, fmt.Sprintf("Src: %s", r.Src))
 	if len(r.MultiPath) > 0 {
 		elems = append(elems, fmt.Sprintf("Gw: %s", r.MultiPath))
@@ -70,6 +95,27 @@ func (r Route) String() string {
 	elems = append(elems, fmt.Sprintf("Flags: %s", r.ListFlags()))
 	elems = append(elems, fmt.Sprintf("Table: %d", r.Table))
 	return fmt.Sprintf("{%s}", strings.Join(elems, " "))
+}
+
+func (r Route) Equal(x Route) bool {
+	return r.LinkIndex == x.LinkIndex &&
+		r.ILinkIndex == x.ILinkIndex &&
+		r.Scope == x.Scope &&
+		ipNetEqual(r.Dst, x.Dst) &&
+		r.Src.Equal(x.Src) &&
+		r.Gw.Equal(x.Gw) &&
+		nexthopInfoSlice(r.MultiPath).Equal(x.MultiPath) &&
+		r.Protocol == x.Protocol &&
+		r.Priority == x.Priority &&
+		r.Table == x.Table &&
+		r.Type == x.Type &&
+		r.Tos == x.Tos &&
+		r.Hoplimit == x.Hoplimit &&
+		r.Flags == x.Flags &&
+		(r.MPLSDst == x.MPLSDst || (r.MPLSDst != nil && x.MPLSDst != nil && *r.MPLSDst == *x.MPLSDst)) &&
+		(r.NewDst == x.NewDst || (r.NewDst != nil && r.NewDst.Equal(x.NewDst))) &&
+		(r.Via == x.Via || (r.Via != nil && r.Via.Equal(x.Via))) &&
+		(r.Encap == x.Encap || (r.Encap != nil && r.Encap.Equal(x.Encap)))
 }
 
 func (r *Route) SetFlag(flag NextHopFlag) {
@@ -98,6 +144,7 @@ type NexthopInfo struct {
 	Flags     int
 	NewDst    Destination
 	Encap     Encap
+	Via       Destination
 }
 
 func (n *NexthopInfo) String() string {
@@ -109,8 +156,50 @@ func (n *NexthopInfo) String() string {
 	if n.Encap != nil {
 		elems = append(elems, fmt.Sprintf("Encap: %s", n.Encap))
 	}
+	if n.Via != nil {
+		elems = append(elems, fmt.Sprintf("Via: %s", n.Via))
+	}
 	elems = append(elems, fmt.Sprintf("Weight: %d", n.Hops+1))
-	elems = append(elems, fmt.Sprintf("Gw: %d", n.Gw))
+	elems = append(elems, fmt.Sprintf("Gw: %s", n.Gw))
 	elems = append(elems, fmt.Sprintf("Flags: %s", n.ListFlags()))
 	return fmt.Sprintf("{%s}", strings.Join(elems, " "))
+}
+
+func (n NexthopInfo) Equal(x NexthopInfo) bool {
+	return n.LinkIndex == x.LinkIndex &&
+		n.Hops == x.Hops &&
+		n.Gw.Equal(x.Gw) &&
+		n.Flags == x.Flags &&
+		(n.NewDst == x.NewDst || (n.NewDst != nil && n.NewDst.Equal(x.NewDst))) &&
+		(n.Encap == x.Encap || (n.Encap != nil && n.Encap.Equal(x.Encap)))
+}
+
+type nexthopInfoSlice []*NexthopInfo
+
+func (n nexthopInfoSlice) Equal(x []*NexthopInfo) bool {
+	if len(n) != len(x) {
+		return false
+	}
+	for i := range n {
+		if n[i] == nil || x[i] == nil {
+			return false
+		}
+		if !n[i].Equal(*x[i]) {
+			return false
+		}
+	}
+	return true
+}
+
+// ipNetEqual returns true iff both IPNet are equal
+func ipNetEqual(ipn1 *net.IPNet, ipn2 *net.IPNet) bool {
+	if ipn1 == ipn2 {
+		return true
+	}
+	if ipn1 == nil || ipn2 == nil {
+		return false
+	}
+	m1, _ := ipn1.Mask.Size()
+	m2, _ := ipn2.Mask.Size()
+	return m1 == m2 && ipn1.IP.Equal(ipn2.IP)
 }

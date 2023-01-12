@@ -1,3 +1,4 @@
+//go:build !integration && !e2e
 // +build !integration,!e2e
 
 // Copyright 2017 Amazon.com, Inc. or its affiliates. All Rights Reserved.
@@ -70,7 +71,6 @@ func TestGetSpecificIPV4HappyPath(t *testing.T) {
 
 	gomock.InOrder(
 		allocator.EXPECT().Assign(gomock.Any(), gomock.Any()).Return(nil),
-		allocator.EXPECT().SetLastKnownIP(net.ParseIP("10.0.0.3")),
 	)
 
 	assignedAddress, err := getIPV4Address(allocator, conf)

@@ -25,6 +25,7 @@ import (
 	"github.com/aws/amazon-ecs-cni-plugins/plugins/ipam/version/cnispec"
 	log "github.com/cihub/seelog"
 	"github.com/containernetworking/cni/pkg/skel"
+	bv "github.com/containernetworking/plugins/pkg/utils/buildversion"
 )
 
 const (
@@ -61,7 +62,7 @@ func main() {
 		return
 	}
 
-	skel.PluginMain(commands.Add, commands.Del, cnispec.GetSpecVersionSupported())
+	skel.PluginMain(commands.Add, commands.Check, commands.Del, cnispec.GetSpecVersionSupported(), bv.BuildString("TODO"))
 }
 
 func printVersionInfo() error {

@@ -14,6 +14,7 @@
 package commands
 
 import (
+	"fmt"
 	"net"
 
 	"github.com/aws/amazon-ecs-cni-plugins/plugins/ipam/config"
@@ -237,4 +238,8 @@ func verifyGateway(gw net.IP, ipManager ipstore.IPAllocator) error {
 	}
 
 	return nil
+}
+
+func Check(args *skel.CmdArgs) error {
+	return fmt.Errorf("not implemented")
 }

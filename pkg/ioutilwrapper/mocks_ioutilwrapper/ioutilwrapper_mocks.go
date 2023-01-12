@@ -1,4 +1,4 @@
-// Copyright 2019 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+// Copyright 2023 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License"). You may
 // not use this file except in compliance with the License. A copy of the
@@ -18,7 +18,7 @@
 package mock_ioutilwrapper
 
 import (
-	os "os"
+	fs "io/fs"
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
@@ -48,10 +48,10 @@ func (m *MockIOUtil) EXPECT() *MockIOUtilMockRecorder {
 }
 
 // ReadDir mocks base method
-func (m *MockIOUtil) ReadDir(arg0 string) ([]os.FileInfo, error) {
+func (m *MockIOUtil) ReadDir(arg0 string) ([]fs.FileInfo, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ReadDir", arg0)
-	ret0, _ := ret[0].([]os.FileInfo)
+	ret0, _ := ret[0].([]fs.FileInfo)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }

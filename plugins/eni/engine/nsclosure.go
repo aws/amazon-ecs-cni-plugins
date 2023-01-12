@@ -19,7 +19,7 @@ import (
 	"syscall"
 
 	"github.com/aws/amazon-ecs-cni-plugins/pkg/netlinkwrapper"
-	"github.com/containernetworking/cni/pkg/ns"
+	"github.com/containernetworking/plugins/pkg/ns"
 	"github.com/pkg/errors"
 	"github.com/vishvananda/netlink"
 )

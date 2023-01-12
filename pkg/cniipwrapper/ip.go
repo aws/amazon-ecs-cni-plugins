@@ -16,12 +16,12 @@ package cniipwrapper
 import (
 	"net"
 
-	"github.com/containernetworking/cni/pkg/ip"
-	"github.com/containernetworking/cni/pkg/ns"
+	"github.com/containernetworking/plugins/pkg/ip"
+	"github.com/containernetworking/plugins/pkg/ns"
 )
 
 // IPAM wraps methods used from the the cni/pkg/ip package
-// Seee github.com/containernetworking/cni/pkg/ip for more details
+// See github.com/containernetworking/plugins/pkg/ip for more details
 type IP interface {
 	// SetupVeth creates a veth pair
 	SetupVeth(contVethName string, mtu int, hostNS ns.NetNS) (net.Interface, net.Interface, error)
@@ -29,7 +29,7 @@ type IP interface {
 	// by the ip address
 	SetHWAddrByIP(ifName string, ip4 net.IP, ip6 net.IP) error
 	// DelLinkByNameAddr deletes the interface
-	DelLinkByNameAddr(ifName string, family int) (*net.IPNet, error)
+	DelLinkByNameAddr(ifName string) (*net.IPNet, error)
 }
 
 type cniIP struct{}
@@ -47,6 +47,11 @@ func (*cniIP) SetHWAddrByIP(ifName string, ip4 net.IP, ip6 net.IP) error {
 	return ip.SetHWAddrByIP(ifName, ip4, ip6)
 }
 
-func (*cniIP) DelLinkByNameAddr(ifName string, family int) (*net.IPNet, error) {
-	return ip.DelLinkByNameAddr(ifName, family)
+func (*cniIP) DelLinkByNameAddr(ifName string) (*net.IPNet, error) {
+	// this was updated to return an array of its addresses.  For now just returning the first
+	ips, err := ip.DelLinkByNameAddr(ifName)
+	if err != nil {
+		return &net.IPNet{}, err
+	}
+	return ips[0], err
 }

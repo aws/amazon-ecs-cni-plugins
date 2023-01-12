@@ -1,4 +1,4 @@
-// Copyright 2019 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+// Copyright 2023 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License"). You may
 // not use this file except in compliance with the License. A copy of the
@@ -21,7 +21,7 @@ import (
 	net "net"
 	reflect "reflect"
 
-	ns "github.com/containernetworking/cni/pkg/ns"
+	ns "github.com/containernetworking/plugins/pkg/ns"
 	gomock "github.com/golang/mock/gomock"
 )
 
@@ -49,18 +49,18 @@ func (m *MockIP) EXPECT() *MockIPMockRecorder {
 }
 
 // DelLinkByNameAddr mocks base method
-func (m *MockIP) DelLinkByNameAddr(arg0 string, arg1 int) (*net.IPNet, error) {
+func (m *MockIP) DelLinkByNameAddr(arg0 string) (*net.IPNet, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "DelLinkByNameAddr", arg0, arg1)
+	ret := m.ctrl.Call(m, "DelLinkByNameAddr", arg0)
 	ret0, _ := ret[0].(*net.IPNet)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // DelLinkByNameAddr indicates an expected call of DelLinkByNameAddr
-func (mr *MockIPMockRecorder) DelLinkByNameAddr(arg0, arg1 interface{}) *gomock.Call {
+func (mr *MockIPMockRecorder) DelLinkByNameAddr(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DelLinkByNameAddr", reflect.TypeOf((*MockIP)(nil).DelLinkByNameAddr), arg0, arg1)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DelLinkByNameAddr", reflect.TypeOf((*MockIP)(nil).DelLinkByNameAddr), arg0)
 }
 
 // SetHWAddrByIP mocks base method
