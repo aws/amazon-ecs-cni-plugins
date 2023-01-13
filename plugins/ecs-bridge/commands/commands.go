@@ -129,7 +129,8 @@ func add(args *skel.CmdArgs, engine engine.Engine) error {
 	// list populated above.
 	// The `ipam.ConfigureIface` method needs this index to be set as it
 	// needs to know which interface should be used when adding routes
-	result.IPs[0].Interface = 2
+	two := 2
+	result.IPs[0].Interface = &two
 
 	detailLogInfo("Configuring container's interface", args, conf, hostVethName)
 	err = engine.ConfigureContainerVethInterface(args.Netns, result, args.IfName)
@@ -164,4 +165,8 @@ func del(args *skel.CmdArgs, engine engine.Engine) error {
 
 	detailLogInfo("Deleting container interface", args, conf, "")
 	return engine.DeleteVeth(args.Netns, args.IfName)
+}
+
+func Check(args *skel.CmdArgs) error {
+	return fmt.Errorf("not implemented")
 }

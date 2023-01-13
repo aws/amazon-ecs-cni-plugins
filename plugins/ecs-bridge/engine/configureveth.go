@@ -19,9 +19,9 @@ import (
 	"github.com/aws/amazon-ecs-cni-plugins/pkg/cniipamwrapper"
 	"github.com/aws/amazon-ecs-cni-plugins/pkg/cniipwrapper"
 	"github.com/aws/amazon-ecs-cni-plugins/pkg/netlinkwrapper"
-	"github.com/containernetworking/cni/pkg/ns"
 	"github.com/containernetworking/cni/pkg/types"
 	"github.com/containernetworking/cni/pkg/types/current"
+	"github.com/containernetworking/plugins/pkg/ns"
 	"github.com/pkg/errors"
 	"github.com/vishvananda/netlink"
 )
