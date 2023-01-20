@@ -6,6 +6,7 @@ LOCAL_IPAM_PLUGIN_BINARY=bin/plugins/ecs-ipam
 LOCAL_BRIDGE_PLUGIN_BINARY=bin/plugins/ecs-bridge
 VERSION=$(shell cat $(ROOT)/VERSION)
 GO_EXECUTABLE=$(shell command -v go 2> /dev/null)
+GO_VERSION=`go version | cut -d' ' -f3 | cut -c 3-`
 
 # We want to embed some git details in the build. We support pulling
 # these details from the environment in order support builds outside
@@ -25,6 +26,15 @@ ifeq ($(strip $(GIT_PORCELAIN)),)
   GIT_PORCELAIN=1
 endif
 
+# buildvcs=false excludes version control information in golang >= 1.18. 
+# This is required for compiling agent with included repositories
+ifeq ($(shell expr $(GO_VERSION) \>= 1.18), 1)
+	BUILD_VCS := -buildvcs=false
+else
+	# leaving BUILD_VCS empty as it is not required for golang < 1.18.
+	BUILD_VCS :=
+endif
+
 .PHONY: get-deps
 
 get-deps:
@@ -37,7 +47,7 @@ get-deps:
 plugins: $(LOCAL_ENI_PLUGIN_BINARY) $(LOCAL_IPAM_PLUGIN_BINARY) $(LOCAL_BRIDGE_PLUGIN_BINARY)
 
 $(LOCAL_ENI_PLUGIN_BINARY): $(SOURCES)
-	GOOS=linux CGO_ENABLED=0 go build -installsuffix cgo -a -ldflags "\
+	GOOS=linux CGO_ENABLED=0 go build $(BUILD_VCS) -installsuffix cgo -a -ldflags "\
 	     -X github.com/aws/amazon-ecs-cni-plugins/pkg/version.GitShortHash=$(GIT_SHORT_HASH) \
 	     -X github.com/aws/amazon-ecs-cni-plugins/pkg/version.GitPorcelain=$(GIT_PORCELAIN) \
 	     -X github.com/aws/amazon-ecs-cni-plugins/pkg/version.Version=$(VERSION) -s" \
@@ -45,7 +55,7 @@ $(LOCAL_ENI_PLUGIN_BINARY): $(SOURCES)
 	@echo "Built eni plugin"
 
 $(LOCAL_IPAM_PLUGIN_BINARY): $(SOURCES)
-	GOOS=linux CGO_ENABLED=0 go build -installsuffix cgo -a -ldflags "\
+	GOOS=linux CGO_ENABLED=0 go build $(BUILD_VCS) -installsuffix cgo -a -ldflags "\
 	     -X github.com/aws/amazon-ecs-cni-plugins/pkg/version.GitShortHash=$(GIT_SHORT_HASH) \
 	     -X github.com/aws/amazon-ecs-cni-plugins/pkg/version.GitPorcelain=$(GIT_PORCELAIN) \
 	     -X github.com/aws/amazon-ecs-cni-plugins/pkg/version.Version=$(VERSION) -s" \
@@ -53,7 +63,7 @@ $(LOCAL_IPAM_PLUGIN_BINARY): $(SOURCES)
 	@echo "Built ipam plugin"
 
 $(LOCAL_BRIDGE_PLUGIN_BINARY): $(SOURCES)
-	GOOS=linux CGO_ENABLED=0 go build -installsuffix cgo -a -ldflags "\
+	GOOS=linux CGO_ENABLED=0 go build $(BUILD_VCS) -installsuffix cgo -a -ldflags "\
 	     -X github.com/aws/amazon-ecs-cni-plugins/pkg/version.GitShortHash=$(GIT_SHORT_HASH) \
 	     -X github.com/aws/amazon-ecs-cni-plugins/pkg/version.GitPorcelain=$(GIT_PORCELAIN) \
 	     -X github.com/aws/amazon-ecs-cni-plugins/pkg/version.Version=$(VERSION) -s" \
