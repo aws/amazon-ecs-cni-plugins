@@ -1,4 +1,4 @@
-// Copyright 2017 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+
 //
 // Licensed under the Apache License, Version 2.0 (the "License"). You may
 // not use this file except in compliance with the License. A copy of the
@@ -49,9 +49,9 @@ func (*cniIP) SetHWAddrByIP(ifName string, ip4 net.IP, ip6 net.IP) error {
 
 func (*cniIP) DelLinkByNameAddr(ifName string) (*net.IPNet, error) {
 	// this was updated to return an array of its addresses.  For now just returning the first
-	ips, err := ip.DelLinkByNameAddr(ifName)
-	if err != nil {
-		return &net.IPNet{}, err
+	addrs, err := ip.DelLinkByNameAddr(ifName)
+	if err != nil || len(addrs) == 0 {
+		return nil, fmt.Errorf("failed to get IP addresses for %q: %v", ifName, err)
 	}
-	return ips[0], err
+	return addrs[0].IPNet, nil 
 }
