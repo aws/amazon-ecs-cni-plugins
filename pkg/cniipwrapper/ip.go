@@ -14,6 +14,7 @@
 package cniipwrapper
 
 import (
+	"fmt"
 	"net"
 
 	"github.com/containernetworking/plugins/pkg/ip"
@@ -53,5 +54,5 @@ func (*cniIP) DelLinkByNameAddr(ifName string) (*net.IPNet, error) {
 	if err != nil || len(addrs) == 0 {
 		return nil, fmt.Errorf("failed to get IP addresses for %q: %v", ifName, err)
 	}
-	return addrs[0].IPNet, nil 
+	return addrs[0], nil
 }

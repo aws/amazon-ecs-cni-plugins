@@ -160,6 +160,7 @@ func del(args *skel.CmdArgs, engine engine.Engine) error {
 		err = engine.RunIPAMPluginDel(conf.IPAM.Type, args.StdinData)
 		if err != nil {
 			detailLogError("Error running IPAM plugin DEL: "+err.Error(), args, conf, "")
+			return err
 		}
 	}
 
