@@ -844,7 +844,7 @@ func TestDeleteVethContextDelLinkByNameAddrError(t *testing.T) {
 	ctrl, _, _, mockIP, _, _ := setup(t)
 	defer ctrl.Finish()
 
-	mockIP.EXPECT().DelLinkByNameAddr(interfaceName).Return(nil, errors.New("error"))
+	mockIP.EXPECT().DelLinkByNameAddr(interfaceName).Return(errors.New("error"))
 	delContext := newDeleteLinkContext(interfaceName, mockIP)
 	err := delContext.run(nil)
 	assert.Error(t, err)
@@ -854,7 +854,7 @@ func TestDeleteVethContextDelLinkByNameAddrErrorNotFound(t *testing.T) {
 	ctrl, _, _, mockIP, _, _ := setup(t)
 	defer ctrl.Finish()
 
-	mockIP.EXPECT().DelLinkByNameAddr(interfaceName).Return(nil, ip.ErrLinkNotFound)
+	mockIP.EXPECT().DelLinkByNameAddr(interfaceName).Return(ip.ErrLinkNotFound)
 	delContext := newDeleteLinkContext(interfaceName, mockIP)
 	err := delContext.run(nil)
 	assert.NoError(t, err)
@@ -864,7 +864,7 @@ func TestDeleteVethContextDelLinkByNameAddrSuccess(t *testing.T) {
 	ctrl, _, _, mockIP, _, _ := setup(t)
 	defer ctrl.Finish()
 
-	mockIP.EXPECT().DelLinkByNameAddr(interfaceName).Return(nil, nil)
+	mockIP.EXPECT().DelLinkByNameAddr(interfaceName).Return(nil)
 	delContext := newDeleteLinkContext(interfaceName, mockIP)
 	err := delContext.run(nil)
 	assert.NoError(t, err)

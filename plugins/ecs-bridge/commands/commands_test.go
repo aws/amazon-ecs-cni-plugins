@@ -247,8 +247,9 @@ func TestDelRunIPAMPluginDelError(t *testing.T) {
 
 	mockEngine := mock_engine.NewMockEngine(ctrl)
 	mockEngine.EXPECT().RunIPAMPluginDel(ipamType, conf.StdinData).Return(errors.New("error"))
+	mockEngine.EXPECT().DeleteVeth(nsName, interfaceName).Return(nil)
 	err := del(conf, mockEngine)
-	assert.Error(t, err)
+	assert.NoError(t, err) // the final error that gets returned is from DeleteVeth - we log the error for IPAM delete and then carry on
 }
 
 func TestDelDeleteVethError(t *testing.T) {

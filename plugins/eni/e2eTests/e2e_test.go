@@ -16,6 +16,7 @@
 package e2eTests
 
 import (
+	"context"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -26,6 +27,8 @@ import (
 	"time"
 
 	"github.com/aws/amazon-ecs-cni-plugins/pkg/utils"
+	"github.com/aws/amazon-ecs-cni-plugins/pkg/testutils"
+
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/ec2metadata"
 	"github.com/aws/aws-sdk-go/aws/session"
@@ -41,10 +44,12 @@ import (
 const (
 	ifName        = "ecs-test-eth0"
 	containerID   = "contain-er"
+	targetNSName  = "targetNS"
 	netConfFormat = `
 {
     "type":"ecs-eni",
     "cniVersion":"0.3.0",
+    "name":"ecs-eni-cni-plugin",
     "eni":"%s",
     "mac":"%s",
     "ip-addresses":["%s"],
@@ -123,14 +128,14 @@ func TestAddDel(t *testing.T) {
 		}
 	}(ok)
 
-	// Use the current network namespace to execute the test in
+	// Use the current network namespace to execute the test in.
 	testNS, err := ns.GetCurrentNS()
 	require.NoError(t, err, "Unable to get the network namespace to run the test in")
 	defer testNS.Close()
 
 	// Create a network namespace to mimic the container's network namespace.
 	// The ENI will be moved to this namespace
-	targetNS, err := ns.NewNS()
+	targetNS, err := testutils.NewNetNS(targetNSName)
 	require.NoError(t, err,
 		"Unable to create the network namespace that represents the network namespace of the container")
 	defer targetNS.Close()
@@ -138,7 +143,7 @@ func TestAddDel(t *testing.T) {
 	// Construct args to invoke the CNI plugin with
 	execInvokeArgs := &invoke.Args{
 		ContainerID: containerID,
-		NetNS:       targetNS.Path(),
+		NetNS:       targetNS.GetPath(),
 		IfName:      ifName,
 		Path:        os.Getenv("CNI_PATH"),
 	}
@@ -153,14 +158,16 @@ func TestAddDel(t *testing.T) {
 		// Execute the "ADD" command for the plugin
 		execInvokeArgs.Command = "ADD"
 		err := invoke.ExecPluginWithoutResult(
+			context.Background(),
 			eniPluginPath,
 			netConf,
-			execInvokeArgs)
+			execInvokeArgs,
+			nil)
 		require.NoError(t, err, "Unable to execute ADD command for ecs-eni plugin")
 		return nil
 	})
 
-	targetNS.Do(func(ns.NetNS) error {
+	targetNS.Run(func() error {
 		// Validate that only 2 devices exist in the target network
 		// namespace (lo and eni)
 		links, err := netlink.LinkList()
@@ -185,9 +192,11 @@ func TestAddDel(t *testing.T) {
 		// Execute the "DEL" command for the plugin
 		execInvokeArgs.Command = "DEL"
 		err := invoke.ExecPluginWithoutResult(
+			context.Background(),
 			eniPluginPath,
 			netConf,
-			execInvokeArgs)
+			execInvokeArgs,
+			nil)
 		require.NoError(t, err, "Unable to execute DEL command for ecs-eni plugin")
 		// TODO: Validate that the dhclient process is stopped
 		return nil
@@ -396,3 +405,4 @@ func getEnvOrDefault(name string, fallback string) string {
 
 	return val
 }
+

@@ -38,7 +38,7 @@ func newDeleteLinkContext(interfaceName string, ip cniipwrapper.IP) *deleteLinkC
 // run defines the closure to execute within the container's namespace to delete
 // the veth pair
 func (delContext *deleteLinkContext) run(hostNS ns.NetNS) error {
-	_, err := delContext.ip.DelLinkByNameAddr(delContext.interfaceName)
+	err := delContext.ip.DelLinkByNameAddr(delContext.interfaceName)
 	if err != nil {
 		if err == ip.ErrLinkNotFound {
 			return nil

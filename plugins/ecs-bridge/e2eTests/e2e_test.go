@@ -16,6 +16,7 @@
 package e2eTests
 
 import (
+	"context"
 	"fmt"
 	"io/ioutil"
 	"net"
@@ -24,8 +25,9 @@ import (
 	"strconv"
 	"testing"
 
+	"github.com/aws/amazon-ecs-cni-plugins/pkg/testutils"
+
 	"github.com/containernetworking/cni/pkg/invoke"
-	"github.com/containernetworking/plugins/pkg/ns"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/vishvananda/netlink"
@@ -40,10 +42,13 @@ const (
 	expectedVethAddress   = "169.254.172.2/22"
 	dst                   = "169.254.170.2/32"
 	bridgeDst             = "169.254.172.1/32"
+	testNSName            = "testNS"
+	targetNSName          = "targetNS"
 	netConf               = `
 {
     "type":"ecs-bridge",
     "cniVersion":"0.3.0",
+    "name":"ecs-bridge-cni-plugin",
     "bridge":"%s",
     "ipam":{
 	"type":"ecs-ipam",
@@ -104,13 +109,13 @@ func TestAddDel(t *testing.T) {
 		t.Run(tcName, func(t *testing.T) {
 			// Create a network namespace to execute the test in.
 			// The bridge and veth pairs will be created in this namespace
-			testNS, err := ns.NewNS()
+			testNS, err := testutils.NewNetNS(testNSName)
 			require.NoError(t, err, "Unable to create the network namespace to run the test in")
 			defer testNS.Close()
 
 			// Create a network namespace to mimic the container's network namespace.
 			// One end of the veth pair device will be moved to this namespace
-			targetNS, err := ns.NewNS()
+			targetNS, err := testutils.NewNetNS(targetNSName)
 			require.NoError(t, err,
 				"Unable to create the network namespace that represents the network namespace of the container")
 			defer targetNS.Close()
@@ -129,23 +134,25 @@ func TestAddDel(t *testing.T) {
 			// Construct args to invoke the CNI plugin with
 			execInvokeArgs := &invoke.Args{
 				ContainerID: containerID,
-				NetNS:       targetNS.Path(),
+				NetNS:       targetNS.GetPath(),
 				IfName:      ifName,
 				Path:        os.Getenv("CNI_PATH"),
 			}
 			// vethTestNetNS is a placeholder that will be populated during execution
 			// of the "ADD" command with details of the veth pair device created
 			var vethTestNetNS netlink.Link
-			testNS.Do(func(ns.NetNS) error {
+			testNS.Run(func() error {
 				err = configFunc()
 				require.NoError(t, err, "Unable to configure test netns before executing ADD")
 
 				// Execute the "ADD" command for the plugin
 				execInvokeArgs.Command = "ADD"
-				_, err := invoke.ExecPluginWithResult(
+				err := invoke.ExecPluginWithoutResult(
+					context.Background(),
 					bridgePluginPath,
 					[]byte(fmt.Sprintf(netConf, bridgeName, dst)),
-					execInvokeArgs)
+					execInvokeArgs,
+					nil)
 				require.NoError(t, err, "Unable to execute ADD command for ecs-bridge plugin")
 
 				// Validate that bridge was created with the expected address
@@ -158,7 +165,7 @@ func TestAddDel(t *testing.T) {
 			})
 
 			var vethTargetNetNS netlink.Link
-			targetNS.Do(func(ns.NetNS) error {
+			targetNS.Run(func() error {
 				// Validate the other end of the veth pair device has the desired
 				// route and the address allocated to it
 				vethTargetNetNS, ok = getVethAndVerifyLo(t)
@@ -168,13 +175,15 @@ func TestAddDel(t *testing.T) {
 				return nil
 			})
 
-			testNS.Do(func(ns.NetNS) error {
+			testNS.Run(func() error {
 				// Execute the "DEL" command for the plugin
 				execInvokeArgs.Command = "DEL"
 				err := invoke.ExecPluginWithoutResult(
+					context.Background(),
 					bridgePluginPath,
 					[]byte(fmt.Sprintf(netConf, bridgeName, dst)),
-					execInvokeArgs)
+					execInvokeArgs,
+					nil)
 				require.NoError(t, err, "Unable to execute DEL command for ecs-bridge plugin")
 
 				// Validate veth interface is removed
@@ -185,7 +194,7 @@ func TestAddDel(t *testing.T) {
 				return nil
 			})
 
-			targetNS.Do(func(ns.NetNS) error {
+			targetNS.Run(func() error {
 				validateLinkDoesNotExist(t, vethTargetNetNS.Attrs().Name)
 				return nil
 			})
@@ -340,3 +349,4 @@ func validateLinkDoesNotExist(t *testing.T, name string) {
 	_, ok := err.(netlink.LinkNotFoundError)
 	require.True(t, ok, "Error type is incorrect for link '%s': %v", name, err)
 }
+

@@ -49,12 +49,11 @@ func (m *MockIP) EXPECT() *MockIPMockRecorder {
 }
 
 // DelLinkByNameAddr mocks base method
-func (m *MockIP) DelLinkByNameAddr(arg0 string) (*net.IPNet, error) {
+func (m *MockIP) DelLinkByNameAddr(arg0 string) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "DelLinkByNameAddr", arg0)
-	ret0, _ := ret[0].(*net.IPNet)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
+	ret0, _ := ret[0].(error)
+	return ret0
 }
 
 // DelLinkByNameAddr indicates an expected call of DelLinkByNameAddr

@@ -42,9 +42,6 @@ github.com/aws/aws-sdk-go/service/sso
 github.com/aws/aws-sdk-go/service/sso/ssoiface
 github.com/aws/aws-sdk-go/service/sts
 github.com/aws/aws-sdk-go/service/sts/stsiface
-# github.com/boltdb/bolt v1.3.1-0.20170131192018-e9cf4fae01b5
-## explicit
-github.com/boltdb/bolt
 # github.com/cihub/seelog v0.0.0-20161009225354-175e6e3d439f
 ## explicit
 github.com/cihub/seelog
@@ -75,7 +72,7 @@ github.com/coreos/go-iptables/iptables
 # github.com/davecgh/go-spew v1.1.1
 ## explicit
 github.com/davecgh/go-spew/spew
-# github.com/docker/libkv v0.2.2-0.20161109010621-1d8431073ae0
+# github.com/docker/libkv v0.2.2-0.20211217151845-dfacc563de57
 ## explicit
 github.com/docker/libkv
 github.com/docker/libkv/store
@@ -96,7 +93,7 @@ github.com/pmezard/go-difflib/difflib
 # github.com/safchain/ethtool v0.0.0-20210803160452-9aa261dae9b1
 ## explicit
 github.com/safchain/ethtool
-# github.com/stretchr/testify v1.5.1
+# github.com/stretchr/testify v1.8.1
 ## explicit; go 1.13
 github.com/stretchr/testify/assert
 github.com/stretchr/testify/require
@@ -107,11 +104,18 @@ github.com/vishvananda/netlink/nl
 # github.com/vishvananda/netns v0.0.0-20210104183010-2eb08e3e575f
 ## explicit; go 1.12
 github.com/vishvananda/netns
+# go.etcd.io/bbolt v1.3.7
+## explicit; go 1.17
+go.etcd.io/bbolt
 # golang.org/x/net v0.5.0
 ## explicit; go 1.17
 # golang.org/x/sys v0.4.0
 ## explicit; go 1.17
+golang.org/x/sys/internal/unsafeheader
 golang.org/x/sys/unix
+golang.org/x/sys/windows
 # gopkg.in/yaml.v2 v2.4.0
 ## explicit; go 1.15
-gopkg.in/yaml.v2
+# gopkg.in/yaml.v3 v3.0.1
+## explicit
+gopkg.in/yaml.v3
