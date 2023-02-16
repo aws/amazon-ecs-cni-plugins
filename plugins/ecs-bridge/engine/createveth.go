@@ -15,8 +15,8 @@ package engine
 
 import (
 	"github.com/aws/amazon-ecs-cni-plugins/pkg/cniipwrapper"
+	"github.com/containernetworking/cni/pkg/ns"
 	"github.com/containernetworking/cni/pkg/types/current"
-	"github.com/containernetworking/plugins/pkg/ns"
 	"github.com/pkg/errors"
 )
 

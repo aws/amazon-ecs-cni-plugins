@@ -17,16 +17,15 @@ package types020
 import (
 	"encoding/json"
 	"fmt"
-	"io"
 	"net"
 	"os"
 
 	"github.com/containernetworking/cni/pkg/types"
 )
 
-const ImplementedSpecVersion string = "0.2.0"
+const implementedSpecVersion string = "0.2.0"
 
-var SupportedVersions = []string{"", "0.1.0", ImplementedSpecVersion}
+var SupportedVersions = []string{"", "0.1.0", implementedSpecVersion}
 
 // Compatibility types for CNI version 0.1.0 and 0.2.0
 
@@ -40,7 +39,7 @@ func NewResult(data []byte) (types.Result, error) {
 
 func GetResult(r types.Result) (*Result, error) {
 	// We expect version 0.1.0/0.2.0 results
-	result020, err := r.GetAsVersion(ImplementedSpecVersion)
+	result020, err := r.GetAsVersion(implementedSpecVersion)
 	if err != nil {
 		return nil, err
 	}
@@ -53,20 +52,18 @@ func GetResult(r types.Result) (*Result, error) {
 
 // Result is what gets returned from the plugin (via stdout) to the caller
 type Result struct {
-	CNIVersion string    `json:"cniVersion,omitempty"`
-	IP4        *IPConfig `json:"ip4,omitempty"`
-	IP6        *IPConfig `json:"ip6,omitempty"`
-	DNS        types.DNS `json:"dns,omitempty"`
+	IP4 *IPConfig `json:"ip4,omitempty"`
+	IP6 *IPConfig `json:"ip6,omitempty"`
+	DNS types.DNS `json:"dns,omitempty"`
 }
 
 func (r *Result) Version() string {
-	return ImplementedSpecVersion
+	return implementedSpecVersion
 }
 
 func (r *Result) GetAsVersion(version string) (types.Result, error) {
 	for _, supportedVersion := range SupportedVersions {
 		if version == supportedVersion {
-			r.CNIVersion = version
 			return r, nil
 		}
 	}
@@ -74,16 +71,26 @@ func (r *Result) GetAsVersion(version string) (types.Result, error) {
 }
 
 func (r *Result) Print() error {
-	return r.PrintTo(os.Stdout)
-}
-
-func (r *Result) PrintTo(writer io.Writer) error {
 	data, err := json.MarshalIndent(r, "", "    ")
 	if err != nil {
 		return err
 	}
-	_, err = writer.Write(data)
+	_, err = os.Stdout.Write(data)
 	return err
+}
+
+// String returns a formatted string in the form of "[IP4: $1,][ IP6: $2,] DNS: $3" where
+// $1 represents the receiver's IPv4, $2 represents the receiver's IPv6 and $3 the
+// receiver's DNS. If $1 or $2 are nil, they won't be present in the returned string.
+func (r *Result) String() string {
+	var str string
+	if r.IP4 != nil {
+		str = fmt.Sprintf("IP4:%+v, ", *r.IP4)
+	}
+	if r.IP6 != nil {
+		str += fmt.Sprintf("IP6:%+v, ", *r.IP6)
+	}
+	return fmt.Sprintf("%sDNS:%+v", str, r.DNS)
 }
 
 // IPConfig contains values necessary to configure an interface

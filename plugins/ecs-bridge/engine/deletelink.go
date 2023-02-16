@@ -15,10 +15,10 @@ package engine
 
 import (
 	"github.com/aws/amazon-ecs-cni-plugins/pkg/cniipwrapper"
-	"github.com/containernetworking/plugins/pkg/ip"
-	"github.com/containernetworking/plugins/pkg/ns"
+	"github.com/containernetworking/cni/pkg/ip"
+	"github.com/containernetworking/cni/pkg/ns"
 	"github.com/pkg/errors"
-	//"github.com/vishvananda/netlink"
+	"github.com/vishvananda/netlink"
 )
 
 // deleteLinkContext wraps the parameters and the method to delete the
@@ -38,7 +38,8 @@ func newDeleteLinkContext(interfaceName string, ip cniipwrapper.IP) *deleteLinkC
 // run defines the closure to execute within the container's namespace to delete
 // the veth pair
 func (delContext *deleteLinkContext) run(hostNS ns.NetNS) error {
-	_, err := delContext.ip.DelLinkByNameAddr(delContext.interfaceName)
+	_, err := delContext.ip.DelLinkByNameAddr(
+		delContext.interfaceName, netlink.FAMILY_V4)
 	if err != nil {
 		if err == ip.ErrLinkNotFound {
 			return nil

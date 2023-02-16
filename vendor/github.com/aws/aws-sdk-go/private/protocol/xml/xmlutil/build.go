@@ -5,29 +5,17 @@ import (
 	"encoding/base64"
 	"encoding/xml"
 	"fmt"
-	"math"
 	"reflect"
 	"sort"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/aws/aws-sdk-go/private/protocol"
 )
 
-const (
-	floatNaN    = "NaN"
-	floatInf    = "Infinity"
-	floatNegInf = "-Infinity"
-)
-
-// BuildXML will serialize params into an xml.Encoder. Error will be returned
-// if the serialization of any of the params or nested values fails.
+// BuildXML will serialize params into an xml.Encoder.
+// Error will be returned if the serialization of any of the params or nested values fails.
 func BuildXML(params interface{}, e *xml.Encoder) error {
-	return buildXML(params, e, false)
-}
-
-func buildXML(params interface{}, e *xml.Encoder, sorted bool) error {
 	b := xmlBuilder{encoder: e, namespaces: map[string]string{}}
 	root := NewXMLElement(xml.Name{})
 	if err := b.buildValue(reflect.ValueOf(params), root, ""); err != nil {
@@ -35,7 +23,7 @@ func buildXML(params interface{}, e *xml.Encoder, sorted bool) error {
 	}
 	for _, c := range root.Children {
 		for _, v := range c {
-			return StructToXML(e, v, sorted)
+			return StructToXML(e, v, false)
 		}
 	}
 	return nil
@@ -68,14 +56,6 @@ func (b *xmlBuilder) buildValue(value reflect.Value, current *XMLNode, tag refle
 		return nil
 	}
 
-	xml := tag.Get("xml")
-	if len(xml) != 0 {
-		name := strings.SplitAfterN(xml, ",", 2)[0]
-		if name == "-" {
-			return nil
-		}
-	}
-
 	t := tag.Get("type")
 	if t == "" {
 		switch value.Kind() {
@@ -103,12 +83,14 @@ func (b *xmlBuilder) buildValue(value reflect.Value, current *XMLNode, tag refle
 	}
 }
 
-// buildStruct adds a struct and its fields to the current XMLNode. All fields and any nested
+// buildStruct adds a struct and its fields to the current XMLNode. All fields any any nested
 // types are converted to XMLNodes also.
 func (b *xmlBuilder) buildStruct(value reflect.Value, current *XMLNode, tag reflect.StructTag) error {
 	if !value.IsValid() {
 		return nil
 	}
+
+	fieldAdded := false
 
 	// unwrap payloads
 	if payload := tag.Get("payload"); payload != "" {
@@ -137,8 +119,6 @@ func (b *xmlBuilder) buildStruct(value reflect.Value, current *XMLNode, tag refl
 		child.Attr = append(child.Attr, ns)
 	}
 
-	var payloadFields, nonPayloadFields int
-
 	t := value.Type()
 	for i := 0; i < value.NumField(); i++ {
 		member := elemOf(value.Field(i))
@@ -147,16 +127,11 @@ func (b *xmlBuilder) buildStruct(value reflect.Value, current *XMLNode, tag refl
 		if field.PkgPath != "" {
 			continue // ignore unexported fields
 		}
-		if field.Tag.Get("ignore") != "" {
-			continue
-		}
 
 		mTag := field.Tag
 		if mTag.Get("location") != "" { // skip non-body members
-			nonPayloadFields++
 			continue
 		}
-		payloadFields++
 
 		if protocol.CanSetIdempotencyToken(value.Field(i), field) {
 			token := protocol.GetIdempotencyToken()
@@ -171,11 +146,11 @@ func (b *xmlBuilder) buildStruct(value reflect.Value, current *XMLNode, tag refl
 		if err := b.buildValue(member, child, mTag); err != nil {
 			return err
 		}
+
+		fieldAdded = true
 	}
 
-	// Only case where the child shape is not added is if the shape only contains
-	// non-payload fields, e.g headers/query.
-	if !(payloadFields == 0 && nonPayloadFields > 0) {
+	if fieldAdded { // only append this child if we have one ore more valid members
 		current.AddChild(child)
 	}
 
@@ -282,7 +257,6 @@ func (b *xmlBuilder) buildMap(value reflect.Value, current *XMLNode, tag reflect
 // Error will be returned if the value type is unsupported.
 func (b *xmlBuilder) buildScalar(value reflect.Value, current *XMLNode, tag reflect.StructTag) error {
 	var str string
-
 	switch converted := value.Interface().(type) {
 	case string:
 		str = converted
@@ -297,36 +271,12 @@ func (b *xmlBuilder) buildScalar(value reflect.Value, current *XMLNode, tag refl
 	case int:
 		str = strconv.Itoa(converted)
 	case float64:
-		switch {
-		case math.IsNaN(converted):
-			str = floatNaN
-		case math.IsInf(converted, 1):
-			str = floatInf
-		case math.IsInf(converted, -1):
-			str = floatNegInf
-		default:
-			str = strconv.FormatFloat(converted, 'f', -1, 64)
-		}
+		str = strconv.FormatFloat(converted, 'f', -1, 64)
 	case float32:
-		// The SDK doesn't render float32 values in types, only float64. This case would never be hit currently.
-		asFloat64 := float64(converted)
-		switch {
-		case math.IsNaN(asFloat64):
-			str = floatNaN
-		case math.IsInf(asFloat64, 1):
-			str = floatInf
-		case math.IsInf(asFloat64, -1):
-			str = floatNegInf
-		default:
-			str = strconv.FormatFloat(asFloat64, 'f', -1, 32)
-		}
+		str = strconv.FormatFloat(float64(converted), 'f', -1, 32)
 	case time.Time:
-		format := tag.Get("timestampFormat")
-		if len(format) == 0 {
-			format = protocol.ISO8601TimeFormatName
-		}
-
-		str = protocol.FormatTime(format, converted)
+		const ISO8601UTC = "2006-01-02T15:04:05Z"
+		str = converted.UTC().Format(ISO8601UTC)
 	default:
 		return fmt.Errorf("unsupported value for param %s: %v (%s)",
 			tag.Get("locationName"), value.Interface(), value.Type().Name())
@@ -336,8 +286,6 @@ func (b *xmlBuilder) buildScalar(value reflect.Value, current *XMLNode, tag refl
 	if tag.Get("xmlAttribute") != "" { // put into current node's attribute list
 		attr := xml.Attr{Name: xname, Value: str}
 		current.Attr = append(current.Attr, attr)
-	} else if len(xname.Local) == 0 {
-		current.Text = str
 	} else { // regular text node
 		current.AddChild(&XMLNode{Name: xname, Text: str})
 	}

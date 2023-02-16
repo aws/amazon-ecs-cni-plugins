@@ -31,7 +31,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/ec2"
 	"github.com/containernetworking/cni/pkg/invoke"
-	"github.com/containernetworking/plugins/pkg/ns"
+	"github.com/containernetworking/cni/pkg/ns"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"

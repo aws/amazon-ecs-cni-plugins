@@ -9,22 +9,18 @@ package defaults
 
 import (
 	"fmt"
-	"net"
 	"net/http"
-	"net/url"
 	"os"
 	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-sdk-go/aws/corehandlers"
 	"github.com/aws/aws-sdk-go/aws/credentials"
 	"github.com/aws/aws-sdk-go/aws/credentials/ec2rolecreds"
 	"github.com/aws/aws-sdk-go/aws/credentials/endpointcreds"
 	"github.com/aws/aws-sdk-go/aws/ec2metadata"
-	"github.com/aws/aws-sdk-go/aws/endpoints"
 	"github.com/aws/aws-sdk-go/aws/request"
-	"github.com/aws/aws-sdk-go/internal/shareddefaults"
+	"github.com/aws/aws-sdk-go/private/endpoints"
 )
 
 // A Defaults provides a collection of default values for SDK clients.
@@ -60,7 +56,7 @@ func Config() *aws.Config {
 		WithMaxRetries(aws.UseServiceDefaultRetries).
 		WithLogger(aws.NewDefaultLogger()).
 		WithLogLevel(aws.LogOff).
-		WithEndpointResolver(endpoints.DefaultResolver())
+		WithSleepDelay(time.Sleep)
 }
 
 // Handlers returns the default request handlers.
@@ -74,7 +70,6 @@ func Handlers() request.Handlers {
 	handlers.Validate.PushBackNamed(corehandlers.ValidateEndpointHandler)
 	handlers.Validate.AfterEachFn = request.HandlerListStopOnError
 	handlers.Build.PushBackNamed(corehandlers.SDKVersionUserAgentHandler)
-	handlers.Build.PushBackNamed(corehandlers.AddHostExecEnvUserAgentHander)
 	handlers.Build.AfterEachFn = request.HandlerListStopOnError
 	handlers.Sign.PushBackNamed(corehandlers.BuildContentLengthHandler)
 	handlers.Send.PushBackNamed(corehandlers.ValidateReqSigHandler)
@@ -93,115 +88,43 @@ func Handlers() request.Handlers {
 func CredChain(cfg *aws.Config, handlers request.Handlers) *credentials.Credentials {
 	return credentials.NewCredentials(&credentials.ChainProvider{
 		VerboseErrors: aws.BoolValue(cfg.CredentialsChainVerboseErrors),
-		Providers:     CredProviders(cfg, handlers),
+		Providers: []credentials.Provider{
+			&credentials.EnvProvider{},
+			&credentials.SharedCredentialsProvider{Filename: "", Profile: ""},
+			RemoteCredProvider(*cfg, handlers),
+		},
 	})
 }
 
-// CredProviders returns the slice of providers used in
-// the default credential chain.
-//
-// For applications that need to use some other provider (for example use
-// different  environment variables for legacy reasons) but still fall back
-// on the default chain of providers. This allows that default chaint to be
-// automatically updated
-func CredProviders(cfg *aws.Config, handlers request.Handlers) []credentials.Provider {
-	return []credentials.Provider{
-		&credentials.EnvProvider{},
-		&credentials.SharedCredentialsProvider{Filename: "", Profile: ""},
-		RemoteCredProvider(*cfg, handlers),
-	}
-}
-
-const (
-	httpProviderAuthorizationEnvVar = "AWS_CONTAINER_AUTHORIZATION_TOKEN"
-	httpProviderEnvVar              = "AWS_CONTAINER_CREDENTIALS_FULL_URI"
-)
-
-// RemoteCredProvider returns a credentials provider for the default remote
+// RemoteCredProvider returns a credenitials provider for the default remote
 // endpoints such as EC2 or ECS Roles.
 func RemoteCredProvider(cfg aws.Config, handlers request.Handlers) credentials.Provider {
-	if u := os.Getenv(httpProviderEnvVar); len(u) > 0 {
-		return localHTTPCredProvider(cfg, handlers, u)
-	}
+	ecsCredURI := os.Getenv("AWS_CONTAINER_CREDENTIALS_RELATIVE_URI")
 
-	if uri := os.Getenv(shareddefaults.ECSCredsProviderEnvVar); len(uri) > 0 {
-		u := fmt.Sprintf("%s%s", shareddefaults.ECSContainerCredentialsURI, uri)
-		return httpCredProvider(cfg, handlers, u)
+	if len(ecsCredURI) > 0 {
+		return ecsCredProvider(cfg, handlers, ecsCredURI)
 	}
 
 	return ec2RoleProvider(cfg, handlers)
 }
 
-var lookupHostFn = net.LookupHost
+func ecsCredProvider(cfg aws.Config, handlers request.Handlers, uri string) credentials.Provider {
+	const host = `169.254.170.2`
 
-func isLoopbackHost(host string) (bool, error) {
-	ip := net.ParseIP(host)
-	if ip != nil {
-		return ip.IsLoopback(), nil
-	}
-
-	// Host is not an ip, perform lookup
-	addrs, err := lookupHostFn(host)
-	if err != nil {
-		return false, err
-	}
-	for _, addr := range addrs {
-		if !net.ParseIP(addr).IsLoopback() {
-			return false, nil
-		}
-	}
-
-	return true, nil
-}
-
-func localHTTPCredProvider(cfg aws.Config, handlers request.Handlers, u string) credentials.Provider {
-	var errMsg string
-
-	parsed, err := url.Parse(u)
-	if err != nil {
-		errMsg = fmt.Sprintf("invalid URL, %v", err)
-	} else {
-		host := aws.URLHostname(parsed)
-		if len(host) == 0 {
-			errMsg = "unable to parse host from local HTTP cred provider URL"
-		} else if isLoopback, loopbackErr := isLoopbackHost(host); loopbackErr != nil {
-			errMsg = fmt.Sprintf("failed to resolve host %q, %v", host, loopbackErr)
-		} else if !isLoopback {
-			errMsg = fmt.Sprintf("invalid endpoint host, %q, only loopback hosts are allowed.", host)
-		}
-	}
-
-	if len(errMsg) > 0 {
-		if cfg.Logger != nil {
-			cfg.Logger.Log("Ignoring, HTTP credential provider", errMsg, err)
-		}
-		return credentials.ErrorProvider{
-			Err:          awserr.New("CredentialsEndpointError", errMsg, err),
-			ProviderName: endpointcreds.ProviderName,
-		}
-	}
-
-	return httpCredProvider(cfg, handlers, u)
-}
-
-func httpCredProvider(cfg aws.Config, handlers request.Handlers, u string) credentials.Provider {
-	return endpointcreds.NewProviderClient(cfg, handlers, u,
+	return endpointcreds.NewProviderClient(cfg, handlers,
+		fmt.Sprintf("http://%s%s", host, uri),
 		func(p *endpointcreds.Provider) {
 			p.ExpiryWindow = 5 * time.Minute
-			p.AuthorizationToken = os.Getenv(httpProviderAuthorizationEnvVar)
 		},
 	)
 }
 
 func ec2RoleProvider(cfg aws.Config, handlers request.Handlers) credentials.Provider {
-	resolver := cfg.EndpointResolver
-	if resolver == nil {
-		resolver = endpoints.DefaultResolver()
-	}
+	endpoint, signingRegion := endpoints.EndpointForRegion(ec2metadata.ServiceName,
+		aws.StringValue(cfg.Region), true, false)
 
-	e, _ := resolver.EndpointFor(endpoints.Ec2metadataServiceID, "")
 	return &ec2rolecreds.EC2RoleProvider{
-		Client:       ec2metadata.NewClient(cfg, handlers, e.URL, e.SigningRegion),
+		Client:       ec2metadata.NewClient(cfg, handlers, endpoint, signingRegion),
 		ExpiryWindow: 5 * time.Minute,
 	}
 }

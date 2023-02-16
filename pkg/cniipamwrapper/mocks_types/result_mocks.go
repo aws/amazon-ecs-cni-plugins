@@ -1,4 +1,4 @@
-// Copyright 2023 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+// Copyright 2019 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License"). You may
 // not use this file except in compliance with the License. A copy of the
@@ -18,7 +18,6 @@
 package mock_types
 
 import (
-	io "io"
 	reflect "reflect"
 
 	types "github.com/containernetworking/cni/pkg/types"
@@ -77,18 +76,18 @@ func (mr *MockResultMockRecorder) Print() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Print", reflect.TypeOf((*MockResult)(nil).Print))
 }
 
-// PrintTo mocks base method
-func (m *MockResult) PrintTo(arg0 io.Writer) error {
+// String mocks base method
+func (m *MockResult) String() string {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "PrintTo", arg0)
-	ret0, _ := ret[0].(error)
+	ret := m.ctrl.Call(m, "String")
+	ret0, _ := ret[0].(string)
 	return ret0
 }
 
-// PrintTo indicates an expected call of PrintTo
-func (mr *MockResultMockRecorder) PrintTo(arg0 interface{}) *gomock.Call {
+// String indicates an expected call of String
+func (mr *MockResultMockRecorder) String() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PrintTo", reflect.TypeOf((*MockResult)(nil).PrintTo), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "String", reflect.TypeOf((*MockResult)(nil).String))
 }
 
 // Version mocks base method

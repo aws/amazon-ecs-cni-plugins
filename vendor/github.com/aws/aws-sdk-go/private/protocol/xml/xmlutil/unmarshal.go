@@ -1,46 +1,21 @@
 package xmlutil
 
 import (
-	"bytes"
 	"encoding/base64"
 	"encoding/xml"
 	"fmt"
 	"io"
-	"math"
 	"reflect"
 	"strconv"
 	"strings"
 	"time"
-
-	"github.com/aws/aws-sdk-go/aws/awserr"
-	"github.com/aws/aws-sdk-go/private/protocol"
 )
-
-// UnmarshalXMLError unmarshals the XML error from the stream into the value
-// type specified. The value must be a pointer. If the message fails to
-// unmarshal, the message content will be included in the returned error as a
-// awserr.UnmarshalError.
-func UnmarshalXMLError(v interface{}, stream io.Reader) error {
-	var errBuf bytes.Buffer
-	body := io.TeeReader(stream, &errBuf)
-
-	err := xml.NewDecoder(body).Decode(v)
-	if err != nil && err != io.EOF {
-		return awserr.NewUnmarshalError(err,
-			"failed to unmarshal error message", errBuf.Bytes())
-	}
-
-	return nil
-}
 
 // UnmarshalXML deserializes an xml.Decoder into the container v. V
 // needs to match the shape of the XML expected to be decoded.
 // If the shape doesn't match unmarshaling will fail.
 func UnmarshalXML(v interface{}, d *xml.Decoder, wrapper string) error {
-	n, err := XMLToStruct(d, nil)
-	if err != nil {
-		return err
-	}
+	n, _ := XMLToStruct(d, nil)
 	if n.Children != nil {
 		for _, root := range n.Children {
 			for _, c := range root {
@@ -48,7 +23,7 @@ func UnmarshalXML(v interface{}, d *xml.Decoder, wrapper string) error {
 					c = wrappedChild[0] // pull out wrapped element
 				}
 
-				err = parse(reflect.ValueOf(v), c, "")
+				err := parse(reflect.ValueOf(v), c, "")
 				if err != nil {
 					if err == io.EOF {
 						return nil
@@ -65,14 +40,6 @@ func UnmarshalXML(v interface{}, d *xml.Decoder, wrapper string) error {
 // parse deserializes any value from the XMLNode. The type tag is used to infer the type, or reflect
 // will be used to determine the type from r.
 func parse(r reflect.Value, node *XMLNode, tag reflect.StructTag) error {
-	xml := tag.Get("xml")
-	if len(xml) != 0 {
-		name := strings.SplitAfterN(xml, ",", 2)[0]
-		if name == "-" {
-			return nil
-		}
-	}
-
 	rtype := r.Type()
 	if rtype.Kind() == reflect.Ptr {
 		rtype = rtype.Elem() // check kind of actual element type
@@ -82,15 +49,9 @@ func parse(r reflect.Value, node *XMLNode, tag reflect.StructTag) error {
 	if t == "" {
 		switch rtype.Kind() {
 		case reflect.Struct:
-			// also it can't be a time object
-			if _, ok := r.Interface().(*time.Time); !ok {
-				t = "structure"
-			}
+			t = "structure"
 		case reflect.Slice:
-			// also it can't be a byte slice
-			if _, ok := r.Interface().([]byte); !ok {
-				t = "list"
-			}
+			t = "list"
 		case reflect.Map:
 			t = "map"
 		}
@@ -150,8 +111,11 @@ func parseStruct(r reflect.Value, node *XMLNode, tag reflect.StructTag) error {
 		elems := node.Children[name]
 
 		if elems == nil { // try to find the field in attributes
-			if val, ok := node.findElem(name); ok {
-				elems = []*XMLNode{{Text: val}}
+			for _, a := range node.Attr {
+				if name == strings.Join([]string{a.Name.Space, a.Name.Local}, ":") {
+					// turn this into a text node for de-serializing
+					elems = []*XMLNode{{Text: a.Value}}
+				}
 			}
 		}
 
@@ -277,29 +241,14 @@ func parseScalar(r reflect.Value, node *XMLNode, tag reflect.StructTag) error {
 		}
 		r.Set(reflect.ValueOf(&v))
 	case *float64:
-		var v float64
-		switch {
-		case strings.EqualFold(node.Text, floatNaN):
-			v = math.NaN()
-		case strings.EqualFold(node.Text, floatInf):
-			v = math.Inf(1)
-		case strings.EqualFold(node.Text, floatNegInf):
-			v = math.Inf(-1)
-		default:
-			var err error
-			v, err = strconv.ParseFloat(node.Text, 64)
-			if err != nil {
-				return err
-			}
+		v, err := strconv.ParseFloat(node.Text, 64)
+		if err != nil {
+			return err
 		}
 		r.Set(reflect.ValueOf(&v))
 	case *time.Time:
-		format := tag.Get("timestampFormat")
-		if len(format) == 0 {
-			format = protocol.ISO8601TimeFormatName
-		}
-
-		t, err := protocol.ParseTime(format, node.Text)
+		const ISO8601UTC = "2006-01-02T15:04:05Z"
+		t, err := time.Parse(ISO8601UTC, node.Text)
 		if err != nil {
 			return err
 		}

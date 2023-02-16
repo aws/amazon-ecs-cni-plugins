@@ -3,8 +3,6 @@ package request
 import (
 	"io"
 	"sync"
-
-	"github.com/aws/aws-sdk-go/internal/sdkio"
 )
 
 // offsetReader is a thread-safe io.ReadCloser to prevent racing
@@ -15,15 +13,12 @@ type offsetReader struct {
 	closed bool
 }
 
-func newOffsetReader(buf io.ReadSeeker, offset int64) (*offsetReader, error) {
+func newOffsetReader(buf io.ReadSeeker, offset int64) *offsetReader {
 	reader := &offsetReader{}
-	_, err := buf.Seek(offset, sdkio.SeekStart)
-	if err != nil {
-		return nil, err
-	}
+	buf.Seek(offset, 0)
 
 	reader.buf = buf
-	return reader, nil
+	return reader
 }
 
 // Close will close the instance of the offset reader's access to
@@ -57,9 +52,7 @@ func (o *offsetReader) Seek(offset int64, whence int) (int64, error) {
 
 // CloseAndCopy will return a new offsetReader with a copy of the old buffer
 // and close the old buffer.
-func (o *offsetReader) CloseAndCopy(offset int64) (*offsetReader, error) {
-	if err := o.Close(); err != nil {
-		return nil, err
-	}
+func (o *offsetReader) CloseAndCopy(offset int64) *offsetReader {
+	o.Close()
 	return newOffsetReader(o.buf, offset)
 }

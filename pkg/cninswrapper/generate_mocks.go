@@ -14,4 +14,4 @@
 package cninswrapper
 
 //go:generate go run ../../scripts/mockgen.go github.com/aws/amazon-ecs-cni-plugins/pkg/cninswrapper NS mocks/cninswrapper_mocks.go
-//go:generate go run ../../scripts/mockgen.go github.com/containernetworking/plugins/pkg/ns NetNS mocks_netns/netns_mocks.go
+//go:generate go run ../../scripts/mockgen.go github.com/containernetworking/cni/pkg/ns NetNS mocks_netns/netns_mocks.go

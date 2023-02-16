@@ -21,8 +21,8 @@ import (
 	"time"
 
 	"github.com/aws/amazon-ecs-cni-plugins/plugins/ipam/ipstore"
+	"github.com/containernetworking/cni/pkg/ip"
 	"github.com/containernetworking/cni/pkg/types"
-	"github.com/containernetworking/plugins/pkg/ip"
 	"github.com/pkg/errors"
 )
 

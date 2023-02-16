@@ -1,4 +1,4 @@
-// Copyright 2023 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+// Copyright 2019 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License"). You may
 // not use this file except in compliance with the License. A copy of the
@@ -18,7 +18,7 @@
 package mock_os
 
 import (
-	fs "io/fs"
+	os "os"
 	reflect "reflect"
 	time "time"
 
@@ -77,10 +77,10 @@ func (mr *MockFileInfoMockRecorder) ModTime() *gomock.Call {
 }
 
 // Mode mocks base method
-func (m *MockFileInfo) Mode() fs.FileMode {
+func (m *MockFileInfo) Mode() os.FileMode {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Mode")
-	ret0, _ := ret[0].(fs.FileMode)
+	ret0, _ := ret[0].(os.FileMode)
 	return ret0
 }
 

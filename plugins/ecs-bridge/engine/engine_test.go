@@ -1,4 +1,3 @@
-//go:build !integration && !e2e
 // +build !integration,!e2e
 
 // Copyright 2017 Amazon.com, Inc. or its affiliates. All Rights Reserved.
@@ -29,8 +28,8 @@ import (
 	"github.com/aws/amazon-ecs-cni-plugins/pkg/cninswrapper/mocks_netns"
 	"github.com/aws/amazon-ecs-cni-plugins/pkg/netlinkwrapper/mocks"
 	"github.com/aws/amazon-ecs-cni-plugins/pkg/netlinkwrapper/mocks_link"
+	"github.com/containernetworking/cni/pkg/ip"
 	"github.com/containernetworking/cni/pkg/types/current"
-	"github.com/containernetworking/plugins/pkg/ip"
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
 	"github.com/vishvananda/netlink"
@@ -294,12 +293,10 @@ func TestRunIPAMPluginAddExecAddError(t *testing.T) {
 	defer ctrl.Finish()
 
 	netConf := []byte{}
-	mockIPAM.EXPECT().ExecAdd(ipamType, netConf).Return(nil, errors.New("test error"))
+	mockIPAM.EXPECT().ExecAdd(ipamType, netConf).Return(nil, errors.New("error"))
 	engine := &engine{ipam: mockIPAM}
-	expectedErrorText := "bridge ipam ADD: failed to execute plugin: ecs-ipam: test error"
 	_, err := engine.RunIPAMPluginAdd(ipamType, netConf)
 	assert.Error(t, err)
-	assert.Equal(t, expectedErrorText, err.Error())
 }
 
 func TestRunIPAMPluginAddResultConversionError(t *testing.T) {
@@ -314,6 +311,7 @@ func TestRunIPAMPluginAddResultConversionError(t *testing.T) {
 		// current.NewResultFromResult to return an error, thus
 		// simulating a "parse error"
 		result.EXPECT().Version().Return("a.b.c").MinTimes(1),
+		result.EXPECT().String().Return(""),
 	)
 	engine := &engine{ipam: mockIPAM}
 	_, err := engine.RunIPAMPluginAdd(ipamType, netConf)
@@ -844,7 +842,7 @@ func TestDeleteVethContextDelLinkByNameAddrError(t *testing.T) {
 	ctrl, _, _, mockIP, _, _ := setup(t)
 	defer ctrl.Finish()
 
-	mockIP.EXPECT().DelLinkByNameAddr(interfaceName).Return(nil, errors.New("error"))
+	mockIP.EXPECT().DelLinkByNameAddr(interfaceName, netlink.FAMILY_V4).Return(nil, errors.New("error"))
 	delContext := newDeleteLinkContext(interfaceName, mockIP)
 	err := delContext.run(nil)
 	assert.Error(t, err)
@@ -854,7 +852,7 @@ func TestDeleteVethContextDelLinkByNameAddrErrorNotFound(t *testing.T) {
 	ctrl, _, _, mockIP, _, _ := setup(t)
 	defer ctrl.Finish()
 
-	mockIP.EXPECT().DelLinkByNameAddr(interfaceName).Return(nil, ip.ErrLinkNotFound)
+	mockIP.EXPECT().DelLinkByNameAddr(interfaceName, netlink.FAMILY_V4).Return(nil, ip.ErrLinkNotFound)
 	delContext := newDeleteLinkContext(interfaceName, mockIP)
 	err := delContext.run(nil)
 	assert.NoError(t, err)
@@ -864,7 +862,7 @@ func TestDeleteVethContextDelLinkByNameAddrSuccess(t *testing.T) {
 	ctrl, _, _, mockIP, _, _ := setup(t)
 	defer ctrl.Finish()
 
-	mockIP.EXPECT().DelLinkByNameAddr(interfaceName).Return(nil, nil)
+	mockIP.EXPECT().DelLinkByNameAddr(interfaceName, netlink.FAMILY_V4).Return(nil, nil)
 	delContext := newDeleteLinkContext(interfaceName, mockIP)
 	err := delContext.run(nil)
 	assert.NoError(t, err)

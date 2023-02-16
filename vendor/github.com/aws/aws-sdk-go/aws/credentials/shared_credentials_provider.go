@@ -3,10 +3,11 @@ package credentials
 import (
 	"fmt"
 	"os"
+	"path/filepath"
+
+	"github.com/go-ini/ini"
 
 	"github.com/aws/aws-sdk-go/aws/awserr"
-	"github.com/aws/aws-sdk-go/internal/ini"
-	"github.com/aws/aws-sdk-go/internal/shareddefaults"
 )
 
 // SharedCredsProviderName provides a name of SharedCreds provider
@@ -14,12 +15,13 @@ const SharedCredsProviderName = "SharedCredentialsProvider"
 
 var (
 	// ErrSharedCredentialsHomeNotFound is emitted when the user directory cannot be found.
+	//
+	// @readonly
 	ErrSharedCredentialsHomeNotFound = awserr.New("UserHomeNotFound", "user home directory not found.", nil)
 )
 
-// A SharedCredentialsProvider retrieves access key pair (access key ID,
-// secret access key, and session token if present) credentials from the current
-// user's home directory, and keeps track if those credentials are expired.
+// A SharedCredentialsProvider retrieves credentials from the current user's home
+// directory, and keeps track if those credentials are expired.
 //
 // Profile ini file example: $HOME/.aws/credentials
 type SharedCredentialsProvider struct {
@@ -77,37 +79,36 @@ func (p *SharedCredentialsProvider) IsExpired() bool {
 // The credentials retrieved from the profile will be returned or error. Error will be
 // returned if it fails to read from the file, or the data is invalid.
 func loadProfile(filename, profile string) (Value, error) {
-	config, err := ini.OpenFile(filename)
+	config, err := ini.Load(filename)
 	if err != nil {
 		return Value{ProviderName: SharedCredsProviderName}, awserr.New("SharedCredsLoad", "failed to load shared credentials file", err)
 	}
-
-	iniProfile, ok := config.GetSection(profile)
-	if !ok {
-		return Value{ProviderName: SharedCredsProviderName}, awserr.New("SharedCredsLoad", "failed to get profile", nil)
+	iniProfile, err := config.GetSection(profile)
+	if err != nil {
+		return Value{ProviderName: SharedCredsProviderName}, awserr.New("SharedCredsLoad", "failed to get profile", err)
 	}
 
-	id := iniProfile.String("aws_access_key_id")
-	if len(id) == 0 {
+	id, err := iniProfile.GetKey("aws_access_key_id")
+	if err != nil {
 		return Value{ProviderName: SharedCredsProviderName}, awserr.New("SharedCredsAccessKey",
 			fmt.Sprintf("shared credentials %s in %s did not contain aws_access_key_id", profile, filename),
-			nil)
+			err)
 	}
 
-	secret := iniProfile.String("aws_secret_access_key")
-	if len(secret) == 0 {
+	secret, err := iniProfile.GetKey("aws_secret_access_key")
+	if err != nil {
 		return Value{ProviderName: SharedCredsProviderName}, awserr.New("SharedCredsSecret",
 			fmt.Sprintf("shared credentials %s in %s did not contain aws_secret_access_key", profile, filename),
 			nil)
 	}
 
 	// Default to empty string if not found
-	token := iniProfile.String("aws_session_token")
+	token := iniProfile.Key("aws_session_token")
 
 	return Value{
-		AccessKeyID:     id,
-		SecretAccessKey: secret,
-		SessionToken:    token,
+		AccessKeyID:     id.String(),
+		SecretAccessKey: secret.String(),
+		SessionToken:    token.String(),
 		ProviderName:    SharedCredsProviderName,
 	}, nil
 }
@@ -116,22 +117,21 @@ func loadProfile(filename, profile string) (Value, error) {
 //
 // Will return an error if the user's home directory path cannot be found.
 func (p *SharedCredentialsProvider) filename() (string, error) {
-	if len(p.Filename) != 0 {
-		return p.Filename, nil
-	}
+	if p.Filename == "" {
+		if p.Filename = os.Getenv("AWS_SHARED_CREDENTIALS_FILE"); p.Filename != "" {
+			return p.Filename, nil
+		}
 
-	if p.Filename = os.Getenv("AWS_SHARED_CREDENTIALS_FILE"); len(p.Filename) != 0 {
-		return p.Filename, nil
-	}
+		homeDir := os.Getenv("HOME") // *nix
+		if homeDir == "" {           // Windows
+			homeDir = os.Getenv("USERPROFILE")
+		}
+		if homeDir == "" {
+			return "", ErrSharedCredentialsHomeNotFound
+		}
 
-	if home := shareddefaults.UserHomeDir(); len(home) == 0 {
-		// Backwards compatibility of home directly not found error being returned.
-		// This error is too verbose, failure when opening the file would of been
-		// a better error to return.
-		return "", ErrSharedCredentialsHomeNotFound
+		p.Filename = filepath.Join(homeDir, ".aws", "credentials")
 	}
-
-	p.Filename = shareddefaults.SharedCredentialsFilename()
 
 	return p.Filename, nil
 }

@@ -6,7 +6,6 @@ import (
 	"encoding/base64"
 	"fmt"
 	"io"
-	"math"
 	"net/http"
 	"net/url"
 	"path"
@@ -18,21 +17,15 @@ import (
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-sdk-go/aws/request"
-	"github.com/aws/aws-sdk-go/private/protocol"
 )
 
-const (
-	floatNaN    = "NaN"
-	floatInf    = "Infinity"
-	floatNegInf = "-Infinity"
-)
+// RFC822 returns an RFC822 formatted timestamp for AWS protocols
+const RFC822 = "Mon, 2 Jan 2006 15:04:05 GMT"
 
 // Whether the byte value can be sent without escaping in AWS URLs
 var noEscape [256]bool
 
 var errValueNotSet = fmt.Errorf("value not set")
-
-var byteSliceType = reflect.TypeOf([]byte{})
 
 func init() {
 	for i := 0; i < len(noEscape); i++ {
@@ -54,28 +47,13 @@ var BuildHandler = request.NamedHandler{Name: "awssdk.rest.Build", Fn: Build}
 func Build(r *request.Request) {
 	if r.ParamsFilled() {
 		v := reflect.ValueOf(r.Params).Elem()
-		buildLocationElements(r, v, false)
+		buildLocationElements(r, v)
 		buildBody(r, v)
 	}
 }
 
-// BuildAsGET builds the REST component of a service request with the ability to hoist
-// data from the body.
-func BuildAsGET(r *request.Request) {
-	if r.ParamsFilled() {
-		v := reflect.ValueOf(r.Params).Elem()
-		buildLocationElements(r, v, true)
-		buildBody(r, v)
-	}
-}
-
-func buildLocationElements(r *request.Request, v reflect.Value, buildGETQuery bool) {
+func buildLocationElements(r *request.Request, v reflect.Value) {
 	query := r.HTTPRequest.URL.Query()
-
-	// Setup the raw path to match the base path pattern. This is needed
-	// so that when the path is mutated a custom escaped version can be
-	// stored in RawPath that will be used by the Go client.
-	r.HTTPRequest.URL.RawPath = r.HTTPRequest.URL.Path
 
 	for i := 0; i < v.NumField(); i++ {
 		m := v.Field(i)
@@ -89,42 +67,23 @@ func buildLocationElements(r *request.Request, v reflect.Value, buildGETQuery bo
 			if name == "" {
 				name = field.Name
 			}
-			if kind := m.Kind(); kind == reflect.Ptr {
+			if m.Kind() == reflect.Ptr {
 				m = m.Elem()
-			} else if kind == reflect.Interface {
-				if !m.Elem().IsValid() {
-					continue
-				}
 			}
 			if !m.IsValid() {
 				continue
-			}
-			if field.Tag.Get("ignore") != "" {
-				continue
-			}
-
-			// Support the ability to customize values to be marshaled as a
-			// blob even though they were modeled as a string. Required for S3
-			// API operations like SSECustomerKey is modeled as string but
-			// required to be base64 encoded in request.
-			if field.Tag.Get("marshal-as") == "blob" {
-				m = m.Convert(byteSliceType)
 			}
 
 			var err error
 			switch field.Tag.Get("location") {
 			case "headers": // header maps
-				err = buildHeaderMap(&r.HTTPRequest.Header, m, field.Tag)
+				err = buildHeaderMap(&r.HTTPRequest.Header, m, field.Tag.Get("locationName"))
 			case "header":
-				err = buildHeader(&r.HTTPRequest.Header, m, name, field.Tag)
+				err = buildHeader(&r.HTTPRequest.Header, m, name)
 			case "uri":
-				err = buildURI(r.HTTPRequest.URL, m, name, field.Tag)
+				err = buildURI(r.HTTPRequest.URL, m, name)
 			case "querystring":
-				err = buildQueryString(query, m, name, field.Tag)
-			default:
-				if buildGETQuery {
-					err = buildQueryString(query, m, name, field.Tag)
-				}
+				err = buildQueryString(query, m, name)
 			}
 			r.Error = err
 		}
@@ -134,9 +93,7 @@ func buildLocationElements(r *request.Request, v reflect.Value, buildGETQuery bo
 	}
 
 	r.HTTPRequest.URL.RawQuery = query.Encode()
-	if !aws.BoolValue(r.Config.DisableRestProtocolURICleaning) {
-		cleanPath(r.HTTPRequest.URL)
-	}
+	updatePath(r.HTTPRequest.URL, r.HTTPRequest.URL.Path, aws.BoolValue(r.Config.DisableRestProtocolURICleaning))
 }
 
 func buildBody(r *request.Request, v reflect.Value) {
@@ -154,7 +111,7 @@ func buildBody(r *request.Request, v reflect.Value) {
 					case string:
 						r.SetStringBody(reader)
 					default:
-						r.Error = awserr.New(request.ErrCodeSerialization,
+						r.Error = awserr.New("SerializationError",
 							"failed to encode REST request",
 							fmt.Errorf("unknown payload type %s", payload.Type()))
 					}
@@ -164,58 +121,51 @@ func buildBody(r *request.Request, v reflect.Value) {
 	}
 }
 
-func buildHeader(header *http.Header, v reflect.Value, name string, tag reflect.StructTag) error {
-	str, err := convertType(v, tag)
+func buildHeader(header *http.Header, v reflect.Value, name string) error {
+	str, err := convertType(v)
 	if err == errValueNotSet {
 		return nil
 	} else if err != nil {
-		return awserr.New(request.ErrCodeSerialization, "failed to encode REST request", err)
+		return awserr.New("SerializationError", "failed to encode REST request", err)
 	}
-
-	name = strings.TrimSpace(name)
-	str = strings.TrimSpace(str)
 
 	header.Add(name, str)
 
 	return nil
 }
 
-func buildHeaderMap(header *http.Header, v reflect.Value, tag reflect.StructTag) error {
-	prefix := tag.Get("locationName")
+func buildHeaderMap(header *http.Header, v reflect.Value, prefix string) error {
 	for _, key := range v.MapKeys() {
-		str, err := convertType(v.MapIndex(key), tag)
+		str, err := convertType(v.MapIndex(key))
 		if err == errValueNotSet {
 			continue
 		} else if err != nil {
-			return awserr.New(request.ErrCodeSerialization, "failed to encode REST request", err)
+			return awserr.New("SerializationError", "failed to encode REST request", err)
 
 		}
-		keyStr := strings.TrimSpace(key.String())
-		str = strings.TrimSpace(str)
 
-		header.Add(prefix+keyStr, str)
+		header.Add(prefix+key.String(), str)
 	}
 	return nil
 }
 
-func buildURI(u *url.URL, v reflect.Value, name string, tag reflect.StructTag) error {
-	value, err := convertType(v, tag)
+func buildURI(u *url.URL, v reflect.Value, name string) error {
+	value, err := convertType(v)
 	if err == errValueNotSet {
 		return nil
 	} else if err != nil {
-		return awserr.New(request.ErrCodeSerialization, "failed to encode REST request", err)
+		return awserr.New("SerializationError", "failed to encode REST request", err)
 	}
 
-	u.Path = strings.Replace(u.Path, "{"+name+"}", value, -1)
-	u.Path = strings.Replace(u.Path, "{"+name+"+}", value, -1)
-
-	u.RawPath = strings.Replace(u.RawPath, "{"+name+"}", EscapePath(value, true), -1)
-	u.RawPath = strings.Replace(u.RawPath, "{"+name+"+}", EscapePath(value, false), -1)
+	uri := u.Path
+	uri = strings.Replace(uri, "{"+name+"}", EscapePath(value, true), -1)
+	uri = strings.Replace(uri, "{"+name+"+}", EscapePath(value, false), -1)
+	u.Path = uri
 
 	return nil
 }
 
-func buildQueryString(query url.Values, v reflect.Value, name string, tag reflect.StructTag) error {
+func buildQueryString(query url.Values, v reflect.Value, name string) error {
 	switch value := v.Interface().(type) {
 	case []*string:
 		for _, item := range value {
@@ -232,11 +182,11 @@ func buildQueryString(query url.Values, v reflect.Value, name string, tag reflec
 			}
 		}
 	default:
-		str, err := convertType(v, tag)
+		str, err := convertType(v)
 		if err == errValueNotSet {
 			return nil
 		} else if err != nil {
-			return awserr.New(request.ErrCodeSerialization, "failed to encode REST request", err)
+			return awserr.New("SerializationError", "failed to encode REST request", err)
 		}
 		query.Set(name, str)
 	}
@@ -244,17 +194,27 @@ func buildQueryString(query url.Values, v reflect.Value, name string, tag reflec
 	return nil
 }
 
-func cleanPath(u *url.URL) {
-	hasSlash := strings.HasSuffix(u.Path, "/")
+func updatePath(url *url.URL, urlPath string, disableRestProtocolURICleaning bool) {
+	scheme, query := url.Scheme, url.RawQuery
 
-	// clean up path, removing duplicate `/`
-	u.Path = path.Clean(u.Path)
-	u.RawPath = path.Clean(u.RawPath)
+	hasSlash := strings.HasSuffix(urlPath, "/")
 
-	if hasSlash && !strings.HasSuffix(u.Path, "/") {
-		u.Path += "/"
-		u.RawPath += "/"
+	// clean up path
+	if !disableRestProtocolURICleaning {
+		urlPath = path.Clean(urlPath)
 	}
+	if hasSlash && !strings.HasSuffix(urlPath, "/") {
+		urlPath += "/"
+	}
+
+	// get formatted URL minus scheme so we can build this into Opaque
+	url.Scheme, url.Path, url.RawQuery = "", "", ""
+	s := url.String()
+	url.Scheme = scheme
+	url.RawQuery = query
+
+	// build opaque URI
+	url.Opaque = s + urlPath
 }
 
 // EscapePath escapes part of a URL path in Amazon style
@@ -271,37 +231,16 @@ func EscapePath(path string, encodeSep bool) string {
 	return buf.String()
 }
 
-func convertType(v reflect.Value, tag reflect.StructTag) (str string, err error) {
+func convertType(v reflect.Value) (string, error) {
 	v = reflect.Indirect(v)
 	if !v.IsValid() {
 		return "", errValueNotSet
 	}
 
+	var str string
 	switch value := v.Interface().(type) {
 	case string:
-		if tag.Get("suppressedJSONValue") == "true" && tag.Get("location") == "header" {
-			value = base64.StdEncoding.EncodeToString([]byte(value))
-		}
 		str = value
-	case []*string:
-		if tag.Get("location") != "header" || tag.Get("enum") == "" {
-			return "", fmt.Errorf("%T is only supported with location header and enum shapes", value)
-		}
-		buff := &bytes.Buffer{}
-		for i, sv := range value {
-			if sv == nil || len(*sv) == 0 {
-				continue
-			}
-			if i != 0 {
-				buff.WriteRune(',')
-			}
-			item := *sv
-			if strings.Index(item, `,`) != -1 || strings.Index(item, `"`) != -1 {
-				item = strconv.Quote(item)
-			}
-			buff.WriteString(item)
-		}
-		str = string(buff.Bytes())
 	case []byte:
 		str = base64.StdEncoding.EncodeToString(value)
 	case bool:
@@ -309,41 +248,12 @@ func convertType(v reflect.Value, tag reflect.StructTag) (str string, err error)
 	case int64:
 		str = strconv.FormatInt(value, 10)
 	case float64:
-		switch {
-		case math.IsNaN(value):
-			str = floatNaN
-		case math.IsInf(value, 1):
-			str = floatInf
-		case math.IsInf(value, -1):
-			str = floatNegInf
-		default:
-			str = strconv.FormatFloat(value, 'f', -1, 64)
-		}
+		str = strconv.FormatFloat(value, 'f', -1, 64)
 	case time.Time:
-		format := tag.Get("timestampFormat")
-		if len(format) == 0 {
-			format = protocol.RFC822TimeFormatName
-			if tag.Get("location") == "querystring" {
-				format = protocol.ISO8601TimeFormatName
-			}
-		}
-		str = protocol.FormatTime(format, value)
-	case aws.JSONValue:
-		if len(value) == 0 {
-			return "", errValueNotSet
-		}
-		escaping := protocol.NoEscape
-		if tag.Get("location") == "header" {
-			escaping = protocol.Base64Escape
-		}
-		str, err = protocol.EncodeJSONValue(value, escaping)
-		if err != nil {
-			return "", fmt.Errorf("unable to encode JSONValue, %v", err)
-		}
+		str = value.UTC().Format(RFC822)
 	default:
-		err := fmt.Errorf("unsupported value for param %v (%s)", v.Interface(), v.Type())
+		err := fmt.Errorf("Unsupported value for param %v (%s)", v.Interface(), v.Type())
 		return "", err
 	}
-
 	return str, nil
 }
