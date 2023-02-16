@@ -16,6 +16,10 @@ Please provide the following information:
 
 New tests cover the changes: <!-- yes|no -->
 
+#### All tests below should pass:
+- [ ] make unit-test
+- [ ] make e2e-test
+
 ### Description for the changelog
 <!--
 Write a short (one line) summary that describes the changes in this
