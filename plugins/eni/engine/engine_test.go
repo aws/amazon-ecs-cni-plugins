@@ -973,20 +973,26 @@ func TestSetupNamespaceClosureRunFailsOnBlackholeRouteAddError(t *testing.T) {
 	mockNetNS := mock_ns.NewMockNetNS(ctrl)
 	mockENILink := mock_netlink.NewMockLink(ctrl)
 	ipv4Address := &netlink.Addr{}
-	_, imdsNetwork, err := net.ParseCIDR(instanceMetadataEndpoint)
-	assert.NoError(t, err)
 	gomock.InOrder(
 		mockNetLink.EXPECT().ParseAddr(eniIPV4CIDRBlock).Return(ipv4Address, nil),
 		mockNetLink.EXPECT().LinkByName(deviceName).Return(mockENILink, nil),
 		mockNetLink.EXPECT().LinkSetName(mockENILink, "eth0").Return(nil),
 		mockNetLink.EXPECT().AddrAdd(mockENILink, ipv4Address).Return(nil),
 		mockNetLink.EXPECT().LinkSetUp(mockENILink).Return(nil),
+	)
+	for i, ep := range InstanceMetadataEndpoints {
+		var retErr error
+		if i == len(InstanceMetadataEndpoints) - 1 {
+			retErr = errors.New("error")
+		}
+		_, imdsNetwork, err := net.ParseCIDR(ep)
+		assert.NoError(t, err)
 		mockNetLink.EXPECT().RouteAdd(gomock.Any()).Do(func(route *netlink.Route) {
 			assert.Nil(t, route.Gw)
 			assert.Equal(t, imdsNetwork.String(), route.Dst.String())
 			assert.Equal(t, syscall.RTN_BLACKHOLE, route.Type)
-		}).Return(errors.New("error")),
-	)
+		}).Return(retErr)
+	}
 	closure, err := newSetupNamespaceClosureContext(mockNetLink, "eth0", deviceName, eniMACAddress,
 		[]string{eniIPV4CIDRBlock}, []string{eniIPV4Gateway}, true, 0)
 	assert.NoError(t, err)
@@ -1107,8 +1113,6 @@ func TestSetupNamespaceClosureRunBlockIMDS(t *testing.T) {
 	ipv4Address := &netlink.Addr{}
 	ipv6Address := &netlink.Addr{}
 	eniLinkIndex := 1
-	_, imdsNetwork, err := net.ParseCIDR(instanceMetadataEndpoint)
-	assert.NoError(t, err)
 	gomock.InOrder(
 		mockNetLink.EXPECT().ParseAddr(eniIPV4CIDRBlock).Return(ipv4Address, nil),
 		mockNetLink.EXPECT().ParseAddr(eniIPV6CIDRBlock).Return(ipv6Address, nil),
@@ -1117,11 +1121,17 @@ func TestSetupNamespaceClosureRunBlockIMDS(t *testing.T) {
 		mockNetLink.EXPECT().AddrAdd(mockENILink, ipv4Address).Return(nil),
 		mockNetLink.EXPECT().AddrAdd(mockENILink, ipv6Address).Return(nil),
 		mockNetLink.EXPECT().LinkSetUp(mockENILink).Return(nil),
-		mockNetLink.EXPECT().RouteAdd(gomock.Any()).Do(func(route *netlink.Route) {
-			assert.Nil(t, route.Gw)
-			assert.Equal(t, imdsNetwork.String(), route.Dst.String())
-			assert.Equal(t, syscall.RTN_BLACKHOLE, route.Type)
-		}).Return(nil),
+	)
+	for _, ep := range InstanceMetadataEndpoints {
+                _, imdsNetwork, err := net.ParseCIDR(ep)
+                assert.NoError(t, err)
+                mockNetLink.EXPECT().RouteAdd(gomock.Any()).Do(func(route *netlink.Route) {
+                        assert.Nil(t, route.Gw)
+                        assert.Equal(t, imdsNetwork.String(), route.Dst.String())
+                        assert.Equal(t, syscall.RTN_BLACKHOLE, route.Type)
+                }).Return(nil)
+        }
+	gomock.InOrder(
 		mockENILink.EXPECT().Attrs().Return(&netlink.LinkAttrs{Index: eniLinkIndex}),
 		mockNetLink.EXPECT().RouteAdd(gomock.Any()).Do(func(route *netlink.Route) {
 			assert.Equal(t, route.Gw.String(), eniIPV4Gateway)
