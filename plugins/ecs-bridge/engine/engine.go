@@ -19,6 +19,8 @@ import (
 	"strings"
 	"syscall"
 
+	log "github.com/cihub/seelog"
+
 	"github.com/aws/amazon-ecs-cni-plugins/pkg/cniipamwrapper"
 	"github.com/aws/amazon-ecs-cni-plugins/pkg/cniipwrapper"
 	"github.com/aws/amazon-ecs-cni-plugins/pkg/cninswrapper"
@@ -144,12 +146,14 @@ func (engine *engine) createBridge(bridgeName string, mtu int) error {
 	// Connect a dummy link to the bridge.
 	// Bridge inherits the smallest MTU of links connected to its ports.
 	dummyName := fmt.Sprintf("%sdummy", bridgeName)
+	log.Info("dummy name " + dummyName)
 	la := netlink.NewLinkAttrs()
 	la.Name = dummyName
 	la.MTU = mtu
 	la.MasterIndex = bridge.Attrs().Index
 	dummyLink := &netlink.Dummy{LinkAttrs: la}
 	err = netlink.LinkAdd(dummyLink)
+	log.Infof("dummy link %v", dummyLink)
 	if err != nil {
 		return errors.Wrapf(err,
 			"bridge create: unable to add dummy interface %s", dummyName)
@@ -165,10 +169,12 @@ func (engine *engine) createBridge(bridgeName string, mtu int) error {
 	// ports. Explicitly setting a static address prevents the bridge from dynamically changing its
 	// address as interfaces join and leave the bridge.
 	link, err := netlink.LinkByName(dummyName)
+	log.Infof("retrieved dummy link %v", link)
 	if err != nil {
 		return errors.Wrapf(err,
 			"bridge create: unable to find dummy interface %s", dummyName)
 	}
+	log.Infof("setting hardware addr (dummy) %v %v", bridge, link.Attrs().HardwareAddr)
 	err = netlink.LinkSetHardwareAddr(bridge, link.Attrs().HardwareAddr)
 	if err != nil {
 		return errors.Wrapf(err,
