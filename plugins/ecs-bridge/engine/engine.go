@@ -14,6 +14,7 @@
 package engine
 
 import (
+	"fmt"
 	"net"
 	"strings"
 	"syscall"
@@ -27,7 +28,7 @@ import (
 	"github.com/vishvananda/netlink"
 )
 
-const  (
+const (
 	// zeroLengthIPString is what we expect net.IP.String() to return if the
 	// ip has length 0. We use this to determing if an IP is empty.
 	// Refer https://golang.org/pkg/net/#IP.String
@@ -132,17 +133,47 @@ func (engine *engine) createBridge(bridgeName string, mtu int) error {
 	bridgeLinkAttributes := netlink.NewLinkAttrs()
 	bridgeLinkAttributes.MTU = mtu
 	bridgeLinkAttributes.Name = bridgeName
-
 	bridge := &netlink.Bridge{
 		LinkAttrs: bridgeLinkAttributes,
 	}
-
 	err := engine.netLink.LinkAdd(bridge)
 	if err != nil {
 		return errors.Wrapf(err,
 			"bridge create: unable to add bridge interface %s", bridgeName)
 	}
-
+	// Connect a dummy link to the bridge.
+	// Bridge inherits the smallest MTU of links connected to its ports.
+	dummyName := fmt.Sprintf("%sdummy", bridgeName)
+	la := netlink.NewLinkAttrs()
+	la.Name = dummyName
+	la.MTU = mtu
+	la.MasterIndex = bridge.Attrs().Index
+	dummyLink := &netlink.Dummy{LinkAttrs: la}
+	err = netlink.LinkAdd(dummyLink)
+	if err != nil {
+		return errors.Wrapf(err,
+			"bridge create: unable to add dummy interface %s", dummyName)
+	}
+	// Set dummy link operational state up.
+	err = netlink.LinkSetUp(dummyLink)
+	if err != nil {
+		return errors.Wrapf(err,
+			"bridge create: unable to set dummy interface %s up", dummyName)
+	}
+	// Set bridge MAC address to dummy's MAC address.
+	// Bridge by default inherits the smallest of the MAC addresses of interfaces connected to its
+	// ports. Explicitly setting a static address prevents the bridge from dynamically changing its
+	// address as interfaces join and leave the bridge.
+	link, err := netlink.LinkByName(dummyName)
+	if err != nil {
+		return errors.Wrapf(err,
+			"bridge create: unable to find dummy interface %s", dummyName)
+	}
+	err = netlink.LinkSetHardwareAddr(bridge, link.Attrs().HardwareAddr)
+	if err != nil {
+		return errors.Wrapf(err,
+			"bridge create: unable to set bridge MAC address %s up", bridgeName)
+	}
 	return nil
 }
 
