@@ -13,7 +13,11 @@
 
 package netlinkwrapper
 
-import "github.com/vishvananda/netlink"
+import (
+	"net"
+
+	"github.com/vishvananda/netlink"
+)
 
 // NetLink wraps methods used from the vishvananda/netlink package
 type NetLink interface {
@@ -35,6 +39,8 @@ type NetLink interface {
 	LinkSetName(link netlink.Link, name string) error
 	// LinkSetUp is equivalent to `ip link set $link up`
 	LinkSetUp(link netlink.Link) error
+	// LinkSetHardwareAddr sets the hardware address of the link device. Equivalent to: `ip link set $link address $hwaddr`
+	LinkSetHardwareAddr(link netlink.Link, hwaddr net.HardwareAddr) error
 	// LinkSetMTU is equivalent to `ip link set $link mtu $mtu`
 	LinkSetMTU(link netlink.Link, mtu int) error
 	// LinkList is equivalent to: `ip link show`
@@ -85,6 +91,10 @@ func (*netLink) LinkSetUp(link netlink.Link) error {
 
 func (*netLink) LinkSetName(link netlink.Link, name string) error {
 	return netlink.LinkSetName(link, name)
+}
+
+func (*netLink) LinkSetHardwareAddr(link netlink.Link, hwaddr net.HardwareAddr) error {
+	return netlink.LinkSetHardwareAddr(link, hwaddr)
 }
 
 func (*netLink) LinkSetMTU(link netlink.Link, mtu int) error {

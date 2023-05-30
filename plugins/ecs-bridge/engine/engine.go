@@ -14,9 +14,12 @@
 package engine
 
 import (
+	"crypto/rand"
 	"net"
 	"strings"
 	"syscall"
+
+	log "github.com/cihub/seelog"
 
 	"github.com/aws/amazon-ecs-cni-plugins/pkg/cniipamwrapper"
 	"github.com/aws/amazon-ecs-cni-plugins/pkg/cniipwrapper"
@@ -27,7 +30,7 @@ import (
 	"github.com/vishvananda/netlink"
 )
 
-const  (
+const (
 	// zeroLengthIPString is what we expect net.IP.String() to return if the
 	// ip has length 0. We use this to determing if an IP is empty.
 	// Refer https://golang.org/pkg/net/#IP.String
@@ -127,6 +130,22 @@ func (engine *engine) lookupBridge(bridgeName string) (*netlink.Bridge, error) {
 	return bridge, nil
 }
 
+// generateMACAddress generates a random locally-administrated MAC address.
+func (engine *engine) generateMACAddress() (net.HardwareAddr, error) {
+	buf := make([]byte, 6)
+	var mac net.HardwareAddr
+
+	_, err := rand.Read(buf)
+	if err != nil {
+		return mac, err
+	}
+
+	// Set locally administered addresses bit and reset multicast bit
+	buf[0] = (buf[0] | 0x02) & 0xfe
+	mac = append(mac, buf[0], buf[1], buf[2], buf[3], buf[4], buf[5])
+	return mac, nil
+}
+
 // createBridge creates a bridge interface
 func (engine *engine) createBridge(bridgeName string, mtu int) error {
 	bridgeLinkAttributes := netlink.NewLinkAttrs()
@@ -141,6 +160,19 @@ func (engine *engine) createBridge(bridgeName string, mtu int) error {
 	if err != nil {
 		return errors.Wrapf(err,
 			"bridge create: unable to add bridge interface %s", bridgeName)
+	}
+
+	mac, err := engine.generateMACAddress()
+	if err != nil {
+		return errors.Wrapf(err,
+			"bridge create: unable to generate mac addr %s", err)
+	}
+
+	log.Infof("Setting ecs-bridge hardware addr (MAC) %v", mac)
+	err = engine.netLink.LinkSetHardwareAddr(bridge, mac)
+	if err != nil {
+		return errors.Wrapf(err,
+			"bridge create: unable to set bridge MAC address %s up", bridgeName)
 	}
 
 	return nil
