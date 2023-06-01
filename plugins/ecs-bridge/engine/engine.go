@@ -162,6 +162,11 @@ func (engine *engine) createBridge(bridgeName string, mtu int) error {
 			"bridge create: unable to add bridge interface %s", bridgeName)
 	}
 
+	// Bridge by default inherits the lowest of the MAC addresses of interfaces connected to its ports.
+	// As interfaces connect and disconnect, the bridge MAC address changes dynamically, causing the
+	// corresponding ARP cache entry in container network namespaces to become stale, which results
+	// in brief periods of lost network connectivity as containers learn the new bridge MAC address.
+	// Explicitly setting a static MAC address solves this problem.
 	mac, err := engine.generateMACAddress()
 	if err != nil {
 		return errors.Wrapf(err,
