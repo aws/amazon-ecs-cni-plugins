@@ -1,4 +1,4 @@
-// Copyright 2019 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+// Copyright 2024 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License"). You may
 // not use this file except in compliance with the License. A copy of the
@@ -25,30 +25,30 @@ import (
 	gomock "github.com/golang/mock/gomock"
 )
 
-// MockIPAM is a mock of IPAM interface
+// MockIPAM is a mock of IPAM interface.
 type MockIPAM struct {
 	ctrl     *gomock.Controller
 	recorder *MockIPAMMockRecorder
 }
 
-// MockIPAMMockRecorder is the mock recorder for MockIPAM
+// MockIPAMMockRecorder is the mock recorder for MockIPAM.
 type MockIPAMMockRecorder struct {
 	mock *MockIPAM
 }
 
-// NewMockIPAM creates a new mock instance
+// NewMockIPAM creates a new mock instance.
 func NewMockIPAM(ctrl *gomock.Controller) *MockIPAM {
 	mock := &MockIPAM{ctrl: ctrl}
 	mock.recorder = &MockIPAMMockRecorder{mock}
 	return mock
 }
 
-// EXPECT returns an object that allows the caller to indicate expected use
+// EXPECT returns an object that allows the caller to indicate expected use.
 func (m *MockIPAM) EXPECT() *MockIPAMMockRecorder {
 	return m.recorder
 }
 
-// ConfigureIface mocks base method
+// ConfigureIface mocks base method.
 func (m *MockIPAM) ConfigureIface(arg0 string, arg1 *current.Result) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ConfigureIface", arg0, arg1)
@@ -56,13 +56,13 @@ func (m *MockIPAM) ConfigureIface(arg0 string, arg1 *current.Result) error {
 	return ret0
 }
 
-// ConfigureIface indicates an expected call of ConfigureIface
+// ConfigureIface indicates an expected call of ConfigureIface.
 func (mr *MockIPAMMockRecorder) ConfigureIface(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ConfigureIface", reflect.TypeOf((*MockIPAM)(nil).ConfigureIface), arg0, arg1)
 }
 
-// ExecAdd mocks base method
+// ExecAdd mocks base method.
 func (m *MockIPAM) ExecAdd(arg0 string, arg1 []byte) (types.Result, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ExecAdd", arg0, arg1)
@@ -71,13 +71,13 @@ func (m *MockIPAM) ExecAdd(arg0 string, arg1 []byte) (types.Result, error) {
 	return ret0, ret1
 }
 
-// ExecAdd indicates an expected call of ExecAdd
+// ExecAdd indicates an expected call of ExecAdd.
 func (mr *MockIPAMMockRecorder) ExecAdd(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ExecAdd", reflect.TypeOf((*MockIPAM)(nil).ExecAdd), arg0, arg1)
 }
 
-// ExecDel mocks base method
+// ExecDel mocks base method.
 func (m *MockIPAM) ExecDel(arg0 string, arg1 []byte) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ExecDel", arg0, arg1)
@@ -85,7 +85,7 @@ func (m *MockIPAM) ExecDel(arg0 string, arg1 []byte) error {
 	return ret0
 }
 
-// ExecDel indicates an expected call of ExecDel
+// ExecDel indicates an expected call of ExecDel.
 func (mr *MockIPAMMockRecorder) ExecDel(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ExecDel", reflect.TypeOf((*MockIPAM)(nil).ExecDel), arg0, arg1)

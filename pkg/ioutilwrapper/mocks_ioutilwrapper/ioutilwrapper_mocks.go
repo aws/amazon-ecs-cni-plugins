@@ -1,4 +1,4 @@
-// Copyright 2019 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+// Copyright 2024 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License"). You may
 // not use this file except in compliance with the License. A copy of the
@@ -18,51 +18,51 @@
 package mock_ioutilwrapper
 
 import (
-	os "os"
+	fs "io/fs"
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
 )
 
-// MockIOUtil is a mock of IOUtil interface
+// MockIOUtil is a mock of IOUtil interface.
 type MockIOUtil struct {
 	ctrl     *gomock.Controller
 	recorder *MockIOUtilMockRecorder
 }
 
-// MockIOUtilMockRecorder is the mock recorder for MockIOUtil
+// MockIOUtilMockRecorder is the mock recorder for MockIOUtil.
 type MockIOUtilMockRecorder struct {
 	mock *MockIOUtil
 }
 
-// NewMockIOUtil creates a new mock instance
+// NewMockIOUtil creates a new mock instance.
 func NewMockIOUtil(ctrl *gomock.Controller) *MockIOUtil {
 	mock := &MockIOUtil{ctrl: ctrl}
 	mock.recorder = &MockIOUtilMockRecorder{mock}
 	return mock
 }
 
-// EXPECT returns an object that allows the caller to indicate expected use
+// EXPECT returns an object that allows the caller to indicate expected use.
 func (m *MockIOUtil) EXPECT() *MockIOUtilMockRecorder {
 	return m.recorder
 }
 
-// ReadDir mocks base method
-func (m *MockIOUtil) ReadDir(arg0 string) ([]os.FileInfo, error) {
+// ReadDir mocks base method.
+func (m *MockIOUtil) ReadDir(arg0 string) ([]fs.FileInfo, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ReadDir", arg0)
-	ret0, _ := ret[0].([]os.FileInfo)
+	ret0, _ := ret[0].([]fs.FileInfo)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// ReadDir indicates an expected call of ReadDir
+// ReadDir indicates an expected call of ReadDir.
 func (mr *MockIOUtilMockRecorder) ReadDir(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReadDir", reflect.TypeOf((*MockIOUtil)(nil).ReadDir), arg0)
 }
 
-// ReadFile mocks base method
+// ReadFile mocks base method.
 func (m *MockIOUtil) ReadFile(arg0 string) ([]byte, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ReadFile", arg0)
@@ -71,7 +71,7 @@ func (m *MockIOUtil) ReadFile(arg0 string) ([]byte, error) {
 	return ret0, ret1
 }
 
-// ReadFile indicates an expected call of ReadFile
+// ReadFile indicates an expected call of ReadFile.
 func (mr *MockIOUtilMockRecorder) ReadFile(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReadFile", reflect.TypeOf((*MockIOUtil)(nil).ReadFile), arg0)

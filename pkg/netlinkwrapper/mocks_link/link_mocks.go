@@ -1,4 +1,4 @@
-// Copyright 2019 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+// Copyright 2024 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License"). You may
 // not use this file except in compliance with the License. A copy of the
@@ -24,30 +24,30 @@ import (
 	netlink "github.com/vishvananda/netlink"
 )
 
-// MockLink is a mock of Link interface
+// MockLink is a mock of Link interface.
 type MockLink struct {
 	ctrl     *gomock.Controller
 	recorder *MockLinkMockRecorder
 }
 
-// MockLinkMockRecorder is the mock recorder for MockLink
+// MockLinkMockRecorder is the mock recorder for MockLink.
 type MockLinkMockRecorder struct {
 	mock *MockLink
 }
 
-// NewMockLink creates a new mock instance
+// NewMockLink creates a new mock instance.
 func NewMockLink(ctrl *gomock.Controller) *MockLink {
 	mock := &MockLink{ctrl: ctrl}
 	mock.recorder = &MockLinkMockRecorder{mock}
 	return mock
 }
 
-// EXPECT returns an object that allows the caller to indicate expected use
+// EXPECT returns an object that allows the caller to indicate expected use.
 func (m *MockLink) EXPECT() *MockLinkMockRecorder {
 	return m.recorder
 }
 
-// Attrs mocks base method
+// Attrs mocks base method.
 func (m *MockLink) Attrs() *netlink.LinkAttrs {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Attrs")
@@ -55,13 +55,13 @@ func (m *MockLink) Attrs() *netlink.LinkAttrs {
 	return ret0
 }
 
-// Attrs indicates an expected call of Attrs
+// Attrs indicates an expected call of Attrs.
 func (mr *MockLinkMockRecorder) Attrs() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Attrs", reflect.TypeOf((*MockLink)(nil).Attrs))
 }
 
-// Type mocks base method
+// Type mocks base method.
 func (m *MockLink) Type() string {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Type")
@@ -69,7 +69,7 @@ func (m *MockLink) Type() string {
 	return ret0
 }
 
-// Type indicates an expected call of Type
+// Type indicates an expected call of Type.
 func (mr *MockLinkMockRecorder) Type() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Type", reflect.TypeOf((*MockLink)(nil).Type))

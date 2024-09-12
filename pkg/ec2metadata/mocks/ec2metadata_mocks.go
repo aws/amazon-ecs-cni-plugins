@@ -1,4 +1,4 @@
-// Copyright 2019 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+// Copyright 2024 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License"). You may
 // not use this file except in compliance with the License. A copy of the
@@ -23,30 +23,30 @@ import (
 	gomock "github.com/golang/mock/gomock"
 )
 
-// MockEC2Metadata is a mock of EC2Metadata interface
+// MockEC2Metadata is a mock of EC2Metadata interface.
 type MockEC2Metadata struct {
 	ctrl     *gomock.Controller
 	recorder *MockEC2MetadataMockRecorder
 }
 
-// MockEC2MetadataMockRecorder is the mock recorder for MockEC2Metadata
+// MockEC2MetadataMockRecorder is the mock recorder for MockEC2Metadata.
 type MockEC2MetadataMockRecorder struct {
 	mock *MockEC2Metadata
 }
 
-// NewMockEC2Metadata creates a new mock instance
+// NewMockEC2Metadata creates a new mock instance.
 func NewMockEC2Metadata(ctrl *gomock.Controller) *MockEC2Metadata {
 	mock := &MockEC2Metadata{ctrl: ctrl}
 	mock.recorder = &MockEC2MetadataMockRecorder{mock}
 	return mock
 }
 
-// EXPECT returns an object that allows the caller to indicate expected use
+// EXPECT returns an object that allows the caller to indicate expected use.
 func (m *MockEC2Metadata) EXPECT() *MockEC2MetadataMockRecorder {
 	return m.recorder
 }
 
-// GetMetadata mocks base method
+// GetMetadata mocks base method.
 func (m *MockEC2Metadata) GetMetadata(arg0 string) (string, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetMetadata", arg0)
@@ -55,7 +55,7 @@ func (m *MockEC2Metadata) GetMetadata(arg0 string) (string, error) {
 	return ret0, ret1
 }
 
-// GetMetadata indicates an expected call of GetMetadata
+// GetMetadata indicates an expected call of GetMetadata.
 func (mr *MockEC2MetadataMockRecorder) GetMetadata(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetMetadata", reflect.TypeOf((*MockEC2Metadata)(nil).GetMetadata), arg0)

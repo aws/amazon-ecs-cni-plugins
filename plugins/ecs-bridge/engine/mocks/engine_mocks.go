@@ -1,4 +1,4 @@
-// Copyright 2019 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+// Copyright 2024 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License"). You may
 // not use this file except in compliance with the License. A copy of the
@@ -25,30 +25,30 @@ import (
 	netlink "github.com/vishvananda/netlink"
 )
 
-// MockEngine is a mock of Engine interface
+// MockEngine is a mock of Engine interface.
 type MockEngine struct {
 	ctrl     *gomock.Controller
 	recorder *MockEngineMockRecorder
 }
 
-// MockEngineMockRecorder is the mock recorder for MockEngine
+// MockEngineMockRecorder is the mock recorder for MockEngine.
 type MockEngineMockRecorder struct {
 	mock *MockEngine
 }
 
-// NewMockEngine creates a new mock instance
+// NewMockEngine creates a new mock instance.
 func NewMockEngine(ctrl *gomock.Controller) *MockEngine {
 	mock := &MockEngine{ctrl: ctrl}
 	mock.recorder = &MockEngineMockRecorder{mock}
 	return mock
 }
 
-// EXPECT returns an object that allows the caller to indicate expected use
+// EXPECT returns an object that allows the caller to indicate expected use.
 func (m *MockEngine) EXPECT() *MockEngineMockRecorder {
 	return m.recorder
 }
 
-// AttachHostVethInterfaceToBridge mocks base method
+// AttachHostVethInterfaceToBridge mocks base method.
 func (m *MockEngine) AttachHostVethInterfaceToBridge(arg0 string, arg1 *netlink.Bridge) (*current.Interface, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "AttachHostVethInterfaceToBridge", arg0, arg1)
@@ -57,13 +57,13 @@ func (m *MockEngine) AttachHostVethInterfaceToBridge(arg0 string, arg1 *netlink.
 	return ret0, ret1
 }
 
-// AttachHostVethInterfaceToBridge indicates an expected call of AttachHostVethInterfaceToBridge
+// AttachHostVethInterfaceToBridge indicates an expected call of AttachHostVethInterfaceToBridge.
 func (mr *MockEngineMockRecorder) AttachHostVethInterfaceToBridge(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AttachHostVethInterfaceToBridge", reflect.TypeOf((*MockEngine)(nil).AttachHostVethInterfaceToBridge), arg0, arg1)
 }
 
-// ConfigureBridge mocks base method
+// ConfigureBridge mocks base method.
 func (m *MockEngine) ConfigureBridge(arg0 *current.Result, arg1 *netlink.Bridge) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ConfigureBridge", arg0, arg1)
@@ -71,13 +71,13 @@ func (m *MockEngine) ConfigureBridge(arg0 *current.Result, arg1 *netlink.Bridge)
 	return ret0
 }
 
-// ConfigureBridge indicates an expected call of ConfigureBridge
+// ConfigureBridge indicates an expected call of ConfigureBridge.
 func (mr *MockEngineMockRecorder) ConfigureBridge(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ConfigureBridge", reflect.TypeOf((*MockEngine)(nil).ConfigureBridge), arg0, arg1)
 }
 
-// ConfigureContainerVethInterface mocks base method
+// ConfigureContainerVethInterface mocks base method.
 func (m *MockEngine) ConfigureContainerVethInterface(arg0 string, arg1 *current.Result, arg2 string) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ConfigureContainerVethInterface", arg0, arg1, arg2)
@@ -85,13 +85,13 @@ func (m *MockEngine) ConfigureContainerVethInterface(arg0 string, arg1 *current.
 	return ret0
 }
 
-// ConfigureContainerVethInterface indicates an expected call of ConfigureContainerVethInterface
+// ConfigureContainerVethInterface indicates an expected call of ConfigureContainerVethInterface.
 func (mr *MockEngineMockRecorder) ConfigureContainerVethInterface(arg0, arg1, arg2 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ConfigureContainerVethInterface", reflect.TypeOf((*MockEngine)(nil).ConfigureContainerVethInterface), arg0, arg1, arg2)
 }
 
-// CreateBridge mocks base method
+// CreateBridge mocks base method.
 func (m *MockEngine) CreateBridge(arg0 string, arg1 int) (*netlink.Bridge, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "CreateBridge", arg0, arg1)
@@ -100,13 +100,13 @@ func (m *MockEngine) CreateBridge(arg0 string, arg1 int) (*netlink.Bridge, error
 	return ret0, ret1
 }
 
-// CreateBridge indicates an expected call of CreateBridge
+// CreateBridge indicates an expected call of CreateBridge.
 func (mr *MockEngineMockRecorder) CreateBridge(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateBridge", reflect.TypeOf((*MockEngine)(nil).CreateBridge), arg0, arg1)
 }
 
-// CreateVethPair mocks base method
+// CreateVethPair mocks base method.
 func (m *MockEngine) CreateVethPair(arg0 string, arg1 int, arg2 string) (*current.Interface, string, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "CreateVethPair", arg0, arg1, arg2)
@@ -116,13 +116,13 @@ func (m *MockEngine) CreateVethPair(arg0 string, arg1 int, arg2 string) (*curren
 	return ret0, ret1, ret2
 }
 
-// CreateVethPair indicates an expected call of CreateVethPair
+// CreateVethPair indicates an expected call of CreateVethPair.
 func (mr *MockEngineMockRecorder) CreateVethPair(arg0, arg1, arg2 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateVethPair", reflect.TypeOf((*MockEngine)(nil).CreateVethPair), arg0, arg1, arg2)
 }
 
-// DeleteVeth mocks base method
+// DeleteVeth mocks base method.
 func (m *MockEngine) DeleteVeth(arg0, arg1 string) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "DeleteVeth", arg0, arg1)
@@ -130,13 +130,13 @@ func (m *MockEngine) DeleteVeth(arg0, arg1 string) error {
 	return ret0
 }
 
-// DeleteVeth indicates an expected call of DeleteVeth
+// DeleteVeth indicates an expected call of DeleteVeth.
 func (mr *MockEngineMockRecorder) DeleteVeth(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteVeth", reflect.TypeOf((*MockEngine)(nil).DeleteVeth), arg0, arg1)
 }
 
-// GetInterfaceIPV4Address mocks base method
+// GetInterfaceIPV4Address mocks base method.
 func (m *MockEngine) GetInterfaceIPV4Address(arg0, arg1 string) (string, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetInterfaceIPV4Address", arg0, arg1)
@@ -145,13 +145,13 @@ func (m *MockEngine) GetInterfaceIPV4Address(arg0, arg1 string) (string, error) 
 	return ret0, ret1
 }
 
-// GetInterfaceIPV4Address indicates an expected call of GetInterfaceIPV4Address
+// GetInterfaceIPV4Address indicates an expected call of GetInterfaceIPV4Address.
 func (mr *MockEngineMockRecorder) GetInterfaceIPV4Address(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetInterfaceIPV4Address", reflect.TypeOf((*MockEngine)(nil).GetInterfaceIPV4Address), arg0, arg1)
 }
 
-// RunIPAMPluginAdd mocks base method
+// RunIPAMPluginAdd mocks base method.
 func (m *MockEngine) RunIPAMPluginAdd(arg0 string, arg1 []byte) (*current.Result, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "RunIPAMPluginAdd", arg0, arg1)
@@ -160,13 +160,13 @@ func (m *MockEngine) RunIPAMPluginAdd(arg0 string, arg1 []byte) (*current.Result
 	return ret0, ret1
 }
 
-// RunIPAMPluginAdd indicates an expected call of RunIPAMPluginAdd
+// RunIPAMPluginAdd indicates an expected call of RunIPAMPluginAdd.
 func (mr *MockEngineMockRecorder) RunIPAMPluginAdd(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RunIPAMPluginAdd", reflect.TypeOf((*MockEngine)(nil).RunIPAMPluginAdd), arg0, arg1)
 }
 
-// RunIPAMPluginDel mocks base method
+// RunIPAMPluginDel mocks base method.
 func (m *MockEngine) RunIPAMPluginDel(arg0 string, arg1 []byte) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "RunIPAMPluginDel", arg0, arg1)
@@ -174,7 +174,7 @@ func (m *MockEngine) RunIPAMPluginDel(arg0 string, arg1 []byte) error {
 	return ret0
 }
 
-// RunIPAMPluginDel indicates an expected call of RunIPAMPluginDel
+// RunIPAMPluginDel indicates an expected call of RunIPAMPluginDel.
 func (mr *MockEngineMockRecorder) RunIPAMPluginDel(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RunIPAMPluginDel", reflect.TypeOf((*MockEngine)(nil).RunIPAMPluginDel), arg0, arg1)
