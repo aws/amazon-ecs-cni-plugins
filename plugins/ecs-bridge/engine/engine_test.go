@@ -170,6 +170,7 @@ func TestCreateBridgeLinkSetupError(t *testing.T) {
 	gomock.InOrder(
 		mockNetLink.EXPECT().LinkByName(bridgeName).Return(nil, netlink.LinkNotFoundError{}),
 		mockNetLink.EXPECT().LinkAdd(gomock.Any()).Return(nil),
+		mockNetLink.EXPECT().LinkSetHardwareAddr(gomock.Any(), gomock.Any()).Return(nil),
 		mockNetLink.EXPECT().LinkByName(bridgeName).Return(bridgeLink, nil),
 		mockNetLink.EXPECT().LinkSetUp(bridgeLink).Return(errors.New("error")),
 	)
@@ -186,6 +187,7 @@ func TestCreateBridgeSuccess(t *testing.T) {
 	gomock.InOrder(
 		mockNetLink.EXPECT().LinkByName(bridgeName).Return(nil, netlink.LinkNotFoundError{}),
 		mockNetLink.EXPECT().LinkAdd(gomock.Any()).Return(nil),
+		mockNetLink.EXPECT().LinkSetHardwareAddr(gomock.Any(), gomock.Any()).Return(nil),
 		mockNetLink.EXPECT().LinkByName(bridgeName).Return(bridgeLink, nil),
 		mockNetLink.EXPECT().LinkSetUp(bridgeLink).Return(nil),
 	)
