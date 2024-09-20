@@ -1,3 +1,6 @@
+## 2024.09.0
+* Enhancement - Migrate to Go modules. [#113](https://github.com/aws/amazon-ecs-cni-plugins/pull/113)
+
 ## 2020.09.0
 * Feature - Support multiple IP (v4 and v6) addresses per interface. [#98](https://github.com/aws/amazon-ecs-cni-plugins/pull/98)
 
