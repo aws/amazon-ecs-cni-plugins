@@ -45,13 +45,25 @@ var (
 // Add invokes the command to add ENI to a container's namespace
 func Add(args *skel.CmdArgs) error {
 	defer log.Flush()
-	return add(args, engine.New())
+
+	eng, err := engine.New()
+	if err != nil {
+		return err
+	}
+
+	return add(args, eng)
 }
 
 // Del invokes the command to remove ENI from a container's namespace
 func Del(args *skel.CmdArgs) error {
 	defer log.Flush()
-	return del(args, engine.New())
+
+	eng, err := engine.New()
+	if err != nil {
+		return err
+	}
+
+	return del(args, eng)
 }
 
 func add(args *skel.CmdArgs, engine engine.Engine) error {

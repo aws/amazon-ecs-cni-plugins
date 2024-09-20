@@ -14,16 +14,56 @@
 package ec2metadata
 
 import (
-	ec2metadatasvc "github.com/aws/aws-sdk-go/aws/ec2metadata"
-	"github.com/aws/aws-sdk-go/aws/session"
+	"context"
+	"io"
+
+	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/feature/ec2/imds"
 )
 
 // EC2Metadata wraps the methods from the amazon-sdk-go's ec2metadata package
 type EC2Metadata interface {
 	GetMetadata(path string) (string, error)
+	Region() (string, error)
+}
+
+type ec2Metadata struct {
+	imds *imds.Client
 }
 
 // NewEC2Metadata creates a new EC2Metadata object
-func NewEC2Metadata() EC2Metadata {
-	return ec2metadatasvc.New(session.New())
+func NewEC2Metadata() (EC2Metadata, error) {
+	cfg, err := config.LoadDefaultConfig(context.TODO())
+	if err != nil {
+		return nil, err
+	}
+
+	return &ec2Metadata{
+		imds: imds.NewFromConfig(cfg),
+	}, nil
+}
+
+func (e *ec2Metadata) GetMetadata(path string) (string, error) {
+	output, err := e.imds.GetMetadata(context.TODO(), &imds.GetMetadataInput{
+		Path: path,
+	})
+	if err != nil {
+		return "", err
+	}
+
+	content, err := io.ReadAll(output.Content)
+	if err != nil {
+		return "", err
+	}
+
+	return string(content), nil
+}
+
+func (e *ec2Metadata) Region() (string, error) {
+	output, err := e.imds.GetRegion(context.TODO(), &imds.GetRegionInput{})
+	if err != nil {
+		return "", err
+	}
+
+	return output.Region, nil
 }

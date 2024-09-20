@@ -1,3 +1,4 @@
+//go:build e2e
 // +build e2e
 
 // Copyright 2017 Amazon.com, Inc. or its affiliates. All Rights Reserved.
@@ -16,6 +17,7 @@
 package e2eTests
 
 import (
+	"context"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -25,11 +27,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/aws/amazon-ecs-cni-plugins/pkg/ec2metadata"
 	"github.com/aws/amazon-ecs-cni-plugins/pkg/utils"
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/ec2metadata"
-	"github.com/aws/aws-sdk-go/aws/session"
-	"github.com/aws/aws-sdk-go/service/ec2"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	awsconfig "github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/service/ec2"
+	"github.com/aws/aws-sdk-go-v2/service/ec2/types"
 	"github.com/containernetworking/cni/pkg/invoke"
 	"github.com/containernetworking/cni/pkg/ns"
 	"github.com/pkg/errors"
@@ -53,6 +56,7 @@ const (
     "mtu":%d
 }`
 	imdsEndpoint = "169.254.169.254/32"
+	waitDuration = 5 * time.Minute
 )
 
 func init() {
@@ -64,7 +68,7 @@ func init() {
 type config struct {
 	region         string
 	subnet         string
-	index          int64
+	index          int32
 	instanceID     string
 	securityGroups []string
 	vpc            string
@@ -78,16 +82,19 @@ func TestAddDel(t *testing.T) {
 	// Ensure that we are able to build a config from instance's metadata
 	cfg, err := newConfig()
 	require.NoError(t, err, "Unable to get instance config")
-	ec2Client := ec2.New(session.Must(session.NewSession()), &aws.Config{
-		Region: aws.String(cfg.region),
-	})
+
+	awsCfg, err := awsconfig.LoadDefaultConfig(context.TODO(), awsconfig.WithRegion(cfg.region))
+	require.NoError(t, err, "Unable to load AWS config")
+
+	ec2Client := ec2.NewFromConfig(awsCfg)
+	ec2Waiter := ec2.NewNetworkInterfaceAvailableWaiter(ec2Client)
 
 	// Create an ENI
 	eni, err := createENI(ec2Client, cfg)
 	require.NoError(t, err, "Unable to create ENI")
-	defer deleteENI(ec2Client, eni)
+	defer deleteENI(ec2Client, ec2Waiter, eni)
 
-	require.NoError(t, waitUntilNetworkInterfaceAvailable(ec2Client, eni), "ENI didn't transition into 'available'")
+	require.NoError(t, waitUntilNetworkInterfaceAvailable(ec2Waiter, eni), "ENI didn't transition into 'available'")
 	// Attach the ENI to the instance
 	attachment, err := attachENI(ec2Client, cfg, eni)
 	require.NoError(t, err, "Unable to attach ENI")
@@ -143,9 +150,9 @@ func TestAddDel(t *testing.T) {
 		Path:        os.Getenv("CNI_PATH"),
 	}
 	netConf := []byte(fmt.Sprintf(netConfFormat,
-		aws.StringValue(eni.NetworkInterfaceId),
-		aws.StringValue(eni.MacAddress),
-		aws.StringValue(eni.PrivateIpAddress)+"/"+ipv4PrefixLength,
+		aws.ToString(eni.NetworkInterfaceId),
+		aws.ToString(eni.MacAddress),
+		aws.ToString(eni.PrivateIpAddress)+"/"+ipv4PrefixLength,
 		ipv4SubnetGateway, 9000))
 	t.Logf("Using config: %s", string(netConf))
 
@@ -168,7 +175,7 @@ func TestAddDel(t *testing.T) {
 		assert.Len(t, links, 2, "Incorrect number of devices discovered in taget network namespace")
 		eniFound := false
 		for _, link := range links {
-			if link.Attrs().HardwareAddr.String() == aws.StringValue(eni.MacAddress) {
+			if link.Attrs().HardwareAddr.String() == aws.ToString(eni.MacAddress) {
 				eniFound = true
 				break
 			}
@@ -196,7 +203,11 @@ func TestAddDel(t *testing.T) {
 
 // newConfig creates a new config object
 func newConfig() (*config, error) {
-	ec2Metadata := ec2metadata.New(session.Must(session.NewSession()))
+	ec2Metadata, err := ec2metadata.NewEC2Metadata()
+	if err != nil {
+		return nil, err
+	}
+
 	region, err := ec2Metadata.Region()
 	if err != nil {
 		return nil, errors.Wrapf(err, "unable to get region from ec2 metadata")
@@ -234,7 +245,7 @@ func newConfig() (*config, error) {
 
 	return &config{region: region,
 		subnet:         subnet,
-		index:          int64(len(strings.Split(interfaces, "\n"))),
+		index:          int32(len(strings.Split(interfaces, "\n"))),
 		instanceID:     instanceID,
 		securityGroups: strings.Split(securityGroups, "\n"),
 		vpc:            vpc,
@@ -242,34 +253,34 @@ func newConfig() (*config, error) {
 }
 
 // createENI creates an ENI in the same subnet as the instance's primary ENI
-func createENI(ec2Client *ec2.EC2, cfg *config) (*ec2.NetworkInterface, error) {
-	var filterValuesGroupName []*string
+func createENI(ec2Client *ec2.Client, cfg *config) (*types.NetworkInterface, error) {
+	var filterValuesGroupName []string
 	for _, sg := range cfg.securityGroups {
-		filterValuesGroupName = append(filterValuesGroupName, aws.String(sg))
+		filterValuesGroupName = append(filterValuesGroupName, sg)
 	}
 	// Get security group id for the security group that the instance was
 	// started with
-	securityGroups, err := ec2Client.DescribeSecurityGroups(&ec2.DescribeSecurityGroupsInput{
-		Filters: []*ec2.Filter{
+	securityGroups, err := ec2Client.DescribeSecurityGroups(context.TODO(), &ec2.DescribeSecurityGroupsInput{
+		Filters: []types.Filter{
 			{
 				Name:   aws.String("group-name"),
 				Values: filterValuesGroupName,
 			},
 			{
 				Name:   aws.String("vpc-id"),
-				Values: []*string{aws.String(cfg.vpc)},
+				Values: []string{cfg.vpc},
 			},
 		}})
 	if err != nil {
 		return nil, errors.Wrapf(err, "unable to get security group ids")
 	}
-	var securityGroupIDs []*string
+	var securityGroupIDs []string
 	for _, sg := range securityGroups.SecurityGroups {
-		securityGroupIDs = append(securityGroupIDs, sg.GroupId)
+		securityGroupIDs = append(securityGroupIDs, aws.ToString(sg.GroupId))
 	}
 
 	// Create the ENI
-	output, err := ec2Client.CreateNetworkInterface(&ec2.CreateNetworkInterfaceInput{
+	output, err := ec2Client.CreateNetworkInterface(context.TODO(), &ec2.CreateNetworkInterfaceInput{
 		Description: aws.String("for running end-to-end test for ECS ENI Plugin"),
 		Groups:      securityGroupIDs,
 		SubnetId:    aws.String(cfg.subnet),
@@ -281,9 +292,9 @@ func createENI(ec2Client *ec2.EC2, cfg *config) (*ec2.NetworkInterface, error) {
 }
 
 // computeIPv4SubnetGatewayAndPrefixLength computes the IPv4 subnet gateway and prefix length of the ENI
-func computeIPv4SubnetGatewayAndPrefixLength(ec2Client *ec2.EC2, subnetID string) (string, string, error) {
-	resp, err := ec2Client.DescribeSubnets(&ec2.DescribeSubnetsInput{
-		SubnetIds: []*string{aws.String(subnetID)},
+func computeIPv4SubnetGatewayAndPrefixLength(ec2Client *ec2.Client, subnetID string) (string, string, error) {
+	resp, err := ec2Client.DescribeSubnets(context.TODO(), &ec2.DescribeSubnetsInput{
+		SubnetIds: []string{subnetID},
 	})
 	if err != nil {
 		return "", "", errors.Wrapf(err, "unable to describe the subnet")
@@ -291,7 +302,7 @@ func computeIPv4SubnetGatewayAndPrefixLength(ec2Client *ec2.EC2, subnetID string
 	if len(resp.Subnets) != 1 {
 		return "", "", errors.Errorf("unexpected number of subnets returned in describe: %d", len(resp.Subnets))
 	}
-	gatewayIPV4, mask, err := utils.ComputeIPV4GatewayNetmask(aws.StringValue(resp.Subnets[0].CidrBlock))
+	gatewayIPV4, mask, err := utils.ComputeIPV4GatewayNetmask(aws.ToString(resp.Subnets[0].CidrBlock))
 	if err != nil {
 		return "", "", err
 	}
@@ -299,21 +310,21 @@ func computeIPv4SubnetGatewayAndPrefixLength(ec2Client *ec2.EC2, subnetID string
 }
 
 // waitUntilNetworkInterfaceAvailable waits until the ENI state == "available"
-func waitUntilNetworkInterfaceAvailable(ec2Client *ec2.EC2, eni *ec2.NetworkInterface) error {
-	return ec2Client.WaitUntilNetworkInterfaceAvailable(&ec2.DescribeNetworkInterfacesInput{
-		Filters: []*ec2.Filter{{
+func waitUntilNetworkInterfaceAvailable(ec2Waiter *ec2.NetworkInterfaceAvailableWaiter, eni *types.NetworkInterface) error {
+	return ec2Waiter.Wait(context.TODO(), &ec2.DescribeNetworkInterfacesInput{
+		Filters: []types.Filter{{
 			Name:   aws.String("network-interface-id"),
-			Values: []*string{eni.NetworkInterfaceId}},
-		}})
+			Values: []string{aws.ToString(eni.NetworkInterfaceId)}},
+		}}, waitDuration)
 }
 
 // deleteENI deletes the ENI
-func deleteENI(ec2Client *ec2.EC2, eni *ec2.NetworkInterface) error {
-	err := waitUntilNetworkInterfaceAvailable(ec2Client, eni)
+func deleteENI(ec2Client *ec2.Client, ec2Waiter *ec2.NetworkInterfaceAvailableWaiter, eni *types.NetworkInterface) error {
+	err := waitUntilNetworkInterfaceAvailable(ec2Waiter, eni)
 	if err != nil {
 		return errors.Wrapf(err, "failed waiting for ENI to be 'available'")
 	}
-	_, err = ec2Client.DeleteNetworkInterface(&ec2.DeleteNetworkInterfaceInput{
+	_, err = ec2Client.DeleteNetworkInterface(context.TODO(), &ec2.DeleteNetworkInterfaceInput{
 		NetworkInterfaceId: eni.NetworkInterfaceId,
 	})
 	if err != nil {
@@ -323,17 +334,17 @@ func deleteENI(ec2Client *ec2.EC2, eni *ec2.NetworkInterface) error {
 }
 
 // attachENI attaches the ENI to the current EC2 instance
-func attachENI(ec2Client *ec2.EC2, cfg *config, eni *ec2.NetworkInterface) (*ec2.AttachNetworkInterfaceOutput, error) {
-	return ec2Client.AttachNetworkInterface(&ec2.AttachNetworkInterfaceInput{
-		DeviceIndex:        aws.Int64(cfg.index),
+func attachENI(ec2Client *ec2.Client, cfg *config, eni *types.NetworkInterface) (*ec2.AttachNetworkInterfaceOutput, error) {
+	return ec2Client.AttachNetworkInterface(context.TODO(), &ec2.AttachNetworkInterfaceInput{
+		DeviceIndex:        aws.Int32(cfg.index),
 		InstanceId:         aws.String(cfg.instanceID),
 		NetworkInterfaceId: eni.NetworkInterfaceId,
 	})
 }
 
 // detachENI detaches the ENI from the current EC2 instance
-func detachENI(ec2Client *ec2.EC2, attachment *ec2.AttachNetworkInterfaceOutput) error {
-	_, err := ec2Client.DetachNetworkInterface(&ec2.DetachNetworkInterfaceInput{
+func detachENI(ec2Client *ec2.Client, attachment *ec2.AttachNetworkInterfaceOutput) error {
+	_, err := ec2Client.DetachNetworkInterface(context.TODO(), &ec2.DetachNetworkInterfaceInput{
 		AttachmentId: attachment.AttachmentId,
 		Force:        aws.Bool(true),
 	})
@@ -345,14 +356,14 @@ func detachENI(ec2Client *ec2.EC2, attachment *ec2.AttachNetworkInterfaceOutput)
 }
 
 // waitUntilNetworkInterfaceAttached waits until the ENI shows up on the instance
-func waitUntilNetworkInterfaceAttached(eni *ec2.NetworkInterface, interval time.Duration) error {
+func waitUntilNetworkInterfaceAttached(eni *types.NetworkInterface, interval time.Duration) error {
 	for {
 		links, err := netlink.LinkList()
 		if err != nil {
 			return err
 		}
 		for _, link := range links {
-			if link.Attrs().HardwareAddr.String() == aws.StringValue(eni.MacAddress) {
+			if link.Attrs().HardwareAddr.String() == aws.ToString(eni.MacAddress) {
 				return nil
 			}
 		}

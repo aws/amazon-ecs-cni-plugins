@@ -60,3 +60,18 @@ func (mr *MockEC2MetadataMockRecorder) GetMetadata(arg0 interface{}) *gomock.Cal
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetMetadata", reflect.TypeOf((*MockEC2Metadata)(nil).GetMetadata), arg0)
 }
+
+// Region mocks base method.
+func (m *MockEC2Metadata) Region() (string, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Region")
+	ret0, _ := ret[0].(string)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// Region indicates an expected call of Region.
+func (mr *MockEC2MetadataMockRecorder) Region() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Region", reflect.TypeOf((*MockEC2Metadata)(nil).Region))
+}
