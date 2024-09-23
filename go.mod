@@ -3,7 +3,7 @@ module github.com/aws/amazon-ecs-cni-plugins
 go 1.22.0
 
 require (
-	github.com/aws/aws-sdk-go v1.5.11-0.20161122232317-92ed7a76d078
+	github.com/aws/aws-sdk-go v1.34.0
 	github.com/cihub/seelog v0.0.0-20161009225354-175e6e3d439f
 	github.com/containernetworking/cni v0.0.0-00010101000000-000000000000
 	github.com/docker/libkv v0.2.2-0.20211217151845-dfacc563de57
@@ -17,7 +17,6 @@ require (
 require (
 	github.com/coreos/go-iptables v0.8.0 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
-	github.com/go-ini/ini v1.67.0 // indirect
 	github.com/jmespath/go-jmespath v0.4.0 // indirect
 	github.com/onsi/ginkgo v1.16.5 // indirect
 	github.com/onsi/gomega v1.34.2 // indirect
