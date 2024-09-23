@@ -1,4 +1,4 @@
-// Copyright 2019 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+// Copyright 2024 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License"). You may
 // not use this file except in compliance with the License. A copy of the
@@ -25,30 +25,30 @@ import (
 	gomock "github.com/golang/mock/gomock"
 )
 
-// MockCmd is a mock of Cmd interface
+// MockCmd is a mock of Cmd interface.
 type MockCmd struct {
 	ctrl     *gomock.Controller
 	recorder *MockCmdMockRecorder
 }
 
-// MockCmdMockRecorder is the mock recorder for MockCmd
+// MockCmdMockRecorder is the mock recorder for MockCmd.
 type MockCmdMockRecorder struct {
 	mock *MockCmd
 }
 
-// NewMockCmd creates a new mock instance
+// NewMockCmd creates a new mock instance.
 func NewMockCmd(ctrl *gomock.Controller) *MockCmd {
 	mock := &MockCmd{ctrl: ctrl}
 	mock.recorder = &MockCmdMockRecorder{mock}
 	return mock
 }
 
-// EXPECT returns an object that allows the caller to indicate expected use
+// EXPECT returns an object that allows the caller to indicate expected use.
 func (m *MockCmd) EXPECT() *MockCmdMockRecorder {
 	return m.recorder
 }
 
-// CombinedOutput mocks base method
+// CombinedOutput mocks base method.
 func (m *MockCmd) CombinedOutput() ([]byte, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "CombinedOutput")
@@ -57,13 +57,13 @@ func (m *MockCmd) CombinedOutput() ([]byte, error) {
 	return ret0, ret1
 }
 
-// CombinedOutput indicates an expected call of CombinedOutput
+// CombinedOutput indicates an expected call of CombinedOutput.
 func (mr *MockCmdMockRecorder) CombinedOutput() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CombinedOutput", reflect.TypeOf((*MockCmd)(nil).CombinedOutput))
 }
 
-// Output mocks base method
+// Output mocks base method.
 func (m *MockCmd) Output() ([]byte, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Output")
@@ -72,13 +72,13 @@ func (m *MockCmd) Output() ([]byte, error) {
 	return ret0, ret1
 }
 
-// Output indicates an expected call of Output
+// Output indicates an expected call of Output.
 func (mr *MockCmdMockRecorder) Output() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Output", reflect.TypeOf((*MockCmd)(nil).Output))
 }
 
-// Run mocks base method
+// Run mocks base method.
 func (m *MockCmd) Run() error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Run")
@@ -86,13 +86,13 @@ func (m *MockCmd) Run() error {
 	return ret0
 }
 
-// Run indicates an expected call of Run
+// Run indicates an expected call of Run.
 func (mr *MockCmdMockRecorder) Run() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Run", reflect.TypeOf((*MockCmd)(nil).Run))
 }
 
-// Start mocks base method
+// Start mocks base method.
 func (m *MockCmd) Start() error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Start")
@@ -100,13 +100,13 @@ func (m *MockCmd) Start() error {
 	return ret0
 }
 
-// Start indicates an expected call of Start
+// Start indicates an expected call of Start.
 func (mr *MockCmdMockRecorder) Start() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Start", reflect.TypeOf((*MockCmd)(nil).Start))
 }
 
-// StderrPipe mocks base method
+// StderrPipe mocks base method.
 func (m *MockCmd) StderrPipe() (io.ReadCloser, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "StderrPipe")
@@ -115,13 +115,13 @@ func (m *MockCmd) StderrPipe() (io.ReadCloser, error) {
 	return ret0, ret1
 }
 
-// StderrPipe indicates an expected call of StderrPipe
+// StderrPipe indicates an expected call of StderrPipe.
 func (mr *MockCmdMockRecorder) StderrPipe() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StderrPipe", reflect.TypeOf((*MockCmd)(nil).StderrPipe))
 }
 
-// StdinPipe mocks base method
+// StdinPipe mocks base method.
 func (m *MockCmd) StdinPipe() (io.WriteCloser, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "StdinPipe")
@@ -130,13 +130,13 @@ func (m *MockCmd) StdinPipe() (io.WriteCloser, error) {
 	return ret0, ret1
 }
 
-// StdinPipe indicates an expected call of StdinPipe
+// StdinPipe indicates an expected call of StdinPipe.
 func (mr *MockCmdMockRecorder) StdinPipe() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StdinPipe", reflect.TypeOf((*MockCmd)(nil).StdinPipe))
 }
 
-// StdoutPipe mocks base method
+// StdoutPipe mocks base method.
 func (m *MockCmd) StdoutPipe() (io.ReadCloser, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "StdoutPipe")
@@ -145,13 +145,13 @@ func (m *MockCmd) StdoutPipe() (io.ReadCloser, error) {
 	return ret0, ret1
 }
 
-// StdoutPipe indicates an expected call of StdoutPipe
+// StdoutPipe indicates an expected call of StdoutPipe.
 func (mr *MockCmdMockRecorder) StdoutPipe() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StdoutPipe", reflect.TypeOf((*MockCmd)(nil).StdoutPipe))
 }
 
-// Wait mocks base method
+// Wait mocks base method.
 func (m *MockCmd) Wait() error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Wait")
@@ -159,36 +159,36 @@ func (m *MockCmd) Wait() error {
 	return ret0
 }
 
-// Wait indicates an expected call of Wait
+// Wait indicates an expected call of Wait.
 func (mr *MockCmdMockRecorder) Wait() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Wait", reflect.TypeOf((*MockCmd)(nil).Wait))
 }
 
-// MockExec is a mock of Exec interface
+// MockExec is a mock of Exec interface.
 type MockExec struct {
 	ctrl     *gomock.Controller
 	recorder *MockExecMockRecorder
 }
 
-// MockExecMockRecorder is the mock recorder for MockExec
+// MockExecMockRecorder is the mock recorder for MockExec.
 type MockExecMockRecorder struct {
 	mock *MockExec
 }
 
-// NewMockExec creates a new mock instance
+// NewMockExec creates a new mock instance.
 func NewMockExec(ctrl *gomock.Controller) *MockExec {
 	mock := &MockExec{ctrl: ctrl}
 	mock.recorder = &MockExecMockRecorder{mock}
 	return mock
 }
 
-// EXPECT returns an object that allows the caller to indicate expected use
+// EXPECT returns an object that allows the caller to indicate expected use.
 func (m *MockExec) EXPECT() *MockExecMockRecorder {
 	return m.recorder
 }
 
-// Command mocks base method
+// Command mocks base method.
 func (m *MockExec) Command(arg0 string, arg1 ...string) execwrapper.Cmd {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{arg0}
@@ -200,14 +200,14 @@ func (m *MockExec) Command(arg0 string, arg1 ...string) execwrapper.Cmd {
 	return ret0
 }
 
-// Command indicates an expected call of Command
+// Command indicates an expected call of Command.
 func (mr *MockExecMockRecorder) Command(arg0 interface{}, arg1 ...interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]interface{}{arg0}, arg1...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Command", reflect.TypeOf((*MockExec)(nil).Command), varargs...)
 }
 
-// LookPath mocks base method
+// LookPath mocks base method.
 func (m *MockExec) LookPath(arg0 string) (string, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "LookPath", arg0)
@@ -216,7 +216,7 @@ func (m *MockExec) LookPath(arg0 string) (string, error) {
 	return ret0, ret1
 }
 
-// LookPath indicates an expected call of LookPath
+// LookPath indicates an expected call of LookPath.
 func (mr *MockExecMockRecorder) LookPath(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "LookPath", reflect.TypeOf((*MockExec)(nil).LookPath), arg0)

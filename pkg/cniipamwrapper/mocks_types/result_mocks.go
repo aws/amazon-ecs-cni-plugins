@@ -1,4 +1,4 @@
-// Copyright 2019 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+// Copyright 2024 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License"). You may
 // not use this file except in compliance with the License. A copy of the
@@ -24,30 +24,30 @@ import (
 	gomock "github.com/golang/mock/gomock"
 )
 
-// MockResult is a mock of Result interface
+// MockResult is a mock of Result interface.
 type MockResult struct {
 	ctrl     *gomock.Controller
 	recorder *MockResultMockRecorder
 }
 
-// MockResultMockRecorder is the mock recorder for MockResult
+// MockResultMockRecorder is the mock recorder for MockResult.
 type MockResultMockRecorder struct {
 	mock *MockResult
 }
 
-// NewMockResult creates a new mock instance
+// NewMockResult creates a new mock instance.
 func NewMockResult(ctrl *gomock.Controller) *MockResult {
 	mock := &MockResult{ctrl: ctrl}
 	mock.recorder = &MockResultMockRecorder{mock}
 	return mock
 }
 
-// EXPECT returns an object that allows the caller to indicate expected use
+// EXPECT returns an object that allows the caller to indicate expected use.
 func (m *MockResult) EXPECT() *MockResultMockRecorder {
 	return m.recorder
 }
 
-// GetAsVersion mocks base method
+// GetAsVersion mocks base method.
 func (m *MockResult) GetAsVersion(arg0 string) (types.Result, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetAsVersion", arg0)
@@ -56,13 +56,13 @@ func (m *MockResult) GetAsVersion(arg0 string) (types.Result, error) {
 	return ret0, ret1
 }
 
-// GetAsVersion indicates an expected call of GetAsVersion
+// GetAsVersion indicates an expected call of GetAsVersion.
 func (mr *MockResultMockRecorder) GetAsVersion(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetAsVersion", reflect.TypeOf((*MockResult)(nil).GetAsVersion), arg0)
 }
 
-// Print mocks base method
+// Print mocks base method.
 func (m *MockResult) Print() error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Print")
@@ -70,13 +70,13 @@ func (m *MockResult) Print() error {
 	return ret0
 }
 
-// Print indicates an expected call of Print
+// Print indicates an expected call of Print.
 func (mr *MockResultMockRecorder) Print() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Print", reflect.TypeOf((*MockResult)(nil).Print))
 }
 
-// String mocks base method
+// String mocks base method.
 func (m *MockResult) String() string {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "String")
@@ -84,13 +84,13 @@ func (m *MockResult) String() string {
 	return ret0
 }
 
-// String indicates an expected call of String
+// String indicates an expected call of String.
 func (mr *MockResultMockRecorder) String() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "String", reflect.TypeOf((*MockResult)(nil).String))
 }
 
-// Version mocks base method
+// Version mocks base method.
 func (m *MockResult) Version() string {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Version")
@@ -98,7 +98,7 @@ func (m *MockResult) Version() string {
 	return ret0
 }
 
-// Version indicates an expected call of Version
+// Version indicates an expected call of Version.
 func (mr *MockResultMockRecorder) Version() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Version", reflect.TypeOf((*MockResult)(nil).Version))

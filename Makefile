@@ -28,10 +28,8 @@ endif
 .PHONY: get-deps
 
 get-deps:
-	go get github.com/golang/mock/gomock
-	go get github.com/golang/mock/mockgen
-	go get golang.org/x/tools/cmd/goimports
-	go get github.com/tools/godep
+	go install github.com/golang/mock/mockgen@v1.6.0
+	go install golang.org/x/tools/cmd/goimports@v0.24.0
 
 .PHONY: plugins
 plugins: $(LOCAL_ENI_PLUGIN_BINARY) $(LOCAL_IPAM_PLUGIN_BINARY) $(LOCAL_BRIDGE_PLUGIN_BINARY)

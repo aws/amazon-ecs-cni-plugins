@@ -1,4 +1,4 @@
-// Copyright 2019 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+// Copyright 2024 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License"). You may
 // not use this file except in compliance with the License. A copy of the
@@ -25,30 +25,30 @@ import (
 	gomock "github.com/golang/mock/gomock"
 )
 
-// MockOS is a mock of OS interface
+// MockOS is a mock of OS interface.
 type MockOS struct {
 	ctrl     *gomock.Controller
 	recorder *MockOSMockRecorder
 }
 
-// MockOSMockRecorder is the mock recorder for MockOS
+// MockOSMockRecorder is the mock recorder for MockOS.
 type MockOSMockRecorder struct {
 	mock *MockOS
 }
 
-// NewMockOS creates a new mock instance
+// NewMockOS creates a new mock instance.
 func NewMockOS(ctrl *gomock.Controller) *MockOS {
 	mock := &MockOS{ctrl: ctrl}
 	mock.recorder = &MockOSMockRecorder{mock}
 	return mock
 }
 
-// EXPECT returns an object that allows the caller to indicate expected use
+// EXPECT returns an object that allows the caller to indicate expected use.
 func (m *MockOS) EXPECT() *MockOSMockRecorder {
 	return m.recorder
 }
 
-// FindProcess mocks base method
+// FindProcess mocks base method.
 func (m *MockOS) FindProcess(arg0 int) (oswrapper.OSProcess, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "FindProcess", arg0)
@@ -57,13 +57,13 @@ func (m *MockOS) FindProcess(arg0 int) (oswrapper.OSProcess, error) {
 	return ret0, ret1
 }
 
-// FindProcess indicates an expected call of FindProcess
+// FindProcess indicates an expected call of FindProcess.
 func (mr *MockOSMockRecorder) FindProcess(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FindProcess", reflect.TypeOf((*MockOS)(nil).FindProcess), arg0)
 }
 
-// Getenv mocks base method
+// Getenv mocks base method.
 func (m *MockOS) Getenv(arg0 string) string {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Getenv", arg0)
@@ -71,36 +71,36 @@ func (m *MockOS) Getenv(arg0 string) string {
 	return ret0
 }
 
-// Getenv indicates an expected call of Getenv
+// Getenv indicates an expected call of Getenv.
 func (mr *MockOSMockRecorder) Getenv(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Getenv", reflect.TypeOf((*MockOS)(nil).Getenv), arg0)
 }
 
-// MockOSProcess is a mock of OSProcess interface
+// MockOSProcess is a mock of OSProcess interface.
 type MockOSProcess struct {
 	ctrl     *gomock.Controller
 	recorder *MockOSProcessMockRecorder
 }
 
-// MockOSProcessMockRecorder is the mock recorder for MockOSProcess
+// MockOSProcessMockRecorder is the mock recorder for MockOSProcess.
 type MockOSProcessMockRecorder struct {
 	mock *MockOSProcess
 }
 
-// NewMockOSProcess creates a new mock instance
+// NewMockOSProcess creates a new mock instance.
 func NewMockOSProcess(ctrl *gomock.Controller) *MockOSProcess {
 	mock := &MockOSProcess{ctrl: ctrl}
 	mock.recorder = &MockOSProcessMockRecorder{mock}
 	return mock
 }
 
-// EXPECT returns an object that allows the caller to indicate expected use
+// EXPECT returns an object that allows the caller to indicate expected use.
 func (m *MockOSProcess) EXPECT() *MockOSProcessMockRecorder {
 	return m.recorder
 }
 
-// Signal mocks base method
+// Signal mocks base method.
 func (m *MockOSProcess) Signal(arg0 os.Signal) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Signal", arg0)
@@ -108,7 +108,7 @@ func (m *MockOSProcess) Signal(arg0 os.Signal) error {
 	return ret0
 }
 
-// Signal indicates an expected call of Signal
+// Signal indicates an expected call of Signal.
 func (mr *MockOSProcessMockRecorder) Signal(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Signal", reflect.TypeOf((*MockOSProcess)(nil).Signal), arg0)
