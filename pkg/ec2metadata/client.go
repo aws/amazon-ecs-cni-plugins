@@ -24,7 +24,6 @@ import (
 // EC2Metadata wraps the methods from the amazon-sdk-go's ec2metadata package
 type EC2Metadata interface {
 	GetMetadata(path string) (string, error)
-	Region() (string, error)
 }
 
 type ec2Metadata struct {
@@ -57,13 +56,4 @@ func (e *ec2Metadata) GetMetadata(path string) (string, error) {
 	}
 
 	return string(content), nil
-}
-
-func (e *ec2Metadata) Region() (string, error) {
-	output, err := e.imds.GetRegion(context.TODO(), &imds.GetRegionInput{})
-	if err != nil {
-		return "", err
-	}
-
-	return output.Region, nil
 }

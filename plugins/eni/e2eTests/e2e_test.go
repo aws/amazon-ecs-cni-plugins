@@ -66,7 +66,6 @@ func init() {
 }
 
 type config struct {
-	region         string
 	subnet         string
 	index          int32
 	instanceID     string
@@ -83,7 +82,7 @@ func TestAddDel(t *testing.T) {
 	cfg, err := newConfig()
 	require.NoError(t, err, "Unable to get instance config")
 
-	awsCfg, err := awsconfig.LoadDefaultConfig(context.TODO(), awsconfig.WithRegion(cfg.region))
+	awsCfg, err := awsconfig.LoadDefaultConfig(context.TODO(), awsconfig.WithEC2IMDSRegion())
 	require.NoError(t, err, "Unable to load AWS config")
 
 	ec2Client := ec2.NewFromConfig(awsCfg)
@@ -208,11 +207,6 @@ func newConfig() (*config, error) {
 		return nil, err
 	}
 
-	region, err := ec2Metadata.Region()
-	if err != nil {
-		return nil, errors.Wrapf(err, "unable to get region from ec2 metadata")
-	}
-
 	instanceID, err := ec2Metadata.GetMetadata("instance-id")
 	if err != nil {
 		return nil, errors.Wrapf(err, "unable to get instance id from ec2 metadata")
@@ -243,7 +237,7 @@ func newConfig() (*config, error) {
 		return nil, errors.Wrapf(err, "unable to get vpc from ec2 metadata")
 	}
 
-	return &config{region: region,
+	return &config{
 		subnet:         subnet,
 		index:          int32(len(strings.Split(interfaces, "\n"))),
 		instanceID:     instanceID,
