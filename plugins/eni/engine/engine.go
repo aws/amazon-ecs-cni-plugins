@@ -78,11 +78,16 @@ type engine struct {
 }
 
 // New creates a new Engine object
-func New() Engine {
+func New() (Engine, error) {
+	metadata, err := ec2metadata.NewEC2Metadata()
+	if err != nil {
+		return nil, errors.Wrap(err, "New engine: unable to create EC2 metadata client")
+	}
 	return create(
-		ec2metadata.NewEC2Metadata(),
+		metadata,
 		netlinkwrapper.NewNetLink(),
-		cninswrapper.NewNS())
+		cninswrapper.NewNS(),
+	), nil
 }
 
 func create(metadata ec2metadata.EC2Metadata,
