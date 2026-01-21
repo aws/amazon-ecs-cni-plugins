@@ -231,19 +231,22 @@ func (engine *engine) RunIPAMPluginAdd(plugin string, netConf []byte) (*current.
 			"bridge IPAM ADD: unable to parse result '%s'", ipamResult.String())
 	}
 
-	// This version of the bridge plugin only considers the first IP Address
-	// returned by the ipam plugin as we only expect one ip address to be
-	// allocated by the IPAM interface
-	if len(result.IPs) != 1 {
-		return nil, errors.New("bridge IPAM ADD: Missing IP config in result")
+	// Accept 1 or 2 IP configurations (IPv4 only, IPv6 only, or dual-stack)
+	if len(result.IPs) < 1 || len(result.IPs) > 2 {
+		return nil, errors.Errorf(
+			"bridge IPAM ADD: expected 1 or 2 IP configs, got %d", len(result.IPs))
 	}
 
-	if result.IPs[0].Address.Mask == nil || result.IPs[0].Address.Mask.String() == zeroLengthIPString {
-		return nil, errors.New("bridge IPAM ADD: IP address mask not set in result")
-	}
-
-	if result.IPs[0].Gateway == nil || result.IPs[0].Gateway.String() == zeroLengthIPString {
-		return nil, errors.New("bridge IPAM ADD: Gateway not set in result")
+	// Validate each IP configuration
+	for i, ip := range result.IPs {
+		if ip.Address.Mask == nil || ip.Address.Mask.String() == zeroLengthIPString {
+			return nil, errors.Errorf(
+				"bridge IPAM ADD: IP address mask not set for IP[%d]", i)
+		}
+		if ip.Gateway == nil || ip.Gateway.String() == zeroLengthIPString {
+			return nil, errors.Errorf(
+				"bridge IPAM ADD: Gateway not set for IP[%d]", i)
+		}
 	}
 
 	return result, nil
@@ -262,47 +265,63 @@ func (engine *engine) ConfigureContainerVethInterface(netnsName string, result *
 	return engine.ns.WithNetNSPath(netnsName, configureContext.run)
 }
 
-// ConfigureBridge configures the IP address of the bridge if needed
+// ConfigureBridge configures the IP addresses of the bridge for all address families
 func (engine *engine) ConfigureBridge(result *current.Result, bridge *netlink.Bridge) error {
-	addrs, err := engine.netLink.AddrList(bridge, syscall.AF_INET)
-	if err != nil && err != syscall.ENOENT {
-		return errors.Wrapf(err,
-			"bridge configure: unable to list addresses for bridge %s",
-			bridge.Attrs().Name)
-	}
+	for _, ipConfig := range result.IPs {
+		// Determine address family based on IP version
+		family := syscall.AF_INET
+		if ipConfig.Address.IP.To4() == nil {
+			family = syscall.AF_INET6
+		}
 
-	resultBridgeNetwork := &net.IPNet{
-		IP:   result.IPs[0].Gateway,
-		Mask: result.IPs[0].Address.Mask,
-	}
-	resultBridgeCIDR := resultBridgeNetwork.String()
-	if len(addrs) > 0 {
+		addrs, err := engine.netLink.AddrList(bridge, family)
+		if err != nil && err != syscall.ENOENT {
+			return errors.Wrapf(err,
+				"bridge configure: unable to list addresses for bridge %s",
+				bridge.Attrs().Name)
+		}
+
+		resultBridgeNetwork := &net.IPNet{
+			IP:   ipConfig.Gateway,
+			Mask: ipConfig.Address.Mask,
+		}
+		resultBridgeCIDR := resultBridgeNetwork.String()
+
+		addressExists := false
+		hasConflictingGlobalAddr := false
 		for _, addr := range addrs {
 			if addr.IPNet.String() == resultBridgeCIDR {
-				return nil
+				addressExists = true
+				break
 			}
+			// For IPv6, ignore link-local addresses (fe80::/10) when checking for conflicts
+			// The kernel automatically assigns link-local addresses to interfaces
+			if family == syscall.AF_INET6 && addr.IP.IsLinkLocalUnicast() {
+				continue
+			}
+			hasConflictingGlobalAddr = true
 		}
-		return errors.New("bridge configure: mismatch in bridge ip address")
+
+		if addressExists {
+			continue
+		}
+
+		if hasConflictingGlobalAddr {
+			return errors.Errorf(
+				"bridge configure: mismatch in bridge %s address for family %d",
+				bridge.Attrs().Name, family)
+		}
+
+		bridgeAddr := &netlink.Addr{IPNet: resultBridgeNetwork}
+		addrAddErr := engine.netLink.AddrAdd(bridge, bridgeAddr)
+		if addrAddErr != nil && !strings.Contains(addrAddErr.Error(), fileExistsErrMsg) {
+			return errors.Wrapf(addrAddErr,
+				"bridge configure: unable to assign ip address to bridge %s",
+				bridge.Attrs().Name)
+		}
 	}
 
-	bridgeAddr := &netlink.Addr{
-		IPNet: resultBridgeNetwork,
-	}
-
-	addrAddErr := engine.netLink.AddrAdd(bridge, bridgeAddr)
-	if addrAddErr == nil {
-		return nil
-	}
-
-	if strings.Contains(addrAddErr.Error(), fileExistsErrMsg) {
-		// if we fail to assign ip address because of a file exist error, the error is probably caused by someone else
-		// assigned the address right before we assigned it, which is fine
-		return nil
-	}
-
-	return errors.Wrapf(addrAddErr,
-		"bridge configure: unable to assign ip address to bridge %s",
-		bridge.Attrs().Name)
+	return nil
 }
 
 // GetInterfaceIPV4Address gets the ipv4 address of a given interface

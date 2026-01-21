@@ -5,7 +5,9 @@
 The ECS Bridge plugin configures the network namespace of the container to be
 able to communicate with the credentials endpoint of the [ECS Agent](https://github.com/aws/amazon-ecs-agent) by creating a
 bridge (if required) and veth pair to connect the container's network namespace
-to the bridge. An example configuration for invoking this plugin is listed next:
+to the bridge. The plugin supports IPv4-only, IPv6-only, and dual-stack configurations.
+
+### IPv4-only Configuration Example
 ```json
 {
     "type":"ecs-bridge",
@@ -20,6 +22,54 @@ to the bridge. An example configuration for invoking this plugin is listed next:
 	"ipv4-routes":[
 	    {
 		"dst":"169.254.172.1"
+	    }
+	]
+    }
+}
+```
+
+### IPv6-only Configuration Example
+```json
+{
+    "type":"ecs-bridge",
+    "cniVersion":"0.3.0",
+    "bridge":"ecs-br0",
+    "mtu":1500,
+    "ipam":{
+	"type":"ecs-ipam",
+	"id":"test",
+	"cniVersion":"0.3.0",
+	"ipv6-subnet":"2001:db8::/64",
+	"ipv6-routes":[
+	    {
+		"dst":"fd00:ec2::254/128"
+	    }
+	]
+    }
+}
+```
+
+### Dual-Stack Configuration Example
+```json
+{
+    "type":"ecs-bridge",
+    "cniVersion":"0.3.0",
+    "bridge":"ecs-br0",
+    "mtu":1500,
+    "ipam":{
+	"type":"ecs-ipam",
+	"id":"test",
+	"cniVersion":"0.3.0",
+	"ipv4-subnet":"169.254.172.0/22",
+	"ipv4-routes":[
+	    {
+		"dst":"169.254.170.2/32"
+	    }
+	],
+	"ipv6-subnet":"2001:db8::/64",
+	"ipv6-routes":[
+	    {
+		"dst":"fd00:ec2::254/128"
 	    }
 	]
     }

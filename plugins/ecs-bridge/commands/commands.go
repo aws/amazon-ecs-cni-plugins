@@ -126,10 +126,12 @@ func add(args *skel.CmdArgs, engine engine.Engine) error {
 	}
 
 	// Set the index for the container veth interface in the `Interfaces`
-	// list populated above.
+	// list populated above for ALL IP configurations.
 	// The `ipam.ConfigureIface` method needs this index to be set as it
 	// needs to know which interface should be used when adding routes
-	result.IPs[0].Interface = 2
+	for i := range result.IPs {
+		result.IPs[i].Interface = 2
+	}
 
 	detailLogInfo("Configuring container's interface", args, conf, hostVethName)
 	err = engine.ConfigureContainerVethInterface(args.Netns, result, args.IfName)

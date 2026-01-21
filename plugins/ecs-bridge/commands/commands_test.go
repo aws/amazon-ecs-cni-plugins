@@ -1,3 +1,4 @@
+//go:build !integration && !e2e
 // +build !integration,!e2e
 
 // Copyright 2017 Amazon.com, Inc. or its affiliates. All Rights Reserved.
@@ -20,7 +21,7 @@ import (
 	"net"
 	"testing"
 
-	"github.com/aws/amazon-ecs-cni-plugins/plugins/ecs-bridge/engine/mocks"
+	mock_engine "github.com/aws/amazon-ecs-cni-plugins/plugins/ecs-bridge/engine/mocks"
 	"github.com/containernetworking/cni/pkg/skel"
 	"github.com/containernetworking/cni/pkg/types/current"
 	"github.com/golang/mock/gomock"
@@ -275,5 +276,207 @@ func TestDelSuccess(t *testing.T) {
 		mockEngine.EXPECT().DeleteVeth(nsName, interfaceName).Return(nil),
 	)
 	err := del(conf, mockEngine)
+	assert.NoError(t, err)
+}
+
+// TestAddWithSingleIPv4Result tests ADD with a single IPv4 result
+// Validates: Requirements 4.3, 5.2 - Interface index assignment for IPv4
+func TestAddWithSingleIPv4Result(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockEngine := mock_engine.NewMockEngine(ctrl)
+	bridgeLink := &netlink.Bridge{
+		LinkAttrs: netlink.LinkAttrs{
+			Name:         bridgeName,
+			HardwareAddr: macHWAddr,
+		},
+	}
+
+	_, ipv4Net, _ := net.ParseCIDR("169.254.172.2/22")
+	result := &current.Result{
+		IPs: []*current.IPConfig{
+			{
+				Address: *ipv4Net,
+				Gateway: net.ParseIP("169.254.172.1"),
+			},
+		},
+	}
+	containerVethInterface := &current.Interface{}
+	hostVethInterface := &current.Interface{}
+	gomock.InOrder(
+		mockEngine.EXPECT().CreateBridge(bridgeName, defaultMTU).Return(bridgeLink, nil),
+		mockEngine.EXPECT().CreateVethPair(nsName, defaultMTU, interfaceName).Return(containerVethInterface, hostVethName, nil),
+		mockEngine.EXPECT().AttachHostVethInterfaceToBridge(hostVethName, bridgeLink).Return(hostVethInterface, nil),
+		mockEngine.EXPECT().RunIPAMPluginAdd(ipamType, conf.StdinData).Return(result, nil),
+		mockEngine.EXPECT().ConfigureContainerVethInterface(nsName, result, interfaceName).Do(
+			func(netns string, res *current.Result, ifName string) {
+				assert.NotEmpty(t, res)
+				assert.Equal(t, 3, len(res.Interfaces))
+				// Verify single IPv4 IP has interface index set to 2 (container veth)
+				assert.Equal(t, 1, len(res.IPs))
+				assert.Equal(t, 2, res.IPs[0].Interface)
+				// Verify it's an IPv4 address
+				assert.NotNil(t, res.IPs[0].Address.IP.To4())
+			}).Return(nil),
+		mockEngine.EXPECT().ConfigureBridge(result, bridgeLink).Return(nil),
+	)
+	err := add(conf, mockEngine)
+	assert.NoError(t, err)
+}
+
+// TestAddWithSingleIPv6Result tests ADD with a single IPv6 result
+// Validates: Requirements 4.3, 5.2 - Interface index assignment for IPv6
+func TestAddWithSingleIPv6Result(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockEngine := mock_engine.NewMockEngine(ctrl)
+	bridgeLink := &netlink.Bridge{
+		LinkAttrs: netlink.LinkAttrs{
+			Name:         bridgeName,
+			HardwareAddr: macHWAddr,
+		},
+	}
+
+	_, ipv6Net, _ := net.ParseCIDR("2001:db8::2/64")
+	result := &current.Result{
+		IPs: []*current.IPConfig{
+			{
+				Address: *ipv6Net,
+				Gateway: net.ParseIP("2001:db8::1"),
+			},
+		},
+	}
+	containerVethInterface := &current.Interface{}
+	hostVethInterface := &current.Interface{}
+	gomock.InOrder(
+		mockEngine.EXPECT().CreateBridge(bridgeName, defaultMTU).Return(bridgeLink, nil),
+		mockEngine.EXPECT().CreateVethPair(nsName, defaultMTU, interfaceName).Return(containerVethInterface, hostVethName, nil),
+		mockEngine.EXPECT().AttachHostVethInterfaceToBridge(hostVethName, bridgeLink).Return(hostVethInterface, nil),
+		mockEngine.EXPECT().RunIPAMPluginAdd(ipamType, conf.StdinData).Return(result, nil),
+		mockEngine.EXPECT().ConfigureContainerVethInterface(nsName, result, interfaceName).Do(
+			func(netns string, res *current.Result, ifName string) {
+				assert.NotEmpty(t, res)
+				assert.Equal(t, 3, len(res.Interfaces))
+				// Verify single IPv6 IP has interface index set to 2 (container veth)
+				assert.Equal(t, 1, len(res.IPs))
+				assert.Equal(t, 2, res.IPs[0].Interface)
+				// Verify it's an IPv6 address (To4() returns nil for IPv6)
+				assert.Nil(t, res.IPs[0].Address.IP.To4())
+			}).Return(nil),
+		mockEngine.EXPECT().ConfigureBridge(result, bridgeLink).Return(nil),
+	)
+	err := add(conf, mockEngine)
+	assert.NoError(t, err)
+}
+
+// TestAddWithDualStackResult tests ADD with both IPv4 and IPv6 results
+// Validates: Requirements 4.3, 5.2 - Interface index assignment for dual-stack
+// **Property 6: Interface Index Assignment**
+func TestAddWithDualStackResult(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockEngine := mock_engine.NewMockEngine(ctrl)
+	bridgeLink := &netlink.Bridge{
+		LinkAttrs: netlink.LinkAttrs{
+			Name:         bridgeName,
+			HardwareAddr: macHWAddr,
+		},
+	}
+
+	_, ipv4Net, _ := net.ParseCIDR("169.254.172.2/22")
+	_, ipv6Net, _ := net.ParseCIDR("2001:db8::2/64")
+	result := &current.Result{
+		IPs: []*current.IPConfig{
+			{
+				Address: *ipv4Net,
+				Gateway: net.ParseIP("169.254.172.1"),
+			},
+			{
+				Address: *ipv6Net,
+				Gateway: net.ParseIP("2001:db8::1"),
+			},
+		},
+	}
+	containerVethInterface := &current.Interface{}
+	hostVethInterface := &current.Interface{}
+	gomock.InOrder(
+		mockEngine.EXPECT().CreateBridge(bridgeName, defaultMTU).Return(bridgeLink, nil),
+		mockEngine.EXPECT().CreateVethPair(nsName, defaultMTU, interfaceName).Return(containerVethInterface, hostVethName, nil),
+		mockEngine.EXPECT().AttachHostVethInterfaceToBridge(hostVethName, bridgeLink).Return(hostVethInterface, nil),
+		mockEngine.EXPECT().RunIPAMPluginAdd(ipamType, conf.StdinData).Return(result, nil),
+		mockEngine.EXPECT().ConfigureContainerVethInterface(nsName, result, interfaceName).Do(
+			func(netns string, res *current.Result, ifName string) {
+				assert.NotEmpty(t, res)
+				assert.Equal(t, 3, len(res.Interfaces))
+				// Verify both IPs have interface index set to 2 (container veth)
+				assert.Equal(t, 2, len(res.IPs))
+				for i, ip := range res.IPs {
+					assert.Equal(t, 2, ip.Interface, "IP[%d] should have interface index 2", i)
+				}
+				// Verify first is IPv4
+				assert.NotNil(t, res.IPs[0].Address.IP.To4(), "First IP should be IPv4")
+				// Verify second is IPv6
+				assert.Nil(t, res.IPs[1].Address.IP.To4(), "Second IP should be IPv6")
+			}).Return(nil),
+		mockEngine.EXPECT().ConfigureBridge(result, bridgeLink).Return(nil),
+	)
+	err := add(conf, mockEngine)
+	assert.NoError(t, err)
+}
+
+// TestAddInterfaceIndexAssignmentProperty tests that interface indices are set correctly
+// for all IP configurations regardless of count
+// **Property 6: Interface Index Assignment**
+// Validates: Requirements 4.3, 5.2
+func TestAddInterfaceIndexAssignmentProperty(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockEngine := mock_engine.NewMockEngine(ctrl)
+	bridgeLink := &netlink.Bridge{
+		LinkAttrs: netlink.LinkAttrs{
+			Name:         bridgeName,
+			HardwareAddr: macHWAddr,
+		},
+	}
+
+	// Test with dual-stack to verify all IPs get the correct interface index
+	_, ipv4Net, _ := net.ParseCIDR("10.0.0.2/24")
+	_, ipv6Net, _ := net.ParseCIDR("fd00::2/64")
+	result := &current.Result{
+		IPs: []*current.IPConfig{
+			{
+				Address: *ipv4Net,
+				Gateway: net.ParseIP("10.0.0.1"),
+			},
+			{
+				Address: *ipv6Net,
+				Gateway: net.ParseIP("fd00::1"),
+			},
+		},
+	}
+	containerVethInterface := &current.Interface{}
+	hostVethInterface := &current.Interface{}
+	gomock.InOrder(
+		mockEngine.EXPECT().CreateBridge(bridgeName, defaultMTU).Return(bridgeLink, nil),
+		mockEngine.EXPECT().CreateVethPair(nsName, defaultMTU, interfaceName).Return(containerVethInterface, hostVethName, nil),
+		mockEngine.EXPECT().AttachHostVethInterfaceToBridge(hostVethName, bridgeLink).Return(hostVethInterface, nil),
+		mockEngine.EXPECT().RunIPAMPluginAdd(ipamType, conf.StdinData).Return(result, nil),
+		mockEngine.EXPECT().ConfigureContainerVethInterface(nsName, result, interfaceName).Do(
+			func(netns string, res *current.Result, ifName string) {
+				// Property: For any IP configuration in the IPAM result,
+				// the bridge plugin shall set the interface index to point
+				// to the container veth interface (index 2)
+				for i, ip := range res.IPs {
+					assert.Equal(t, 2, ip.Interface,
+						"IP[%d] interface index should be 2 (container veth)", i)
+				}
+			}).Return(nil),
+		mockEngine.EXPECT().ConfigureBridge(result, bridgeLink).Return(nil),
+	)
+	err := add(conf, mockEngine)
 	assert.NoError(t, err)
 }
