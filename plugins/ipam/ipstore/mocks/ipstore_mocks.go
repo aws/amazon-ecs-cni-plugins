@@ -118,6 +118,21 @@ func (mr *MockIPAllocatorMockRecorder) GetAvailableIP(arg0 interface{}) *gomock.
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetAvailableIP", reflect.TypeOf((*MockIPAllocator)(nil).GetAvailableIP), arg0)
 }
 
+// GetAvailableIPv6 mocks base method.
+func (m *MockIPAllocator) GetAvailableIPv6(arg0 string) (string, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetAvailableIPv6", arg0)
+	ret0, _ := ret[0].(string)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetAvailableIPv6 indicates an expected call of GetAvailableIPv6.
+func (mr *MockIPAllocatorMockRecorder) GetAvailableIPv6(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetAvailableIPv6", reflect.TypeOf((*MockIPAllocator)(nil).GetAvailableIPv6), arg0)
+}
+
 // Release mocks base method.
 func (m *MockIPAllocator) Release(arg0 string) error {
 	m.ctrl.T.Helper()
@@ -133,12 +148,13 @@ func (mr *MockIPAllocatorMockRecorder) Release(arg0 interface{}) *gomock.Call {
 }
 
 // ReleaseByID mocks base method.
-func (m *MockIPAllocator) ReleaseByID(arg0 string) (string, error) {
+func (m *MockIPAllocator) ReleaseByID(arg0 string) (string, string, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ReleaseByID", arg0)
 	ret0, _ := ret[0].(string)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
+	ret1, _ := ret[1].(string)
+	ret2, _ := ret[2].(error)
+	return ret0, ret1, ret2
 }
 
 // ReleaseByID indicates an expected call of ReleaseByID.
@@ -157,6 +173,18 @@ func (m *MockIPAllocator) SetLastKnownIP(arg0 net.IP) {
 func (mr *MockIPAllocatorMockRecorder) SetLastKnownIP(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetLastKnownIP", reflect.TypeOf((*MockIPAllocator)(nil).SetLastKnownIP), arg0)
+}
+
+// SetLastKnownIPv6 mocks base method.
+func (m *MockIPAllocator) SetLastKnownIPv6(arg0 net.IP) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "SetLastKnownIPv6", arg0)
+}
+
+// SetLastKnownIPv6 indicates an expected call of SetLastKnownIPv6.
+func (mr *MockIPAllocatorMockRecorder) SetLastKnownIPv6(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetLastKnownIPv6", reflect.TypeOf((*MockIPAllocator)(nil).SetLastKnownIPv6), arg0)
 }
 
 // Update mocks base method.
