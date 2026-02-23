@@ -24,12 +24,20 @@ import (
 
 const defaultMTU = 1500
 
+// IPAMConfig extends the standard IPAM configuration with ECS-specific fields
+type IPAMConfig struct {
+	Type                        string `json:"type"`
+	ConnectedSubnetMaskSizeIPv4 int    `json:"connectedSubnetMaskSizeIPv4,omitempty"`
+	ConnectedSubnetMaskSizeIPv6 int    `json:"connectedSubnetMaskSizeIPv6,omitempty"`
+}
+
 // NetConf defines the parameters required to configure a bridge and to
 // attach the same to the contaner's namespace
 type NetConf struct {
 	types.NetConf
-	BridgeName string `json:"bridge"`
-	MTU        int    `json:"mtu"`
+	BridgeName string      `json:"bridge"`
+	MTU        int         `json:"mtu"`
+	IPAM       *IPAMConfig `json:"ipam,omitempty"`
 }
 
 // NewConf creates a new NetConf object by parsing the arguments supplied
