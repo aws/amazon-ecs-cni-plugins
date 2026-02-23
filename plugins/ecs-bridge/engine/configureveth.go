@@ -15,12 +15,12 @@ package engine
 
 import (
 	"net"
+	"os"
 
 	"github.com/aws/amazon-ecs-cni-plugins/pkg/cniipamwrapper"
 	"github.com/aws/amazon-ecs-cni-plugins/pkg/cniipwrapper"
 	"github.com/aws/amazon-ecs-cni-plugins/pkg/netlinkwrapper"
 	"github.com/containernetworking/cni/pkg/ns"
-	"github.com/containernetworking/cni/pkg/types"
 	"github.com/containernetworking/cni/pkg/types/current"
 	"github.com/pkg/errors"
 	"github.com/vishvananda/netlink"
@@ -54,32 +54,42 @@ func newConfigureVethContext(interfaceName string,
 // run defines the closure to execute within the container's namespace to
 // configure the veth interface
 func (configContext *configureVethContext) run(hostNS ns.NetNS) error {
-	// Add gateway routes for each IP configuration BEFORE ConfigureIface
-	// For IPv4: /32 route for ARP query request from host
-	// For IPv6: /128 route for neighbor discovery
-	// These routes have an explicit gateway set to the gateway IP itself,
-	// which ConfigureIface will use when adding the route.
+	// Get the link first so we can add on-link routes before ConfigureIface
+	link, err := configContext.netLink.LinkByName(configContext.interfaceName)
+	if err != nil {
+		return errors.Wrapf(err,
+			"bridge configure veth: unable to get link for interface: %s",
+			configContext.interfaceName)
+	}
+
+	// Add on-link routes to the gateway BEFORE ConfigureIface
+	// This makes the gateway directly reachable for containers with /32 or /128 addresses
 	for _, ipConfig := range configContext.result.IPs {
 		var maskBits int
 		if ipConfig.Address.IP.To4() != nil {
-			maskBits = 32 // IPv4: /32 for gateway route
+			maskBits = 32
 		} else {
-			maskBits = 128 // IPv6: /128 for gateway route
+			maskBits = 128
 		}
 
-		route := &types.Route{
-			Dst: net.IPNet{
+		gatewayRoute := &netlink.Route{
+			LinkIndex: link.Attrs().Index,
+			Dst: &net.IPNet{
 				IP:   ipConfig.Gateway,
 				Mask: net.CIDRMask(maskBits, maskBits),
 			},
-			// Set explicit gateway so ConfigureIface uses it
-			GW: ipConfig.Gateway,
+			Scope: netlink.SCOPE_LINK,
 		}
-		configContext.result.Routes = append(configContext.result.Routes, route)
+
+		err = configContext.netLink.RouteAdd(gatewayRoute)
+		if err != nil && !os.IsExist(err) {
+			return errors.Wrapf(err,
+				"bridge configure veth: unable to add gateway route: %v", gatewayRoute)
+		}
 	}
 
 	// Configure routes in the container (handles both IPv4 and IPv6)
-	err := configContext.ipam.ConfigureIface(
+	err = configContext.ipam.ConfigureIface(
 		configContext.interfaceName, configContext.result)
 	if err != nil {
 		return errors.Wrapf(err,
@@ -113,13 +123,7 @@ func (configContext *configureVethContext) run(hostNS ns.NetNS) error {
 		}
 	}
 
-	link, err := configContext.netLink.LinkByName(configContext.interfaceName)
-	if err != nil {
-		return errors.Wrapf(err,
-			"bridge configure veth: unable to get link for interface: %s",
-			configContext.interfaceName)
-	}
-
+	// link was already retrieved at the beginning of run()
 	// Delete default routes for ALL address families (both IPv4 and IPv6)
 	routes, err := configContext.netLink.RouteList(link, netlink.FAMILY_ALL)
 	if err != nil {
@@ -128,15 +132,49 @@ func (configContext *configureVethContext) run(hostNS ns.NetNS) error {
 			configContext.interfaceName)
 	}
 
-	// Delete all default routes within the container (routes without a gateway)
-	// Routes with a gateway (including our gateway routes) will be preserved
+	// Delete only default routes (0.0.0.0/0 or ::/0) within the container
+	// Preserve routes with gateways and connected subnet routes
 	for _, route := range routes {
-		if route.Gw == nil {
+		// Skip routes with a gateway
+		if route.Gw != nil {
+			continue
+		}
+		
+		// Check if this is a default route
+		isDefaultRoute := route.Dst == nil || 
+			route.Dst.String() == "0.0.0.0/0" || 
+			route.Dst.String() == "::/0"
+		
+		if isDefaultRoute {
 			err = configContext.netLink.RouteDel(&route)
 			if err != nil {
 				return errors.Wrapf(err,
 					"bridge configure veth: unable to delete route: %v", route)
 			}
+		}
+	}
+
+	// Explicitly add connected subnet route after cleanup
+	// This route allows the container to reach other IPs in the same bridge subnet
+	for _, ipConfig := range configContext.result.IPs {
+		// Calculate the subnet network address
+		subnetIP := ipConfig.Address.IP.Mask(ipConfig.Address.Mask)
+		
+		// Add the connected subnet route
+		subnetRoute := &netlink.Route{
+			LinkIndex: link.Attrs().Index,
+			Dst: &net.IPNet{
+				IP:   subnetIP,
+				Mask: ipConfig.Address.Mask,
+			},
+			Scope: netlink.SCOPE_LINK,
+		}
+		
+		// Add the route, ignoring if it already exists
+		err = configContext.netLink.RouteAdd(subnetRoute)
+		if err != nil && !os.IsExist(err) {
+			return errors.Wrapf(err,
+				"bridge configure veth: unable to add connected subnet route: %v", subnetRoute)
 		}
 	}
 

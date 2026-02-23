@@ -133,17 +133,19 @@ func add(args *skel.CmdArgs, engine engine.Engine) error {
 		result.IPs[i].Interface = 2
 	}
 
+	// Configure bridge first so gateway IP exists before adding container routes
+	detailLogInfo("Configuring bridge", args, conf, hostVethName)
+	err = engine.ConfigureBridge(result, bridge)
+	if err != nil {
+		return err
+	}
+
 	detailLogInfo("Configuring container's interface", args, conf, hostVethName)
 	err = engine.ConfigureContainerVethInterface(args.Netns, result, args.IfName)
 	if err != nil {
 		return err
 	}
 
-	detailLogInfo("Configuring bridge", args, conf, hostVethName)
-	err = engine.ConfigureBridge(result, bridge)
-	if err != nil {
-		return err
-	}
 	return result.Print()
 }
 

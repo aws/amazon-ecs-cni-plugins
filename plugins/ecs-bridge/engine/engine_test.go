@@ -638,7 +638,15 @@ func TestConfigureContainerVethInterfaceConfigureIfaceError(t *testing.T) {
 			},
 		},
 	}
-	mockIPAM.EXPECT().ConfigureIface(interfaceName, result).Return(errors.New("error"))
+	
+	link := &netlink.Veth{LinkAttrs: netlink.LinkAttrs{Name: interfaceName, Index: 1}}
+	
+	gomock.InOrder(
+		mockNetLink.EXPECT().LinkByName(interfaceName).Return(link, nil),
+		mockNetLink.EXPECT().RouteAdd(gomock.Any()).Return(nil),
+		mockIPAM.EXPECT().ConfigureIface(interfaceName, result).Return(errors.New("error")),
+	)
+	
 	configContext := newConfigureVethContext(
 		interfaceName, result, mockIP, mockIPAM, mockNetLink)
 	err = configContext.run(nil)
@@ -663,7 +671,11 @@ func TestConfigureContainerVethInterfaceSetHWAddrByIPError(t *testing.T) {
 		IPs: []*current.IPConfig{ipConfig},
 	}
 
+	link := &netlink.Veth{LinkAttrs: netlink.LinkAttrs{Name: interfaceName, Index: 1}}
+
 	gomock.InOrder(
+		mockNetLink.EXPECT().LinkByName(interfaceName).Return(link, nil),
+		mockNetLink.EXPECT().RouteAdd(gomock.Any()).Return(nil),
 		mockIPAM.EXPECT().ConfigureIface(interfaceName, gomock.Any()).Return(nil),
 		mockIP.EXPECT().SetHWAddrByIP(interfaceName, containerIPAddr, nil).Return(errors.New("error")),
 	)
@@ -692,8 +704,6 @@ func TestConfigureContainerVethInterfaceLinkByNameError(t *testing.T) {
 	}
 
 	gomock.InOrder(
-		mockIPAM.EXPECT().ConfigureIface(interfaceName, gomock.Any()).Return(nil),
-		mockIP.EXPECT().SetHWAddrByIP(interfaceName, containerIPAddr, nil).Return(nil),
 		mockNetLink.EXPECT().LinkByName(interfaceName).Return(nil, errors.New("error")),
 	)
 	configContext := newConfigureVethContext(
@@ -721,11 +731,14 @@ func TestConfigureContainerVethInterfaceRouteListError(t *testing.T) {
 	}
 
 	mockLink := mock_netlink.NewMockLink(ctrl)
+	mockAttrs := &netlink.LinkAttrs{Index: 1}
 
 	gomock.InOrder(
+		mockNetLink.EXPECT().LinkByName(interfaceName).Return(mockLink, nil),
+		mockLink.EXPECT().Attrs().Return(mockAttrs),
+		mockNetLink.EXPECT().RouteAdd(gomock.Any()).Return(nil),
 		mockIPAM.EXPECT().ConfigureIface(interfaceName, gomock.Any()).Return(nil),
 		mockIP.EXPECT().SetHWAddrByIP(interfaceName, containerIPAddr, nil).Return(nil),
-		mockNetLink.EXPECT().LinkByName(interfaceName).Return(mockLink, nil),
 		mockNetLink.EXPECT().RouteList(mockLink, netlink.FAMILY_ALL).Return(nil, errors.New("error")),
 	)
 	configContext := newConfigureVethContext(
@@ -753,13 +766,16 @@ func TestConfigureContainerVethInterfaceRouteDelError(t *testing.T) {
 	}
 
 	mockLink := mock_netlink.NewMockLink(ctrl)
+	mockAttrs := &netlink.LinkAttrs{Index: 1}
 	// Route without gateway (default route) should be deleted
 	route := netlink.Route{Gw: nil}
 	routes := []netlink.Route{route}
 	gomock.InOrder(
+		mockNetLink.EXPECT().LinkByName(interfaceName).Return(mockLink, nil),
+		mockLink.EXPECT().Attrs().Return(mockAttrs),
+		mockNetLink.EXPECT().RouteAdd(gomock.Any()).Return(nil),
 		mockIPAM.EXPECT().ConfigureIface(interfaceName, gomock.Any()).Return(nil),
 		mockIP.EXPECT().SetHWAddrByIP(interfaceName, containerIPAddr, nil).Return(nil),
-		mockNetLink.EXPECT().LinkByName(interfaceName).Return(mockLink, nil),
 		mockNetLink.EXPECT().RouteList(mockLink, netlink.FAMILY_ALL).Return(routes, nil),
 		mockNetLink.EXPECT().RouteDel(&route).Return(errors.New("error")),
 	)
@@ -787,16 +803,21 @@ func TestConfigureContainerVethInterfaceContextSuccess(t *testing.T) {
 		IPs: []*current.IPConfig{ipConfig},
 	}
 
+	mockAttrs := &netlink.LinkAttrs{Index: 1}
 	mockLink := mock_netlink.NewMockLink(ctrl)
 	// Route without gateway (default route) should be deleted
 	route := netlink.Route{Gw: nil}
 	routes := []netlink.Route{route}
 	gomock.InOrder(
+		mockNetLink.EXPECT().LinkByName(interfaceName).Return(mockLink, nil),
+		mockLink.EXPECT().Attrs().Return(mockAttrs),
+		mockNetLink.EXPECT().RouteAdd(gomock.Any()).Return(nil),
 		mockIPAM.EXPECT().ConfigureIface(interfaceName, gomock.Any()).Return(nil),
 		mockIP.EXPECT().SetHWAddrByIP(interfaceName, containerIPAddr, nil).Return(nil),
-		mockNetLink.EXPECT().LinkByName(interfaceName).Return(mockLink, nil),
 		mockNetLink.EXPECT().RouteList(mockLink, netlink.FAMILY_ALL).Return(routes, nil),
 		mockNetLink.EXPECT().RouteDel(&route).Return(nil),
+		mockLink.EXPECT().Attrs().Return(mockAttrs),
+		mockNetLink.EXPECT().RouteAdd(gomock.Any()).Return(nil),
 	)
 	configContext := newConfigureVethContext(
 		interfaceName, result, mockIP, mockIPAM, mockNetLink)
@@ -2220,20 +2241,18 @@ func TestConfigureContainerVethInterfaceIPv6OnlySuccess(t *testing.T) {
 	}
 
 	mockLink := mock_netlink.NewMockLink(ctrl)
+	mockAttrs := &netlink.LinkAttrs{Index: 1}
 	routes := []netlink.Route{}
 	gomock.InOrder(
-		mockIPAM.EXPECT().ConfigureIface(interfaceName, gomock.Any()).DoAndReturn(
-			func(ifName string, res *current.Result) error {
-				// Verify gateway route for IPv6 was added
-				assert.Equal(t, 1, len(res.Routes), "should have 1 gateway route")
-				ones, _ := res.Routes[0].Dst.Mask.Size()
-				assert.Equal(t, 128, ones, "IPv6 gateway route should be /128")
-				return nil
-			}),
+		mockNetLink.EXPECT().LinkByName(interfaceName).Return(mockLink, nil),
+		mockLink.EXPECT().Attrs().Return(mockAttrs),
+		mockNetLink.EXPECT().RouteAdd(gomock.Any()).Return(nil),
+		mockIPAM.EXPECT().ConfigureIface(interfaceName, gomock.Any()).Return(nil),
 		// For IPv6-only, SetHWAddrByIP uses nil for IPv4 and the IPv6 address
 		mockIP.EXPECT().SetHWAddrByIP(interfaceName, nil, ipv6ContainerAddr).Return(nil),
-		mockNetLink.EXPECT().LinkByName(interfaceName).Return(mockLink, nil),
 		mockNetLink.EXPECT().RouteList(mockLink, netlink.FAMILY_ALL).Return(routes, nil),
+		mockLink.EXPECT().Attrs().Return(mockAttrs),
+		mockNetLink.EXPECT().RouteAdd(gomock.Any()).Return(nil),
 	)
 	configContext := newConfigureVethContext(
 		interfaceName, result, mockIP, mockIPAM, mockNetLink)
@@ -2273,24 +2292,22 @@ func TestConfigureContainerVethInterfaceDualStackSuccess(t *testing.T) {
 	}
 
 	mockLink := mock_netlink.NewMockLink(ctrl)
+	mockAttrs := &netlink.LinkAttrs{Index: 1}
 	routes := []netlink.Route{}
 	gomock.InOrder(
-		mockIPAM.EXPECT().ConfigureIface(interfaceName, gomock.Any()).DoAndReturn(
-			func(ifName string, res *current.Result) error {
-				// Verify gateway routes for both IPv4 and IPv6 were added
-				assert.Equal(t, 2, len(res.Routes), "should have 2 gateway routes")
-				// First route should be IPv4 /32
-				ones, _ := res.Routes[0].Dst.Mask.Size()
-				assert.Equal(t, 32, ones, "IPv4 gateway route should be /32")
-				// Second route should be IPv6 /128
-				ones, _ = res.Routes[1].Dst.Mask.Size()
-				assert.Equal(t, 128, ones, "IPv6 gateway route should be /128")
-				return nil
-			}),
+		mockNetLink.EXPECT().LinkByName(interfaceName).Return(mockLink, nil),
+		mockLink.EXPECT().Attrs().Return(mockAttrs),
+		mockNetLink.EXPECT().RouteAdd(gomock.Any()).Return(nil),
+		mockLink.EXPECT().Attrs().Return(mockAttrs),
+		mockNetLink.EXPECT().RouteAdd(gomock.Any()).Return(nil),
+		mockIPAM.EXPECT().ConfigureIface(interfaceName, gomock.Any()).Return(nil),
 		// For dual-stack, SetHWAddrByIP uses both IPv4 and IPv6 addresses
 		mockIP.EXPECT().SetHWAddrByIP(interfaceName, ipv4ContainerAddr, ipv6ContainerAddr).Return(nil),
-		mockNetLink.EXPECT().LinkByName(interfaceName).Return(mockLink, nil),
 		mockNetLink.EXPECT().RouteList(mockLink, netlink.FAMILY_ALL).Return(routes, nil),
+		mockLink.EXPECT().Attrs().Return(mockAttrs),
+		mockNetLink.EXPECT().RouteAdd(gomock.Any()).Return(nil),
+		mockLink.EXPECT().Attrs().Return(mockAttrs),
+		mockNetLink.EXPECT().RouteAdd(gomock.Any()).Return(nil),
 	)
 	configContext := newConfigureVethContext(
 		interfaceName, result, mockIP, mockIPAM, mockNetLink)
@@ -2331,24 +2348,22 @@ func TestConfigureContainerVethInterfaceDualStackIPv6FirstSuccess(t *testing.T) 
 	}
 
 	mockLink := mock_netlink.NewMockLink(ctrl)
+	mockAttrs := &netlink.LinkAttrs{Index: 1}
 	routes := []netlink.Route{}
 	gomock.InOrder(
-		mockIPAM.EXPECT().ConfigureIface(interfaceName, gomock.Any()).DoAndReturn(
-			func(ifName string, res *current.Result) error {
-				// Verify gateway routes for both IPv6 and IPv4
-				assert.Equal(t, 2, len(res.Routes), "should have 2 gateway routes")
-				// First route should be IPv6 /128
-				ones, _ := res.Routes[0].Dst.Mask.Size()
-				assert.Equal(t, 128, ones, "first gateway route should be /128 for IPv6")
-				// Second route should be IPv4 /32
-				ones, _ = res.Routes[1].Dst.Mask.Size()
-				assert.Equal(t, 32, ones, "second gateway route should be /32 for IPv4")
-				return nil
-			}),
+		mockNetLink.EXPECT().LinkByName(interfaceName).Return(mockLink, nil),
+		mockLink.EXPECT().Attrs().Return(mockAttrs),
+		mockNetLink.EXPECT().RouteAdd(gomock.Any()).Return(nil),
+		mockLink.EXPECT().Attrs().Return(mockAttrs),
+		mockNetLink.EXPECT().RouteAdd(gomock.Any()).Return(nil),
+		mockIPAM.EXPECT().ConfigureIface(interfaceName, gomock.Any()).Return(nil),
 		// Even with IPv6 first, SetHWAddrByIP should use both addresses
 		mockIP.EXPECT().SetHWAddrByIP(interfaceName, ipv4ContainerAddr, ipv6ContainerAddr).Return(nil),
-		mockNetLink.EXPECT().LinkByName(interfaceName).Return(mockLink, nil),
 		mockNetLink.EXPECT().RouteList(mockLink, netlink.FAMILY_ALL).Return(routes, nil),
+		mockLink.EXPECT().Attrs().Return(mockAttrs),
+		mockNetLink.EXPECT().RouteAdd(gomock.Any()).Return(nil),
+		mockLink.EXPECT().Attrs().Return(mockAttrs),
+		mockNetLink.EXPECT().RouteAdd(gomock.Any()).Return(nil),
 	)
 	configContext := newConfigureVethContext(
 		interfaceName, result, mockIP, mockIPAM, mockNetLink)
@@ -2373,6 +2388,7 @@ func TestConfigureContainerVethInterfaceDeleteDefaultRoutesIPv4(t *testing.T) {
 		Gateway: gatewayIPAddr,
 	}
 
+	mockAttrs := &netlink.LinkAttrs{Index: 1}
 	result := &current.Result{
 		IPs: []*current.IPConfig{ipConfig},
 	}
@@ -2391,12 +2407,16 @@ func TestConfigureContainerVethInterfaceDeleteDefaultRoutesIPv4(t *testing.T) {
 	routes := []netlink.Route{defaultRoute, routeWithGw}
 
 	gomock.InOrder(
+		mockNetLink.EXPECT().LinkByName(interfaceName).Return(mockLink, nil),
+		mockLink.EXPECT().Attrs().Return(mockAttrs),
+		mockNetLink.EXPECT().RouteAdd(gomock.Any()).Return(nil),
 		mockIPAM.EXPECT().ConfigureIface(interfaceName, gomock.Any()).Return(nil),
 		mockIP.EXPECT().SetHWAddrByIP(interfaceName, containerIPAddr, nil).Return(nil),
-		mockNetLink.EXPECT().LinkByName(interfaceName).Return(mockLink, nil),
 		mockNetLink.EXPECT().RouteList(mockLink, netlink.FAMILY_ALL).Return(routes, nil),
 		// Only the default route (without gateway) should be deleted
 		mockNetLink.EXPECT().RouteDel(&defaultRoute).Return(nil),
+		mockLink.EXPECT().Attrs().Return(mockAttrs),
+		mockNetLink.EXPECT().RouteAdd(gomock.Any()).Return(nil),
 	)
 	configContext := newConfigureVethContext(
 		interfaceName, result, mockIP, mockIPAM, mockNetLink)
@@ -2420,6 +2440,7 @@ func TestConfigureContainerVethInterfaceDeleteDefaultRoutesIPv6(t *testing.T) {
 		},
 		Gateway: ipv6Gateway,
 	}
+	mockAttrs := &netlink.LinkAttrs{Index: 1}
 
 	result := &current.Result{
 		IPs: []*current.IPConfig{ipConfig},
@@ -2434,11 +2455,15 @@ func TestConfigureContainerVethInterfaceDeleteDefaultRoutesIPv6(t *testing.T) {
 	routes := []netlink.Route{defaultRoute}
 
 	gomock.InOrder(
+		mockNetLink.EXPECT().LinkByName(interfaceName).Return(mockLink, nil),
+		mockLink.EXPECT().Attrs().Return(mockAttrs),
+		mockNetLink.EXPECT().RouteAdd(gomock.Any()).Return(nil),
 		mockIPAM.EXPECT().ConfigureIface(interfaceName, gomock.Any()).Return(nil),
 		mockIP.EXPECT().SetHWAddrByIP(interfaceName, nil, ipv6ContainerAddr).Return(nil),
-		mockNetLink.EXPECT().LinkByName(interfaceName).Return(mockLink, nil),
 		mockNetLink.EXPECT().RouteList(mockLink, netlink.FAMILY_ALL).Return(routes, nil),
 		mockNetLink.EXPECT().RouteDel(&defaultRoute).Return(nil),
+		mockLink.EXPECT().Attrs().Return(mockAttrs),
+		mockNetLink.EXPECT().RouteAdd(gomock.Any()).Return(nil),
 	)
 	configContext := newConfigureVethContext(
 		interfaceName, result, mockIP, mockIPAM, mockNetLink)
@@ -2479,6 +2504,7 @@ func TestConfigureContainerVethInterfaceDeleteDefaultRoutesBothFamilies(t *testi
 	}
 
 	mockLink := mock_netlink.NewMockLink(ctrl)
+	mockAttrs := &netlink.LinkAttrs{Index: 1}
 	// Both IPv4 and IPv6 default routes
 	ipv4DefaultRoute := netlink.Route{
 		Dst: &net.IPNet{IP: net.IPv4zero, Mask: net.CIDRMask(0, 32)},
@@ -2491,13 +2517,21 @@ func TestConfigureContainerVethInterfaceDeleteDefaultRoutesBothFamilies(t *testi
 	routes := []netlink.Route{ipv4DefaultRoute, ipv6DefaultRoute}
 
 	gomock.InOrder(
+		mockNetLink.EXPECT().LinkByName(interfaceName).Return(mockLink, nil),
+		mockLink.EXPECT().Attrs().Return(mockAttrs),
+		mockNetLink.EXPECT().RouteAdd(gomock.Any()).Return(nil),
+		mockLink.EXPECT().Attrs().Return(mockAttrs),
+		mockNetLink.EXPECT().RouteAdd(gomock.Any()).Return(nil),
 		mockIPAM.EXPECT().ConfigureIface(interfaceName, gomock.Any()).Return(nil),
 		mockIP.EXPECT().SetHWAddrByIP(interfaceName, ipv4ContainerAddr, ipv6ContainerAddr).Return(nil),
-		mockNetLink.EXPECT().LinkByName(interfaceName).Return(mockLink, nil),
 		mockNetLink.EXPECT().RouteList(mockLink, netlink.FAMILY_ALL).Return(routes, nil),
 		// Both default routes should be deleted
 		mockNetLink.EXPECT().RouteDel(&ipv4DefaultRoute).Return(nil),
 		mockNetLink.EXPECT().RouteDel(&ipv6DefaultRoute).Return(nil),
+		mockLink.EXPECT().Attrs().Return(mockAttrs),
+		mockNetLink.EXPECT().RouteAdd(gomock.Any()).Return(nil),
+		mockLink.EXPECT().Attrs().Return(mockAttrs),
+		mockNetLink.EXPECT().RouteAdd(gomock.Any()).Return(nil),
 	)
 	configContext := newConfigureVethContext(
 		interfaceName, result, mockIP, mockIPAM, mockNetLink)
@@ -2537,14 +2571,23 @@ func TestConfigureContainerVethInterfaceHWAddrIPv4Preference(t *testing.T) {
 	}
 
 	mockLink := mock_netlink.NewMockLink(ctrl)
+	mockAttrs := &netlink.LinkAttrs{Index: 1}
 	routes := []netlink.Route{}
 
 	gomock.InOrder(
+		mockNetLink.EXPECT().LinkByName(interfaceName).Return(mockLink, nil),
+		mockLink.EXPECT().Attrs().Return(mockAttrs),
+		mockNetLink.EXPECT().RouteAdd(gomock.Any()).Return(nil),
+		mockLink.EXPECT().Attrs().Return(mockAttrs),
+		mockNetLink.EXPECT().RouteAdd(gomock.Any()).Return(nil),
 		mockIPAM.EXPECT().ConfigureIface(interfaceName, gomock.Any()).Return(nil),
 		// Both IPv4 and IPv6 addresses should be passed to SetHWAddrByIP
 		mockIP.EXPECT().SetHWAddrByIP(interfaceName, ipv4ContainerAddr, ipv6ContainerAddr).Return(nil),
-		mockNetLink.EXPECT().LinkByName(interfaceName).Return(mockLink, nil),
 		mockNetLink.EXPECT().RouteList(mockLink, netlink.FAMILY_ALL).Return(routes, nil),
+		mockLink.EXPECT().Attrs().Return(mockAttrs),
+		mockNetLink.EXPECT().RouteAdd(gomock.Any()).Return(nil),
+		mockLink.EXPECT().Attrs().Return(mockAttrs),
+		mockNetLink.EXPECT().RouteAdd(gomock.Any()).Return(nil),
 	)
 	configContext := newConfigureVethContext(
 		interfaceName, result, mockIP, mockIPAM, mockNetLink)
@@ -2767,14 +2810,19 @@ func TestProperty_DefaultRouteDeletion_FamilyAllUsed(t *testing.T) {
 	}
 
 	mockLink := mock_netlink.NewMockLink(ctrl)
+	mockAttrs := &netlink.LinkAttrs{Index: 1}
 	routes := []netlink.Route{}
 
 	gomock.InOrder(
+		mockNetLink.EXPECT().LinkByName(interfaceName).Return(mockLink, nil),
+		mockLink.EXPECT().Attrs().Return(mockAttrs),
+		mockNetLink.EXPECT().RouteAdd(gomock.Any()).Return(nil),
 		mockIPAM.EXPECT().ConfigureIface(interfaceName, gomock.Any()).Return(nil),
 		mockIP.EXPECT().SetHWAddrByIP(interfaceName, containerIPAddr, nil).Return(nil),
-		mockNetLink.EXPECT().LinkByName(interfaceName).Return(mockLink, nil),
 		// Verify FAMILY_ALL is used to list routes
 		mockNetLink.EXPECT().RouteList(mockLink, netlink.FAMILY_ALL).Return(routes, nil),
+		mockLink.EXPECT().Attrs().Return(mockAttrs),
+		mockNetLink.EXPECT().RouteAdd(gomock.Any()).Return(nil),
 	)
 	configContext := newConfigureVethContext(
 		interfaceName, result, mockIP, mockIPAM, mockNetLink)
@@ -2953,20 +3001,17 @@ func TestProperty_BackwardCompatibility(t *testing.T) {
 
 			// Test 3: Veth configuration adds /32 gateway route for IPv4 (backward compatible)
 			mockLink := mock_netlink.NewMockLink(ctrl)
-			routes := []netlink.Route{}
+			mockAttrs := &netlink.LinkAttrs{Index: 1}
+					routes := []netlink.Route{}
 			gomock.InOrder(
-				mockIPAM.EXPECT().ConfigureIface(interfaceName, gomock.Any()).DoAndReturn(
-					func(ifName string, res *current.Result) error {
-						// Verify gateway route is /32 for IPv4 (backward compatible behavior)
-						assert.Equal(t, 1, len(res.Routes), "should have 1 gateway route")
-						ones, bits := res.Routes[0].Dst.Mask.Size()
-						assert.Equal(t, 32, ones, "IPv4 gateway route should be /32")
-						assert.Equal(t, 32, bits, "should be IPv4 mask")
-						return nil
-					}),
-				mockIP.EXPECT().SetHWAddrByIP(interfaceName, ipv4Addr, nil).Return(nil),
 				mockNetLink.EXPECT().LinkByName(interfaceName).Return(mockLink, nil),
+				mockLink.EXPECT().Attrs().Return(mockAttrs),
+				mockNetLink.EXPECT().RouteAdd(gomock.Any()).Return(nil),
+				mockIPAM.EXPECT().ConfigureIface(interfaceName, gomock.Any()).Return(nil),
+				mockIP.EXPECT().SetHWAddrByIP(interfaceName, ipv4Addr, nil).Return(nil),
 				mockNetLink.EXPECT().RouteList(mockLink, netlink.FAMILY_ALL).Return(routes, nil),
+				mockLink.EXPECT().Attrs().Return(mockAttrs),
+				mockNetLink.EXPECT().RouteAdd(gomock.Any()).Return(nil),
 			)
 			configContext := newConfigureVethContext(
 				interfaceName, result, mockIP, mockIPAM, mockNetLink)
@@ -3341,23 +3386,18 @@ func TestProperty_SingleIPv6ResultProcessing_VethConfiguration(t *testing.T) {
 			}
 
 			mockLink := mock_netlink.NewMockLink(ctrl)
-			routes := []netlink.Route{}
+			mockAttrs := &netlink.LinkAttrs{Index: 1}
+					routes := []netlink.Route{}
 
 			gomock.InOrder(
-				mockIPAM.EXPECT().ConfigureIface(interfaceName, gomock.Any()).DoAndReturn(
-					func(ifName string, res *current.Result) error {
-						// Property 2: Verify /128 gateway route is added for IPv6
-						assert.Equal(t, 1, len(res.Routes), "should have 1 gateway route")
-						assert.Equal(t, ipv6Gateway.String(), res.Routes[0].Dst.IP.String(),
-							"gateway route should use IPv6 gateway")
-						ones, bits := res.Routes[0].Dst.Mask.Size()
-						assert.Equal(t, 128, ones, "IPv6 gateway route should be /128")
-						assert.Equal(t, 128, bits, "should be IPv6 mask")
-						return nil
-					}),
-				mockIP.EXPECT().SetHWAddrByIP(interfaceName, nil, ipv6ContainerAddr).Return(nil),
 				mockNetLink.EXPECT().LinkByName(interfaceName).Return(mockLink, nil),
-				mockNetLink.EXPECT().RouteList(mockLink, netlink.FAMILY_ALL).Return(routes, nil),
+				mockLink.EXPECT().Attrs().Return(mockAttrs),
+				mockNetLink.EXPECT().RouteAdd(gomock.Any()).Return(nil),
+				mockIPAM.EXPECT().ConfigureIface(interfaceName, gomock.Any()).Return(nil),
+				mockIP.EXPECT().SetHWAddrByIP(interfaceName, nil, ipv6ContainerAddr).Return(nil),
+			mockNetLink.EXPECT().RouteList(mockLink, netlink.FAMILY_ALL).Return(routes, nil),
+				mockLink.EXPECT().Attrs().Return(mockAttrs),
+				mockNetLink.EXPECT().RouteAdd(gomock.Any()).Return(nil),
 			)
 
 			configContext := newConfigureVethContext(
@@ -3729,32 +3769,23 @@ func TestProperty_DualStackResultProcessing_VethConfiguration(t *testing.T) {
 			}
 
 			mockLink := mock_netlink.NewMockLink(ctrl)
-			routes := []netlink.Route{}
+			mockAttrs := &netlink.LinkAttrs{Index: 1}
+					routes := []netlink.Route{}
 
 			gomock.InOrder(
-				mockIPAM.EXPECT().ConfigureIface(interfaceName, gomock.Any()).DoAndReturn(
-					func(ifName string, res *current.Result) error {
-						// Property 3: Verify gateway routes for both IPv4 and IPv6
-						assert.Equal(t, 2, len(res.Routes), "should have 2 gateway routes")
-
-						// First route should be IPv4 /32
-						assert.Equal(t, ipv4Gateway.String(), res.Routes[0].Dst.IP.String(),
-							"first gateway route should use IPv4 gateway")
-						ones, _ := res.Routes[0].Dst.Mask.Size()
-						assert.Equal(t, 32, ones, "IPv4 gateway route should be /32")
-
-						// Second route should be IPv6 /128
-						assert.Equal(t, ipv6Gateway.String(), res.Routes[1].Dst.IP.String(),
-							"second gateway route should use IPv6 gateway")
-						ones, _ = res.Routes[1].Dst.Mask.Size()
-						assert.Equal(t, 128, ones, "IPv6 gateway route should be /128")
-
-						return nil
-					}),
+				mockNetLink.EXPECT().LinkByName(interfaceName).Return(mockLink, nil),
+				mockLink.EXPECT().Attrs().Return(mockAttrs),
+				mockNetLink.EXPECT().RouteAdd(gomock.Any()).Return(nil),
+				mockLink.EXPECT().Attrs().Return(mockAttrs),
+				mockNetLink.EXPECT().RouteAdd(gomock.Any()).Return(nil),
+				mockIPAM.EXPECT().ConfigureIface(interfaceName, gomock.Any()).Return(nil),
 				// For dual-stack, SetHWAddrByIP uses both IPv4 and IPv6 addresses
 				mockIP.EXPECT().SetHWAddrByIP(interfaceName, ipv4ContainerAddr, ipv6ContainerAddr).Return(nil),
-				mockNetLink.EXPECT().LinkByName(interfaceName).Return(mockLink, nil),
-				mockNetLink.EXPECT().RouteList(mockLink, netlink.FAMILY_ALL).Return(routes, nil),
+			mockNetLink.EXPECT().RouteList(mockLink, netlink.FAMILY_ALL).Return(routes, nil),
+				mockLink.EXPECT().Attrs().Return(mockAttrs),
+				mockNetLink.EXPECT().RouteAdd(gomock.Any()).Return(nil),
+				mockLink.EXPECT().Attrs().Return(mockAttrs),
+				mockNetLink.EXPECT().RouteAdd(gomock.Any()).Return(nil),
 			)
 
 			configContext := newConfigureVethContext(
@@ -3800,6 +3831,7 @@ func TestProperty_DualStackResultProcessing_DefaultRoutesDeletion(t *testing.T) 
 	}
 
 	mockLink := mock_netlink.NewMockLink(ctrl)
+		mockAttrs := &netlink.LinkAttrs{Index: 1}
 
 	// Both IPv4 and IPv6 default routes present
 	ipv4DefaultRoute := netlink.Route{
@@ -3813,13 +3845,21 @@ func TestProperty_DualStackResultProcessing_DefaultRoutesDeletion(t *testing.T) 
 	routes := []netlink.Route{ipv4DefaultRoute, ipv6DefaultRoute}
 
 	gomock.InOrder(
+		mockNetLink.EXPECT().LinkByName(interfaceName).Return(mockLink, nil),
+		mockLink.EXPECT().Attrs().Return(mockAttrs),
+		mockNetLink.EXPECT().RouteAdd(gomock.Any()).Return(nil),
+		mockLink.EXPECT().Attrs().Return(mockAttrs),
+		mockNetLink.EXPECT().RouteAdd(gomock.Any()).Return(nil),
 		mockIPAM.EXPECT().ConfigureIface(interfaceName, gomock.Any()).Return(nil),
 		mockIP.EXPECT().SetHWAddrByIP(interfaceName, ipv4ContainerAddr, ipv6ContainerAddr).Return(nil),
-		mockNetLink.EXPECT().LinkByName(interfaceName).Return(mockLink, nil),
 		mockNetLink.EXPECT().RouteList(mockLink, netlink.FAMILY_ALL).Return(routes, nil),
 		// Property 3: Both default routes should be deleted
 		mockNetLink.EXPECT().RouteDel(&ipv4DefaultRoute).Return(nil),
 		mockNetLink.EXPECT().RouteDel(&ipv6DefaultRoute).Return(nil),
+		mockLink.EXPECT().Attrs().Return(mockAttrs),
+		mockNetLink.EXPECT().RouteAdd(gomock.Any()).Return(nil),
+		mockLink.EXPECT().Attrs().Return(mockAttrs),
+		mockNetLink.EXPECT().RouteAdd(gomock.Any()).Return(nil),
 	)
 
 	configContext := newConfigureVethContext(

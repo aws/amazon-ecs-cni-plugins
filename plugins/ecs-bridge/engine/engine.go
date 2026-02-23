@@ -267,7 +267,9 @@ func (engine *engine) ConfigureContainerVethInterface(netnsName string, result *
 
 // ConfigureBridge configures the IP addresses of the bridge for all address families
 func (engine *engine) ConfigureBridge(result *current.Result, bridge *netlink.Bridge) error {
+	log.Infof("ConfigureBridge called with %d IP configs", len(result.IPs))
 	for _, ipConfig := range result.IPs {
+		log.Infof("Processing IP config - Address=%s, Gateway=%s", ipConfig.Address.String(), ipConfig.Gateway)
 		// Determine address family based on IP version
 		family := syscall.AF_INET
 		if ipConfig.Address.IP.To4() == nil {
@@ -280,11 +282,28 @@ func (engine *engine) ConfigureBridge(result *current.Result, bridge *netlink.Br
 				"bridge configure: unable to list addresses for bridge %s",
 				bridge.Attrs().Name)
 		}
+		log.Infof("Bridge has %d existing addresses for family %d", len(addrs), family)
+
+		// For daemon bridge (169.254.172.x), use /22 subnet mask for gateway
+		// Container gets /32, but bridge needs /22 to route the entire subnet
+		bridgeMask := ipConfig.Address.Mask
+		log.Infof("Gateway IP=%s, IsLinkLocal=%v, To4=%v, ContainerMask=%s",
+			ipConfig.Gateway, ipConfig.Gateway.IsLinkLocalUnicast(), ipConfig.Gateway.To4(), ipConfig.Address.Mask)
+		if ipConfig.Gateway.IsLinkLocalUnicast() && ipConfig.Gateway.To4() != nil {
+			// IPv4 link-local (169.254.x.x) - use /22
+			bridgeMask = net.CIDRMask(22, 32)
+			log.Infof("Applying /22 mask to link-local gateway")
+		} else if ipConfig.Gateway.IsLinkLocalUnicast() && ipConfig.Gateway.To4() == nil {
+			// IPv6 link-local - use /64
+			bridgeMask = net.CIDRMask(64, 128)
+			log.Infof("Applying /64 mask to IPv6 link-local gateway")
+		}
 
 		resultBridgeNetwork := &net.IPNet{
 			IP:   ipConfig.Gateway,
-			Mask: ipConfig.Address.Mask,
+			Mask: bridgeMask,
 		}
+		log.Infof("Bridge will get IP=%s", resultBridgeNetwork.String())
 		resultBridgeCIDR := resultBridgeNetwork.String()
 
 		addressExists := false
@@ -303,6 +322,7 @@ func (engine *engine) ConfigureBridge(result *current.Result, bridge *netlink.Br
 		}
 
 		if addressExists {
+			log.Infof("Address %s already exists on bridge, skipping", resultBridgeCIDR)
 			continue
 		}
 
