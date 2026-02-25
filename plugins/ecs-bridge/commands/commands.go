@@ -141,11 +141,18 @@ func add(args *skel.CmdArgs, engine engine.Engine) error {
 	}
 
 	detailLogInfo("Configuring container's interface", args, conf, hostVethName)
-	log.Infof("Calling ConfigureContainerVethInterface with mask sizes - IPv4: %d, IPv6: %d", 
-		conf.IPAM.ConnectedSubnetMaskSizeIPv4, conf.IPAM.ConnectedSubnetMaskSizeIPv6)
 	err = engine.ConfigureContainerVethInterface(args.Netns, result, args.IfName, conf.IPAM.ConnectedSubnetMaskSizeIPv4, conf.IPAM.ConnectedSubnetMaskSizeIPv6)
 	if err != nil {
 		return err
+	}
+
+	// Block IMDS if configured
+	if conf != nil && conf.BlockIMDS {
+		detailLogInfo("Blocking IMDS access", args, conf, hostVethName)
+		err = engine.BlockInstanceMetadata(args.Netns)
+		if err != nil {
+			return err
+		}
 	}
 
 	return result.Print()

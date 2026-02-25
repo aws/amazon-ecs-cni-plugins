@@ -3957,3 +3957,37 @@ func TestConnectedSubnetRoute_PreserveHostRoutes(t *testing.T) {
 		})
 	}
 }
+
+// TestBlockInstanceMetadata tests the BlockInstanceMetadata method
+func TestBlockInstanceMetadata(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockNetLink := mock_netlinkwrapper.NewMockNetLink(ctrl)
+	mockNS := mock_cninswrapper.NewMockNS(ctrl)
+
+	engine := &engine{
+		netLink: mockNetLink,
+		ns:      mockNS,
+	}
+
+	testNetNS := "test-netns"
+
+	t.Run("successfully blocks IMDS endpoints", func(t *testing.T) {
+		// Expect WithNetNSPath to be called
+		mockNS.EXPECT().WithNetNSPath(testNetNS, gomock.Any()).Return(nil)
+
+		err := engine.BlockInstanceMetadata(testNetNS)
+		assert.NoError(t, err)
+	})
+
+	t.Run("returns error when WithNetNSPath fails", func(t *testing.T) {
+		expectedErr := errors.New("netns not found")
+
+		mockNS.EXPECT().WithNetNSPath(testNetNS, gomock.Any()).Return(expectedErr)
+
+		err := engine.BlockInstanceMetadata(testNetNS)
+		assert.Error(t, err)
+		assert.Equal(t, expectedErr, err)
+	})
+}

@@ -1,4 +1,4 @@
-// Copyright 2024 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+// Copyright 2026 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License"). You may
 // not use this file except in compliance with the License. A copy of the
@@ -63,6 +63,20 @@ func (mr *MockEngineMockRecorder) AttachHostVethInterfaceToBridge(arg0, arg1 int
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AttachHostVethInterfaceToBridge", reflect.TypeOf((*MockEngine)(nil).AttachHostVethInterfaceToBridge), arg0, arg1)
 }
 
+// BlockInstanceMetadata mocks base method.
+func (m *MockEngine) BlockInstanceMetadata(arg0 string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "BlockInstanceMetadata", arg0)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// BlockInstanceMetadata indicates an expected call of BlockInstanceMetadata.
+func (mr *MockEngineMockRecorder) BlockInstanceMetadata(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "BlockInstanceMetadata", reflect.TypeOf((*MockEngine)(nil).BlockInstanceMetadata), arg0)
+}
+
 // ConfigureBridge mocks base method.
 func (m *MockEngine) ConfigureBridge(arg0 *current.Result, arg1 *netlink.Bridge) error {
 	m.ctrl.T.Helper()
@@ -78,17 +92,17 @@ func (mr *MockEngineMockRecorder) ConfigureBridge(arg0, arg1 interface{}) *gomoc
 }
 
 // ConfigureContainerVethInterface mocks base method.
-func (m *MockEngine) ConfigureContainerVethInterface(arg0 string, arg1 *current.Result, arg2 string) error {
+func (m *MockEngine) ConfigureContainerVethInterface(arg0 string, arg1 *current.Result, arg2 string, arg3, arg4 int) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ConfigureContainerVethInterface", arg0, arg1, arg2)
+	ret := m.ctrl.Call(m, "ConfigureContainerVethInterface", arg0, arg1, arg2, arg3, arg4)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // ConfigureContainerVethInterface indicates an expected call of ConfigureContainerVethInterface.
-func (mr *MockEngineMockRecorder) ConfigureContainerVethInterface(arg0, arg1, arg2 interface{}) *gomock.Call {
+func (mr *MockEngineMockRecorder) ConfigureContainerVethInterface(arg0, arg1, arg2, arg3, arg4 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ConfigureContainerVethInterface", reflect.TypeOf((*MockEngine)(nil).ConfigureContainerVethInterface), arg0, arg1, arg2)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ConfigureContainerVethInterface", reflect.TypeOf((*MockEngine)(nil).ConfigureContainerVethInterface), arg0, arg1, arg2, arg3, arg4)
 }
 
 // CreateBridge mocks base method.

@@ -38,6 +38,7 @@ type NetConf struct {
 	BridgeName string      `json:"bridge"`
 	MTU        int         `json:"mtu"`
 	IPAM       *IPAMConfig `json:"ipam,omitempty"`
+	BlockIMDS  bool        `json:"blockInstanceMetadata"`
 }
 
 // NewConf creates a new NetConf object by parsing the arguments supplied

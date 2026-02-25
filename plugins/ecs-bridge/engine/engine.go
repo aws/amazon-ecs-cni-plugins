@@ -25,6 +25,7 @@ import (
 	"github.com/aws/amazon-ecs-cni-plugins/pkg/cniipwrapper"
 	"github.com/aws/amazon-ecs-cni-plugins/pkg/cninswrapper"
 	"github.com/aws/amazon-ecs-cni-plugins/pkg/netlinkwrapper"
+	"github.com/containernetworking/cni/pkg/ns"
 	"github.com/containernetworking/cni/pkg/types/current"
 	"github.com/pkg/errors"
 	"github.com/vishvananda/netlink"
@@ -37,6 +38,11 @@ const (
 	zeroLengthIPString = "<nil>"
 
 	fileExistsErrMsg = "file exists"
+)
+
+var (
+	// InstanceMetadataEndpoints is the list of EC2 instance metadata endpoints.
+	InstanceMetadataEndpoints = []string{"169.254.169.254/32", "fd00:ec2::254/128"}
 )
 
 // Engine represents the execution engine for the ECS Bridge plugin.
@@ -52,6 +58,7 @@ type Engine interface {
 	GetInterfaceIPV4Address(netnsName string, interfaceName string) (string, error)
 	RunIPAMPluginDel(plugin string, netconf []byte) error
 	DeleteVeth(netnsName string, interfaceName string) error
+	BlockInstanceMetadata(netnsName string) error
 }
 
 type engine struct {
@@ -373,4 +380,50 @@ func (engine *engine) RunIPAMPluginDel(plugin string, netconf []byte) error {
 func (engine *engine) DeleteVeth(netnsName string, interfaceName string) error {
 	delContext := newDeleteLinkContext(interfaceName, engine.ip)
 	return engine.ns.WithNetNSPath(netnsName, delContext.run)
+}
+
+// BlockInstanceMetadata adds blackhole routes to block access to IMDS endpoints
+func (engine *engine) BlockInstanceMetadata(netnsName string) error {
+	log.Infof("Blocking instance metadata access for namespace: %s", netnsName)
+	
+	blockContext := &blockIMDSContext{
+		netLink: engine.netLink,
+	}
+
+	err := engine.ns.WithNetNSPath(netnsName, blockContext.run)
+	if err != nil {
+		log.Errorf("Failed to block IMDS for namespace %s: %v", netnsName, err)
+	} else {
+		log.Infof("Successfully blocked IMDS for namespace: %s", netnsName)
+	}
+	return err
+}
+
+type blockIMDSContext struct {
+	netLink netlinkwrapper.NetLink
+}
+
+func (ctx *blockIMDSContext) run(_ ns.NetNS) error {
+	log.Infof("Adding blackhole routes for IMDS endpoints: %v", InstanceMetadataEndpoints)
+	
+	for _, ep := range InstanceMetadataEndpoints {
+		_, imdsNetwork, err := net.ParseCIDR(ep)
+		if err != nil {
+			// This should never happen as these IP addresses are hardcoded.
+			return errors.Wrapf(err, "blockIMDS engine: unable to parse instance metadata endpoint")
+		}
+		
+		log.Debugf("Adding blackhole route for IMDS endpoint: %s", ep)
+		
+		if err = ctx.netLink.RouteAdd(&netlink.Route{
+			Dst:  imdsNetwork,
+			Type: syscall.RTN_BLACKHOLE,
+		}); err != nil {
+			log.Errorf("Failed to add blackhole route for %s: %v", ep, err)
+			return errors.Wrapf(err, "blockIMDS engine: unable to add route to block instance metadata")
+		}
+		
+		log.Infof("Successfully added blackhole route for IMDS endpoint: %s", ep)
+	}
+	return nil
 }
