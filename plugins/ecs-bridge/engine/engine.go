@@ -25,6 +25,7 @@ import (
 	"github.com/aws/amazon-ecs-cni-plugins/pkg/cniipwrapper"
 	"github.com/aws/amazon-ecs-cni-plugins/pkg/cninswrapper"
 	"github.com/aws/amazon-ecs-cni-plugins/pkg/netlinkwrapper"
+	"github.com/containernetworking/cni/pkg/ns"
 	"github.com/containernetworking/cni/pkg/types/current"
 	"github.com/pkg/errors"
 	"github.com/vishvananda/netlink"
@@ -39,6 +40,11 @@ const (
 	fileExistsErrMsg = "file exists"
 )
 
+var (
+	// InstanceMetadataEndpoints is the list of EC2 instance metadata endpoints.
+	InstanceMetadataEndpoints = []string{"169.254.169.254/32", "fd00:ec2::254/128"}
+)
+
 // Engine represents the execution engine for the ECS Bridge plugin.
 // It defines all the operations performed during the execution of the
 // plugin
@@ -47,11 +53,12 @@ type Engine interface {
 	CreateVethPair(netnsName string, mtu int, interfaceName string) (*current.Interface, string, error)
 	AttachHostVethInterfaceToBridge(hostVethName string, bridge *netlink.Bridge) (*current.Interface, error)
 	RunIPAMPluginAdd(plugin string, netConf []byte) (*current.Result, error)
-	ConfigureContainerVethInterface(netnsName string, result *current.Result, interfaceName string) error
+	ConfigureContainerVethInterface(netnsName string, result *current.Result, interfaceName string, connectedSubnetMaskSizeIPv4 int, connectedSubnetMaskSizeIPv6 int) error
 	ConfigureBridge(result *current.Result, bridge *netlink.Bridge) error
 	GetInterfaceIPV4Address(netnsName string, interfaceName string) (string, error)
 	RunIPAMPluginDel(plugin string, netconf []byte) error
 	DeleteVeth(netnsName string, interfaceName string) error
+	BlockInstanceMetadata(netnsName string) error
 }
 
 type engine struct {
@@ -254,20 +261,24 @@ func (engine *engine) RunIPAMPluginAdd(plugin string, netConf []byte) (*current.
 
 // ConfigureContainerVethInterface configures the container's veth interface,
 // including setting up routes within the container
-func (engine *engine) ConfigureContainerVethInterface(netnsName string, result *current.Result, interfaceName string) error {
+func (engine *engine) ConfigureContainerVethInterface(netnsName string, result *current.Result, interfaceName string, connectedSubnetMaskSizeIPv4 int, connectedSubnetMaskSizeIPv6 int) error {
 	configureContext := newConfigureVethContext(
 		interfaceName,
 		result,
 		engine.ip,
 		engine.ipam,
-		engine.netLink)
+		engine.netLink,
+		connectedSubnetMaskSizeIPv4,
+		connectedSubnetMaskSizeIPv6)
 
 	return engine.ns.WithNetNSPath(netnsName, configureContext.run)
 }
 
 // ConfigureBridge configures the IP addresses of the bridge for all address families
 func (engine *engine) ConfigureBridge(result *current.Result, bridge *netlink.Bridge) error {
+	log.Infof("ConfigureBridge called with %d IP configs", len(result.IPs))
 	for _, ipConfig := range result.IPs {
+		log.Infof("Processing IP config - Address=%s, Gateway=%s", ipConfig.Address.String(), ipConfig.Gateway)
 		// Determine address family based on IP version
 		family := syscall.AF_INET
 		if ipConfig.Address.IP.To4() == nil {
@@ -280,11 +291,28 @@ func (engine *engine) ConfigureBridge(result *current.Result, bridge *netlink.Br
 				"bridge configure: unable to list addresses for bridge %s",
 				bridge.Attrs().Name)
 		}
+		log.Infof("Bridge has %d existing addresses for family %d", len(addrs), family)
+
+		// For daemon bridge (169.254.172.x), use /22 subnet mask for gateway
+		// Container gets /32, but bridge needs /22 to route the entire subnet
+		bridgeMask := ipConfig.Address.Mask
+		log.Infof("Gateway IP=%s, IsLinkLocal=%v, To4=%v, ContainerMask=%s",
+			ipConfig.Gateway, ipConfig.Gateway.IsLinkLocalUnicast(), ipConfig.Gateway.To4(), ipConfig.Address.Mask)
+		if ipConfig.Gateway.IsLinkLocalUnicast() && ipConfig.Gateway.To4() != nil {
+			// IPv4 link-local (169.254.x.x) - use /22
+			bridgeMask = net.CIDRMask(22, 32)
+			log.Infof("Applying /22 mask to link-local gateway")
+		} else if ipConfig.Gateway.IsLinkLocalUnicast() && ipConfig.Gateway.To4() == nil {
+			// IPv6 link-local - use /64
+			bridgeMask = net.CIDRMask(64, 128)
+			log.Infof("Applying /64 mask to IPv6 link-local gateway")
+		}
 
 		resultBridgeNetwork := &net.IPNet{
 			IP:   ipConfig.Gateway,
-			Mask: ipConfig.Address.Mask,
+			Mask: bridgeMask,
 		}
+		log.Infof("Bridge will get IP=%s", resultBridgeNetwork.String())
 		resultBridgeCIDR := resultBridgeNetwork.String()
 
 		addressExists := false
@@ -303,6 +331,7 @@ func (engine *engine) ConfigureBridge(result *current.Result, bridge *netlink.Br
 		}
 
 		if addressExists {
+			log.Infof("Address %s already exists on bridge, skipping", resultBridgeCIDR)
 			continue
 		}
 
@@ -351,4 +380,50 @@ func (engine *engine) RunIPAMPluginDel(plugin string, netconf []byte) error {
 func (engine *engine) DeleteVeth(netnsName string, interfaceName string) error {
 	delContext := newDeleteLinkContext(interfaceName, engine.ip)
 	return engine.ns.WithNetNSPath(netnsName, delContext.run)
+}
+
+// BlockInstanceMetadata adds blackhole routes to block access to IMDS endpoints
+func (engine *engine) BlockInstanceMetadata(netnsName string) error {
+	log.Infof("Blocking instance metadata access for namespace: %s", netnsName)
+	
+	blockContext := &blockIMDSContext{
+		netLink: engine.netLink,
+	}
+
+	err := engine.ns.WithNetNSPath(netnsName, blockContext.run)
+	if err != nil {
+		log.Errorf("Failed to block IMDS for namespace %s: %v", netnsName, err)
+	} else {
+		log.Infof("Successfully blocked IMDS for namespace: %s", netnsName)
+	}
+	return err
+}
+
+type blockIMDSContext struct {
+	netLink netlinkwrapper.NetLink
+}
+
+func (ctx *blockIMDSContext) run(_ ns.NetNS) error {
+	log.Infof("Adding blackhole routes for IMDS endpoints: %v", InstanceMetadataEndpoints)
+	
+	for _, ep := range InstanceMetadataEndpoints {
+		_, imdsNetwork, err := net.ParseCIDR(ep)
+		if err != nil {
+			// This should never happen as these IP addresses are hardcoded.
+			return errors.Wrapf(err, "blockIMDS engine: unable to parse instance metadata endpoint")
+		}
+		
+		log.Debugf("Adding blackhole route for IMDS endpoint: %s", ep)
+		
+		if err = ctx.netLink.RouteAdd(&netlink.Route{
+			Dst:  imdsNetwork,
+			Type: syscall.RTN_BLACKHOLE,
+		}); err != nil {
+			log.Errorf("Failed to add blackhole route for %s: %v", ep, err)
+			return errors.Wrapf(err, "blockIMDS engine: unable to add route to block instance metadata")
+		}
+		
+		log.Infof("Successfully added blackhole route for IMDS endpoint: %s", ep)
+	}
+	return nil
 }

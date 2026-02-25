@@ -147,8 +147,9 @@ func TestAddConfigureContainerVethInterfaceError(t *testing.T) {
 		mockEngine.EXPECT().CreateVethPair(nsName, defaultMTU, interfaceName).Return(containerVethInterface, hostVethName, nil),
 		mockEngine.EXPECT().AttachHostVethInterfaceToBridge(hostVethName, bridgeLink).Return(hostVethInterface, nil),
 		mockEngine.EXPECT().RunIPAMPluginAdd(ipamType, conf.StdinData).Return(result, nil),
-		mockEngine.EXPECT().ConfigureContainerVethInterface(nsName, result, interfaceName).Do(
-			func(netns string, res *current.Result, ifName string) {
+		mockEngine.EXPECT().ConfigureBridge(result, bridgeLink).Return(nil),
+		mockEngine.EXPECT().ConfigureContainerVethInterface(nsName, result, interfaceName, 0, 0).Do(
+			func(netns string, res *current.Result, ifName string, maskIPv4 int, maskIPv6 int) {
 				assert.NotEmpty(t, res)
 				assert.Equal(t, 3, len(res.Interfaces))
 				assert.Equal(t, 2, res.IPs[0].Interface)
@@ -185,7 +186,6 @@ func TestAddConfigureBridgeError(t *testing.T) {
 		mockEngine.EXPECT().CreateVethPair(nsName, defaultMTU, interfaceName).Return(containerVethInterface, hostVethName, nil),
 		mockEngine.EXPECT().AttachHostVethInterfaceToBridge(hostVethName, bridgeLink).Return(hostVethInterface, nil),
 		mockEngine.EXPECT().RunIPAMPluginAdd(ipamType, conf.StdinData).Return(result, nil),
-		mockEngine.EXPECT().ConfigureContainerVethInterface(nsName, result, interfaceName).Return(nil),
 		mockEngine.EXPECT().ConfigureBridge(result, bridgeLink).Return(errors.New("error")),
 	)
 	err := add(conf, mockEngine)
@@ -217,8 +217,9 @@ func TestAddSuccess(t *testing.T) {
 		mockEngine.EXPECT().CreateVethPair(nsName, defaultMTU, interfaceName).Return(containerVethInterface, hostVethName, nil),
 		mockEngine.EXPECT().AttachHostVethInterfaceToBridge(hostVethName, bridgeLink).Return(hostVethInterface, nil),
 		mockEngine.EXPECT().RunIPAMPluginAdd(ipamType, conf.StdinData).Return(result, nil),
-		mockEngine.EXPECT().ConfigureContainerVethInterface(nsName, result, interfaceName).Do(
-			func(netns string, res *current.Result, ifName string) {
+		mockEngine.EXPECT().ConfigureBridge(result, bridgeLink).Return(nil),
+		mockEngine.EXPECT().ConfigureContainerVethInterface(nsName, result, interfaceName, 0, 0).Do(
+			func(netns string, res *current.Result, ifName string, maskIPv4 int, maskIPv6 int) {
 				assert.NotEmpty(t, res)
 				assert.Equal(t, 3, len(res.Interfaces))
 				assert.Equal(t, 2, res.IPs[0].Interface)
@@ -226,7 +227,6 @@ func TestAddSuccess(t *testing.T) {
 				assert.Equal(t, bridgeName, bridge.Name)
 				assert.Equal(t, mac, bridge.Mac)
 			}).Return(nil),
-		mockEngine.EXPECT().ConfigureBridge(result, bridgeLink).Return(nil),
 	)
 	err := add(conf, mockEngine)
 	assert.NoError(t, err)
@@ -309,8 +309,9 @@ func TestAddWithSingleIPv4Result(t *testing.T) {
 		mockEngine.EXPECT().CreateVethPair(nsName, defaultMTU, interfaceName).Return(containerVethInterface, hostVethName, nil),
 		mockEngine.EXPECT().AttachHostVethInterfaceToBridge(hostVethName, bridgeLink).Return(hostVethInterface, nil),
 		mockEngine.EXPECT().RunIPAMPluginAdd(ipamType, conf.StdinData).Return(result, nil),
-		mockEngine.EXPECT().ConfigureContainerVethInterface(nsName, result, interfaceName).Do(
-			func(netns string, res *current.Result, ifName string) {
+		mockEngine.EXPECT().ConfigureBridge(result, bridgeLink).Return(nil),
+		mockEngine.EXPECT().ConfigureContainerVethInterface(nsName, result, interfaceName, 0, 0).Do(
+			func(netns string, res *current.Result, ifName string, maskIPv4 int, maskIPv6 int) {
 				assert.NotEmpty(t, res)
 				assert.Equal(t, 3, len(res.Interfaces))
 				// Verify single IPv4 IP has interface index set to 2 (container veth)
@@ -319,7 +320,6 @@ func TestAddWithSingleIPv4Result(t *testing.T) {
 				// Verify it's an IPv4 address
 				assert.NotNil(t, res.IPs[0].Address.IP.To4())
 			}).Return(nil),
-		mockEngine.EXPECT().ConfigureBridge(result, bridgeLink).Return(nil),
 	)
 	err := add(conf, mockEngine)
 	assert.NoError(t, err)
@@ -355,8 +355,9 @@ func TestAddWithSingleIPv6Result(t *testing.T) {
 		mockEngine.EXPECT().CreateVethPair(nsName, defaultMTU, interfaceName).Return(containerVethInterface, hostVethName, nil),
 		mockEngine.EXPECT().AttachHostVethInterfaceToBridge(hostVethName, bridgeLink).Return(hostVethInterface, nil),
 		mockEngine.EXPECT().RunIPAMPluginAdd(ipamType, conf.StdinData).Return(result, nil),
-		mockEngine.EXPECT().ConfigureContainerVethInterface(nsName, result, interfaceName).Do(
-			func(netns string, res *current.Result, ifName string) {
+		mockEngine.EXPECT().ConfigureBridge(result, bridgeLink).Return(nil),
+		mockEngine.EXPECT().ConfigureContainerVethInterface(nsName, result, interfaceName, 0, 0).Do(
+			func(netns string, res *current.Result, ifName string, maskIPv4 int, maskIPv6 int) {
 				assert.NotEmpty(t, res)
 				assert.Equal(t, 3, len(res.Interfaces))
 				// Verify single IPv6 IP has interface index set to 2 (container veth)
@@ -365,7 +366,6 @@ func TestAddWithSingleIPv6Result(t *testing.T) {
 				// Verify it's an IPv6 address (To4() returns nil for IPv6)
 				assert.Nil(t, res.IPs[0].Address.IP.To4())
 			}).Return(nil),
-		mockEngine.EXPECT().ConfigureBridge(result, bridgeLink).Return(nil),
 	)
 	err := add(conf, mockEngine)
 	assert.NoError(t, err)
@@ -407,8 +407,9 @@ func TestAddWithDualStackResult(t *testing.T) {
 		mockEngine.EXPECT().CreateVethPair(nsName, defaultMTU, interfaceName).Return(containerVethInterface, hostVethName, nil),
 		mockEngine.EXPECT().AttachHostVethInterfaceToBridge(hostVethName, bridgeLink).Return(hostVethInterface, nil),
 		mockEngine.EXPECT().RunIPAMPluginAdd(ipamType, conf.StdinData).Return(result, nil),
-		mockEngine.EXPECT().ConfigureContainerVethInterface(nsName, result, interfaceName).Do(
-			func(netns string, res *current.Result, ifName string) {
+		mockEngine.EXPECT().ConfigureBridge(result, bridgeLink).Return(nil),
+		mockEngine.EXPECT().ConfigureContainerVethInterface(nsName, result, interfaceName, 0, 0).Do(
+			func(netns string, res *current.Result, ifName string, maskIPv4 int, maskIPv6 int) {
 				assert.NotEmpty(t, res)
 				assert.Equal(t, 3, len(res.Interfaces))
 				// Verify both IPs have interface index set to 2 (container veth)
@@ -421,7 +422,6 @@ func TestAddWithDualStackResult(t *testing.T) {
 				// Verify second is IPv6
 				assert.Nil(t, res.IPs[1].Address.IP.To4(), "Second IP should be IPv6")
 			}).Return(nil),
-		mockEngine.EXPECT().ConfigureBridge(result, bridgeLink).Return(nil),
 	)
 	err := add(conf, mockEngine)
 	assert.NoError(t, err)
@@ -465,8 +465,9 @@ func TestAddInterfaceIndexAssignmentProperty(t *testing.T) {
 		mockEngine.EXPECT().CreateVethPair(nsName, defaultMTU, interfaceName).Return(containerVethInterface, hostVethName, nil),
 		mockEngine.EXPECT().AttachHostVethInterfaceToBridge(hostVethName, bridgeLink).Return(hostVethInterface, nil),
 		mockEngine.EXPECT().RunIPAMPluginAdd(ipamType, conf.StdinData).Return(result, nil),
-		mockEngine.EXPECT().ConfigureContainerVethInterface(nsName, result, interfaceName).Do(
-			func(netns string, res *current.Result, ifName string) {
+		mockEngine.EXPECT().ConfigureBridge(result, bridgeLink).Return(nil),
+		mockEngine.EXPECT().ConfigureContainerVethInterface(nsName, result, interfaceName, 0, 0).Do(
+			func(netns string, res *current.Result, ifName string, maskIPv4 int, maskIPv6 int) {
 				// Property: For any IP configuration in the IPAM result,
 				// the bridge plugin shall set the interface index to point
 				// to the container veth interface (index 2)
@@ -475,7 +476,6 @@ func TestAddInterfaceIndexAssignmentProperty(t *testing.T) {
 						"IP[%d] interface index should be 2 (container veth)", i)
 				}
 			}).Return(nil),
-		mockEngine.EXPECT().ConfigureBridge(result, bridgeLink).Return(nil),
 	)
 	err := add(conf, mockEngine)
 	assert.NoError(t, err)
