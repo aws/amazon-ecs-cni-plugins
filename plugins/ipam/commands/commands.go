@@ -352,7 +352,9 @@ func getIPV6Address(ipManager ipstore.IPAllocator, conf *config.IPAMConfig) (*ne
 		// if this ip has already been used, it will return an error
 		// IPv6 addresses are stored with the "6" prefix in the database
 		ipKey := ipstore.IPPrefixV6 + assignedAddress.IP.String()
-		err := ipManager.Assign(ipKey, conf.ID)
+		// Append "-v6" to the ID to make it unique from IPv4 allocations
+		idV6 := conf.ID + "-v6"
+		err := ipManager.Assign(ipKey, idV6)
 		if err != nil {
 			return nil, errors.Wrapf(err, "getIPV6Address commands: failed to mark this ip %v as used", assignedAddress)
 		}

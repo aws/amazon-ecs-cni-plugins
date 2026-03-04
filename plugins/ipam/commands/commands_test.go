@@ -355,7 +355,7 @@ func TestGetSpecificIPV6HappyPath(t *testing.T) {
 	conf, allocator := setupIPv6("2001:db8::/64", "2001:db8::3/64", "", t)
 
 	gomock.InOrder(
-		allocator.EXPECT().Assign(ipstore.IPPrefixV6+conf.IPV6Address.IP.String(), gomock.Any()).Return(nil),
+		allocator.EXPECT().Assign(ipstore.IPPrefixV6+conf.IPV6Address.IP.String(), conf.ID+"-v6").Return(nil),
 	)
 
 	assignedAddress, err := getIPV6Address(allocator, conf)
@@ -383,7 +383,7 @@ func TestGetNextIPV6HappyPath(t *testing.T) {
 func TestGetUsedIPv6(t *testing.T) {
 	conf, allocator := setupIPv6("2001:db8::/64", "2001:db8::3/64", "", t)
 
-	allocator.EXPECT().Assign(ipstore.IPPrefixV6+conf.IPV6Address.IP.String(), gomock.Any()).Return(errors.New("IP has already been used"))
+	allocator.EXPECT().Assign(ipstore.IPPrefixV6+conf.IPV6Address.IP.String(), conf.ID+"-v6").Return(errors.New("IP has already been used"))
 
 	assignedAddress, err := getIPV6Address(allocator, conf)
 	assert.Error(t, err, "assign a used IPv6 ip should cause error")
@@ -396,7 +396,7 @@ func TestAddIPv6OnlyHappyPath(t *testing.T) {
 
 	gomock.InOrder(
 		allocator.EXPECT().Get(ipstore.IPPrefixV6+conf.IPV6Gateway.String()).Return(config.GatewayV6Value, nil),
-		allocator.EXPECT().Assign(ipstore.IPPrefixV6+conf.IPV6Address.IP.String(), gomock.Any()).Return(nil),
+		allocator.EXPECT().Assign(ipstore.IPPrefixV6+conf.IPV6Address.IP.String(), conf.ID+"-v6").Return(nil),
 		allocator.EXPECT().Update(ipstore.LastKnownIPv6Key, conf.IPV6Address.IP.String()).Return(nil),
 	)
 
@@ -417,7 +417,7 @@ func TestAddDualStackHappyPath(t *testing.T) {
 		allocator.EXPECT().Update(config.LastKnownIPKey, conf.IPV4Address.IP.String()).Return(nil),
 		// IPv6 handling
 		allocator.EXPECT().Get(ipstore.IPPrefixV6+conf.IPV6Gateway.String()).Return(config.GatewayV6Value, nil),
-		allocator.EXPECT().Assign(ipstore.IPPrefixV6+conf.IPV6Address.IP.String(), gomock.Any()).Return(nil),
+		allocator.EXPECT().Assign(ipstore.IPPrefixV6+conf.IPV6Address.IP.String(), conf.ID+"-v6").Return(nil),
 		allocator.EXPECT().Update(ipstore.LastKnownIPv6Key, conf.IPV6Address.IP.String()).Return(nil),
 	)
 
