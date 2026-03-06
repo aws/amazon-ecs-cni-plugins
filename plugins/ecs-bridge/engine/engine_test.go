@@ -2113,7 +2113,7 @@ func TestProperty_BridgeAddressAssignment_GatewayUsedAsBridgeAddress(t *testing.
 		{
 			name:    "IPv6 gateway becomes bridge address",
 			gateway: net.ParseIP("fd00::1"),
-			mask:    net.CIDRMask(64, 128),
+			mask:    net.CIDRMask(112, 128),
 			family:  syscall.AF_INET6,
 		},
 	}
@@ -3279,22 +3279,25 @@ func TestProperty_SingleIPv6ResultProcessing(t *testing.T) {
 // Property 2: Single IPv6 Result Processing
 func TestProperty_SingleIPv6ResultProcessing_BridgeConfiguration(t *testing.T) {
 	testCases := []struct {
-		name        string
-		ipv6Address string
-		ipv6Gateway string
-		maskBits    int
+		name            string
+		ipv6Address     string
+		ipv6Gateway     string
+		maskBits        int
+		expectedMaskBits int // mask applied by ConfigureBridge (may differ for ULA)
 	}{
 		{
-			name:        "global unicast IPv6",
-			ipv6Address: "2001:db8::2",
-			ipv6Gateway: "2001:db8::1",
-			maskBits:    64,
+			name:            "global unicast IPv6",
+			ipv6Address:     "2001:db8::2",
+			ipv6Gateway:     "2001:db8::1",
+			maskBits:        64,
+			expectedMaskBits: 64,
 		},
 		{
-			name:        "unique local address",
-			ipv6Address: "fd00:ec2::2",
-			ipv6Gateway: "fd00:ec2::1",
-			maskBits:    64,
+			name:            "unique local address",
+			ipv6Address:     "fd00:ec2::2",
+			ipv6Gateway:     "fd00:ec2::1",
+			maskBits:        64,
+			expectedMaskBits: 112, // ULA gets /112 mask
 		},
 	}
 
@@ -3321,7 +3324,7 @@ func TestProperty_SingleIPv6ResultProcessing_BridgeConfiguration(t *testing.T) {
 			bridgeAddr := &netlink.Addr{
 				IPNet: &net.IPNet{
 					IP:   ipv6Gateway,
-					Mask: net.CIDRMask(tc.maskBits, 128),
+					Mask: net.CIDRMask(tc.expectedMaskBits, 128),
 				},
 			}
 
@@ -3618,31 +3621,34 @@ func TestProperty_DualStackResultProcessing_IPv6First(t *testing.T) {
 // Property 3: Dual-Stack Result Processing
 func TestProperty_DualStackResultProcessing_BridgeConfiguration(t *testing.T) {
 	testCases := []struct {
-		name         string
-		ipv4Address  string
-		ipv4Gateway  string
-		ipv4MaskBits int
-		ipv6Address  string
-		ipv6Gateway  string
-		ipv6MaskBits int
+		name                 string
+		ipv4Address          string
+		ipv4Gateway          string
+		ipv4MaskBits         int
+		ipv6Address          string
+		ipv6Gateway          string
+		ipv6MaskBits         int
+		expectedIPv6MaskBits int // mask applied by ConfigureBridge (may differ for ULA)
 	}{
 		{
-			name:         "standard dual-stack",
-			ipv4Address:  "192.168.1.2",
-			ipv4Gateway:  "192.168.1.1",
-			ipv4MaskBits: 24,
-			ipv6Address:  "2001:db8::2",
-			ipv6Gateway:  "2001:db8::1",
-			ipv6MaskBits: 64,
+			name:                 "standard dual-stack",
+			ipv4Address:          "192.168.1.2",
+			ipv4Gateway:          "192.168.1.1",
+			ipv4MaskBits:         24,
+			ipv6Address:          "2001:db8::2",
+			ipv6Gateway:          "2001:db8::1",
+			ipv6MaskBits:         64,
+			expectedIPv6MaskBits: 64,
 		},
 		{
-			name:         "ECS dual-stack",
-			ipv4Address:  "169.254.172.2",
-			ipv4Gateway:  "169.254.172.1",
-			ipv4MaskBits: 22,
-			ipv6Address:  "fd00:ec2::2",
-			ipv6Gateway:  "fd00:ec2::1",
-			ipv6MaskBits: 64,
+			name:                 "ECS dual-stack",
+			ipv4Address:          "169.254.172.2",
+			ipv4Gateway:          "169.254.172.1",
+			ipv4MaskBits:         22,
+			ipv6Address:          "fd00:ec2::2",
+			ipv6Gateway:          "fd00:ec2::1",
+			ipv6MaskBits:         64,
+			expectedIPv6MaskBits: 112, // ULA gets /112 mask
 		},
 	}
 
@@ -3683,7 +3689,7 @@ func TestProperty_DualStackResultProcessing_BridgeConfiguration(t *testing.T) {
 			ipv6BridgeAddr := &netlink.Addr{
 				IPNet: &net.IPNet{
 					IP:   ipv6Gateway,
-					Mask: net.CIDRMask(tc.ipv6MaskBits, 128),
+					Mask: net.CIDRMask(tc.expectedIPv6MaskBits, 128),
 				},
 			}
 

@@ -186,15 +186,29 @@ func (configContext *configureVethContext) run(hostNS ns.NetNS) error {
 			continue
 		}
 		
-		// Calculate the subnet network address using the IP's mask
-		subnetIP := ipConfig.Address.IP.Mask(ipConfig.Address.Mask)
+		// Determine the correct subnet mask size based on IP version
+		var subnetMaskSize int
+		var totalBits int
+		if ipConfig.Address.IP.To4() != nil {
+			subnetMaskSize = configContext.connectedSubnetMaskSizeIPv4
+			totalBits = 32
+		} else {
+			subnetMaskSize = configContext.connectedSubnetMaskSizeIPv6
+			totalBits = 128
+		}
+		
+		// Create subnet mask using the connected subnet mask size
+		subnetMask := net.CIDRMask(subnetMaskSize, totalBits)
+		
+		// Calculate the subnet network address using the connected subnet mask
+		subnetIP := ipConfig.Address.IP.Mask(subnetMask)
 		
 		// Add the connected subnet route
 		subnetRoute := &netlink.Route{
 			LinkIndex: link.Attrs().Index,
 			Dst: &net.IPNet{
 				IP:   subnetIP,
-				Mask: ipConfig.Address.Mask,
+				Mask: subnetMask,
 			},
 			Scope: netlink.SCOPE_LINK,
 		}

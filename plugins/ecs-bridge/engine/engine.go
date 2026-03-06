@@ -306,6 +306,10 @@ func (engine *engine) ConfigureBridge(result *current.Result, bridge *netlink.Br
 			// IPv6 link-local - use /64
 			bridgeMask = net.CIDRMask(64, 128)
 			log.Infof("Applying /64 mask to IPv6 link-local gateway")
+		} else if ipConfig.Gateway.To4() == nil && len(ipConfig.Gateway) == 16 && ipConfig.Gateway[0] == 0xfd {
+			// IPv6 ULA (fd00::/8) - daemon bridge - use /112
+			bridgeMask = net.CIDRMask(112, 128)
+			log.Infof("Applying /112 mask to IPv6 ULA daemon bridge gateway")
 		}
 
 		resultBridgeNetwork := &net.IPNet{

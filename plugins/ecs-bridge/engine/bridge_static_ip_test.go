@@ -155,6 +155,49 @@ func TestConfigureBridge_NonLinkLocalIP_UsesContainerMask(t *testing.T) {
 	assert.NoError(t, err)
 }
 
+// TestConfigureBridge_IPv6ULA_UsesCIDR112 tests that bridge gets /112 mask for IPv6 ULA (daemon bridge)
+func TestConfigureBridge_IPv6ULA_UsesCIDR112(t *testing.T) {
+	ctrl, _, mockNetLink, _, _, _ := setup(t)
+	defer ctrl.Finish()
+
+	bridgeLink := &netlink.Bridge{
+		LinkAttrs: netlink.LinkAttrs{Name: "fargate-bridge"},
+	}
+
+	// IPv6 ULA gateway (daemon bridge)
+	gatewayIP := net.ParseIP("fd00:ec2::172:1")
+	containerIP := net.ParseIP("fd00:ec2::172:2")
+
+	ipConfig := &current.IPConfig{
+		Address: net.IPNet{
+			IP:   containerIP,
+			Mask: net.CIDRMask(128, 128), // Container has /128
+		},
+		Gateway: gatewayIP,
+	}
+
+	result := &current.Result{
+		IPs: []*current.IPConfig{ipConfig},
+	}
+
+	// Expected bridge address should have /112 mask
+	expectedBridgeAddr := &netlink.Addr{
+		IPNet: &net.IPNet{
+			IP:   gatewayIP,
+			Mask: net.CIDRMask(112, 128), // Bridge gets /112 for ULA
+		},
+	}
+
+	gomock.InOrder(
+		mockNetLink.EXPECT().AddrList(bridgeLink, syscall.AF_INET6).Return(nil, nil),
+		mockNetLink.EXPECT().AddrAdd(bridgeLink, expectedBridgeAddr).Return(nil),
+	)
+
+	engine := &engine{netLink: mockNetLink}
+	err := engine.ConfigureBridge(result, bridgeLink)
+	assert.NoError(t, err)
+}
+
 // TestConfigureBridge_BeforeContainer tests that bridge is configured before container
 // This is important because container configuration adds routes to the gateway,
 // which must already exist on the bridge
@@ -227,10 +270,10 @@ func TestConfigureVeth_AddsOnLinkGatewayRoute(t *testing.T) {
 	assert.Equal(t, net.CIDRMask(32, 32).String(), capturedGatewayRoute.Dst.Mask.String())
 	assert.Equal(t, netlink.SCOPE_LINK, capturedGatewayRoute.Scope)
 
-	// Verify subnet route
+	// Verify subnet route uses /22 mask (connected subnet) not /32 (container address)
 	assert.NotNil(t, capturedSubnetRoute)
-	assert.Equal(t, containerIP.String(), capturedSubnetRoute.Dst.IP.String())
-	assert.Equal(t, net.CIDRMask(32, 32).String(), capturedSubnetRoute.Dst.Mask.String())
+	assert.Equal(t, "169.254.172.0", capturedSubnetRoute.Dst.IP.String())
+	assert.Equal(t, net.CIDRMask(22, 32).String(), capturedSubnetRoute.Dst.Mask.String())
 	assert.Equal(t, netlink.SCOPE_LINK, capturedSubnetRoute.Scope)
 }
 
@@ -354,10 +397,10 @@ func TestConfigureVeth_AddsConnectedSubnetRoute(t *testing.T) {
 	err := configContext.run(nil)
 	assert.NoError(t, err)
 
-	// Verify subnet route
+	// Verify subnet route uses /22 mask (connected subnet) not /32 (container address)
 	assert.NotNil(t, capturedSubnetRoute)
-	assert.Equal(t, containerIP.String(), capturedSubnetRoute.Dst.IP.String())
-	assert.Equal(t, net.CIDRMask(32, 32).String(), capturedSubnetRoute.Dst.Mask.String())
+	assert.Equal(t, "169.254.172.0", capturedSubnetRoute.Dst.IP.String())
+	assert.Equal(t, net.CIDRMask(22, 32).String(), capturedSubnetRoute.Dst.Mask.String())
 	assert.Equal(t, netlink.SCOPE_LINK, capturedSubnetRoute.Scope)
 }
 
