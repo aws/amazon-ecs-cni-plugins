@@ -2184,3 +2184,176 @@ func TestDaemonHostNamespace(t *testing.T) {
 		t.Log("Dual-stack daemon host namespace test completed successfully")
 	})
 }
+
+// TestAddBridgeAfterDeletion validates that a bridge can be successfully re-created
+// after it has been deleted. This simulates the daemon task restart scenario where
+// the namespace persists but the bridge was removed, and the CNI plugin needs to
+// recreate it from scratch.
+func TestAddBridgeAfterDeletion(t *testing.T) {
+	// Skip if instance doesn't support IPv4
+	skipIfNoIPv4(t)
+
+	// Ensure that the bridge plugin exists
+	bridgePluginPath, err := invoke.FindInPath("ecs-bridge", []string{os.Getenv("CNI_PATH")})
+	require.NoError(t, err, "Unable to find bridge plugin in path")
+
+	// Create a directory for storing test logs
+	testLogDir, err := ioutil.TempDir("", "ecs-bridge-e2e-test-readd-")
+	require.NoError(t, err, "Unable to create directory for storing test logs")
+
+	os.Setenv("ECS_CNI_LOG_FILE", fmt.Sprintf("%s/bridge.log", testLogDir))
+	t.Logf("Using %s for test logs", testLogDir)
+	defer os.Unsetenv("ECS_CNI_LOG_FILE")
+
+	ok, err := strconv.ParseBool(getEnvOrDefault("ECS_PRESERVE_E2E_TEST_LOGS", "false"))
+	assert.NoError(t, err, "Unable to parse ECS_PRESERVE_E2E_TEST_LOGS env var")
+	defer func(preserve bool) {
+		if !t.Failed() && !preserve {
+			os.RemoveAll(testLogDir)
+		}
+	}(ok)
+
+	// Create a network namespace to execute the test in.
+	// This namespace persists across ADD/DEL/ADD cycles (like a daemon netns).
+	testNS, err := ns.NewNS()
+	require.NoError(t, err, "Unable to create the network namespace to run the test in")
+	defer testNS.Close()
+
+	// Create a directory to store IPAM db
+	ipamDir, err := ioutil.TempDir("", "ecs-ipam-readd-")
+	require.NoError(t, err, "Unable to create a temp directory for the ipam db")
+	os.Setenv("IPAM_DB_PATH", fmt.Sprintf("%s/ipam.db", ipamDir))
+	defer os.Unsetenv("IPAM_DB_PATH")
+	ok, err = strconv.ParseBool(getEnvOrDefault("ECS_BRIDGE_PRESERVE_IPAM_DB", "false"))
+	assert.NoError(t, err, "Unable to parse ECS_BRIDGE_PRESERVE_IPAM_DB env var")
+	if !ok {
+		defer os.RemoveAll(ipamDir)
+	}
+
+	// --- First ADD: create the bridge and veth pair ---
+	targetNS1, err := ns.NewNS()
+	require.NoError(t, err, "Unable to create the first target network namespace")
+	defer targetNS1.Close()
+
+	execInvokeArgs := &invoke.Args{
+		ContainerID: containerID,
+		NetNS:       targetNS1.Path(),
+		IfName:      ifName,
+		Path:        os.Getenv("CNI_PATH"),
+	}
+
+	testNS.Do(func(ns.NetNS) error {
+		execInvokeArgs.Command = "ADD"
+		_, err := invoke.ExecPluginWithResult(
+			bridgePluginPath,
+			[]byte(fmt.Sprintf(netConf, bridgeName, dst)),
+			execInvokeArgs)
+		require.NoError(t, err, "First ADD command failed")
+
+		// Validate bridge was created
+		bridge := getBridgeLink(t)
+		validateBridgeAddress(t, bridge)
+		t.Log("First ADD succeeded: bridge created")
+		return nil
+	})
+
+	// --- DEL: remove the veth pair (bridge remains) ---
+	testNS.Do(func(ns.NetNS) error {
+		execInvokeArgs.Command = "DEL"
+		err := invoke.ExecPluginWithoutResult(
+			bridgePluginPath,
+			[]byte(fmt.Sprintf(netConf, bridgeName, dst)),
+			execInvokeArgs)
+		require.NoError(t, err, "DEL command failed")
+		t.Log("DEL succeeded: veth removed")
+		return nil
+	})
+
+	// --- Delete the bridge explicitly to simulate full teardown ---
+	testNS.Do(func(ns.NetNS) error {
+		bridge, err := netlink.LinkByName(bridgeName)
+		require.NoError(t, err, "Bridge should still exist after DEL")
+
+		err = netlink.LinkDel(bridge)
+		require.NoError(t, err, "Unable to delete bridge")
+
+		// Confirm bridge is gone
+		_, err = netlink.LinkByName(bridgeName)
+		require.Error(t, err, "Bridge should not exist after explicit deletion")
+		t.Log("Bridge explicitly deleted")
+		return nil
+	})
+
+	// --- Second ADD: re-create the bridge in the same namespace ---
+	targetNS2, err := ns.NewNS()
+	require.NoError(t, err, "Unable to create the second target network namespace")
+	defer targetNS2.Close()
+
+	execInvokeArgs2 := &invoke.Args{
+		ContainerID: "contain-er-2",
+		NetNS:       targetNS2.Path(),
+		IfName:      ifName,
+		Path:        os.Getenv("CNI_PATH"),
+	}
+
+	var vethTestNetNS netlink.Link
+	testNS.Do(func(ns.NetNS) error {
+		execInvokeArgs2.Command = "ADD"
+		_, err := invoke.ExecPluginWithResult(
+			bridgePluginPath,
+			[]byte(fmt.Sprintf(netConf, bridgeName, dst)),
+			execInvokeArgs2)
+		require.NoError(t, err, "Second ADD command failed: unable to re-create bridge after deletion")
+
+		// Validate bridge was re-created with the expected address
+		bridge := getBridgeLink(t)
+		validateBridgeAddress(t, bridge)
+
+		// Validate that veth pair device was created
+		vethTestNetNS, ok = getVethAndVerifyLo(t)
+		require.True(t, ok, "veth device not found in test netns after second ADD")
+		t.Log("Second ADD succeeded: bridge re-created after deletion")
+		return nil
+	})
+
+	var vethTargetNetNS netlink.Link
+	targetNS2.Do(func(ns.NetNS) error {
+		// Validate the container end of the veth pair
+		vethTargetNetNS, ok = getVethAndVerifyLo(t)
+		require.True(t, ok, "veth device not found in target netns after second ADD")
+		// Validate the veth has an IPv4 address from the expected subnet (169.254.172.0/22)
+		// Note: we don't check for a specific IP because the IPAM may allocate a
+		// different address on the second ADD (the first allocation is still in the DB)
+		addrs, err := netlink.AddrList(vethTargetNetNS, netlink.FAMILY_V4)
+		require.NoError(t, err, "Unable to list addresses of veth in target netns")
+		addrFound := false
+		_, expectedSubnet, _ := net.ParseCIDR("169.254.172.0/22")
+		for _, addr := range addrs {
+			if expectedSubnet.Contains(addr.IP) {
+				addrFound = true
+				t.Logf("Veth assigned address: %s", addr.IPNet.String())
+			}
+		}
+		require.True(t, addrFound, "Veth should have an IPv4 address from 169.254.172.0/22 subnet")
+		return nil
+	})
+
+	// --- Final DEL: clean up ---
+	testNS.Do(func(ns.NetNS) error {
+		execInvokeArgs2.Command = "DEL"
+		err := invoke.ExecPluginWithoutResult(
+			bridgePluginPath,
+			[]byte(fmt.Sprintf(netConf, bridgeName, dst)),
+			execInvokeArgs2)
+		require.NoError(t, err, "Final DEL command failed")
+
+		validateLinkDoesNotExist(t, vethTestNetNS.Attrs().Name)
+		t.Log("Final DEL succeeded: cleanup complete")
+		return nil
+	})
+
+	targetNS2.Do(func(ns.NetNS) error {
+		validateLinkDoesNotExist(t, vethTargetNetNS.Attrs().Name)
+		return nil
+	})
+}

@@ -16,6 +16,7 @@ package engine
 import (
 	"crypto/rand"
 	"net"
+	"os"
 	"strings"
 	"syscall"
 
@@ -389,7 +390,7 @@ func (engine *engine) DeleteVeth(netnsName string, interfaceName string) error {
 // BlockInstanceMetadata adds blackhole routes to block access to IMDS endpoints
 func (engine *engine) BlockInstanceMetadata(netnsName string) error {
 	log.Infof("Blocking instance metadata access for namespace: %s", netnsName)
-	
+
 	blockContext := &blockIMDSContext{
 		netLink: engine.netLink,
 	}
@@ -409,24 +410,32 @@ type blockIMDSContext struct {
 
 func (ctx *blockIMDSContext) run(_ ns.NetNS) error {
 	log.Infof("Adding blackhole routes for IMDS endpoints: %v", InstanceMetadataEndpoints)
-	
+
 	for _, ep := range InstanceMetadataEndpoints {
 		_, imdsNetwork, err := net.ParseCIDR(ep)
 		if err != nil {
 			// This should never happen as these IP addresses are hardcoded.
 			return errors.Wrapf(err, "blockIMDS engine: unable to parse instance metadata endpoint")
 		}
-		
+
 		log.Debugf("Adding blackhole route for IMDS endpoint: %s", ep)
-		
+
 		if err = ctx.netLink.RouteAdd(&netlink.Route{
 			Dst:  imdsNetwork,
 			Type: syscall.RTN_BLACKHOLE,
 		}); err != nil {
+			// If the route already exists, treat it as success since the
+			// desired state (IMDS blocked) is already achieved. This makes
+			// the operation idempotent for daemon network namespaces that
+			// persist across task restarts.
+			if os.IsExist(err) {
+				log.Infof("Blackhole route for %s already exists, skipping", ep)
+				continue
+			}
 			log.Errorf("Failed to add blackhole route for %s: %v", ep, err)
 			return errors.Wrapf(err, "blockIMDS engine: unable to add route to block instance metadata")
 		}
-		
+
 		log.Infof("Successfully added blackhole route for IMDS endpoint: %s", ep)
 	}
 	return nil
