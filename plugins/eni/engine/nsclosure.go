@@ -16,6 +16,7 @@ package engine
 import (
 	"fmt"
 	"net"
+	"os"
 	"syscall"
 
 	"github.com/aws/amazon-ecs-cni-plugins/pkg/netlinkwrapper"
@@ -27,7 +28,7 @@ import (
 var (
 	// InstanceMetadataEndpoints is the list of EC2 instance metadata endpoints.
 	InstanceMetadataEndpoints = []string{"169.254.169.254/32", "fd00:ec2::254/128"}
-	linkWithMACNotFoundError = errors.New("engine: device with mac address not found")
+	linkWithMACNotFoundError  = errors.New("engine: device with mac address not found")
 )
 
 // setupNamespaceClosureContext wraps the parameters and the method to configure the container's namespace
@@ -147,19 +148,24 @@ func (closureContext *setupNamespaceClosureContext) run(_ ns.NetNS) error {
 
 	// Add a blackhole route for IMDS endpoint if required
 	if closureContext.blockIMDS {
-                for _, ep := range InstanceMetadataEndpoints {
-                        _, imdsNetwork, err := net.ParseCIDR(ep)
-                        if err != nil {
-                                // This should never happen as these IP addresses are hardcoded.
-                                return errors.Wrapf(err, "setupNamespaceClosure engine: unable to parse instance metadata endpoint")
-                        }
-                        if err = closureContext.netLink.RouteAdd(&netlink.Route{
-                                Dst:  imdsNetwork,
-                                Type: syscall.RTN_BLACKHOLE,
-                        }); err != nil {
-                                return errors.Wrapf(err, "setupNamespaceClosure engine: unable to add route to block instance metadata")
-                        }
-                }
+		for _, ep := range InstanceMetadataEndpoints {
+			_, imdsNetwork, err := net.ParseCIDR(ep)
+			if err != nil {
+				// This should never happen as these IP addresses are hardcoded.
+				return errors.Wrapf(err, "setupNamespaceClosure engine: unable to parse instance metadata endpoint")
+			}
+			if err = closureContext.netLink.RouteAdd(&netlink.Route{
+				Dst:  imdsNetwork,
+				Type: syscall.RTN_BLACKHOLE,
+			}); err != nil {
+				// If the route already exists, treat it as success since the
+				// desired state (IMDS blocked) is already achieved.
+				if os.IsExist(err) {
+					continue
+				}
+				return errors.Wrapf(err, "setupNamespaceClosure engine: unable to add route to block instance metadata")
+			}
+		}
 	}
 
 	// Setup IP routes for the gateways

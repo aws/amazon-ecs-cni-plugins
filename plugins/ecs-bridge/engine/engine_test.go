@@ -18,6 +18,7 @@ package engine
 
 import (
 	"net"
+	"os"
 	"syscall"
 	"testing"
 
@@ -638,15 +639,15 @@ func TestConfigureContainerVethInterfaceConfigureIfaceError(t *testing.T) {
 			},
 		},
 	}
-	
+
 	link := &netlink.Veth{LinkAttrs: netlink.LinkAttrs{Name: interfaceName, Index: 1}}
-	
+
 	gomock.InOrder(
 		mockNetLink.EXPECT().LinkByName(interfaceName).Return(link, nil),
 		mockNetLink.EXPECT().RouteAdd(gomock.Any()).Return(nil),
 		mockIPAM.EXPECT().ConfigureIface(interfaceName, result).Return(errors.New("error")),
 	)
-	
+
 	configContext := newConfigureVethContext(
 		interfaceName, result, mockIP, mockIPAM, mockNetLink, 22, 0)
 	err = configContext.run(nil)
@@ -3002,7 +3003,7 @@ func TestProperty_BackwardCompatibility(t *testing.T) {
 			// Test 3: Veth configuration adds /32 gateway route for IPv4 (backward compatible)
 			mockLink := mock_netlink.NewMockLink(ctrl)
 			mockAttrs := &netlink.LinkAttrs{Index: 1}
-					routes := []netlink.Route{}
+			routes := []netlink.Route{}
 			gomock.InOrder(
 				mockNetLink.EXPECT().LinkByName(interfaceName).Return(mockLink, nil),
 				mockLink.EXPECT().Attrs().Return(mockAttrs),
@@ -3279,24 +3280,24 @@ func TestProperty_SingleIPv6ResultProcessing(t *testing.T) {
 // Property 2: Single IPv6 Result Processing
 func TestProperty_SingleIPv6ResultProcessing_BridgeConfiguration(t *testing.T) {
 	testCases := []struct {
-		name            string
-		ipv6Address     string
-		ipv6Gateway     string
-		maskBits        int
+		name             string
+		ipv6Address      string
+		ipv6Gateway      string
+		maskBits         int
 		expectedMaskBits int // mask applied by ConfigureBridge (may differ for ULA)
 	}{
 		{
-			name:            "global unicast IPv6",
-			ipv6Address:     "2001:db8::2",
-			ipv6Gateway:     "2001:db8::1",
-			maskBits:        64,
+			name:             "global unicast IPv6",
+			ipv6Address:      "2001:db8::2",
+			ipv6Gateway:      "2001:db8::1",
+			maskBits:         64,
 			expectedMaskBits: 64,
 		},
 		{
-			name:            "unique local address",
-			ipv6Address:     "fd00:ec2::2",
-			ipv6Gateway:     "fd00:ec2::1",
-			maskBits:        64,
+			name:             "unique local address",
+			ipv6Address:      "fd00:ec2::2",
+			ipv6Gateway:      "fd00:ec2::1",
+			maskBits:         64,
 			expectedMaskBits: 112, // ULA gets /112 mask
 		},
 	}
@@ -3390,7 +3391,7 @@ func TestProperty_SingleIPv6ResultProcessing_VethConfiguration(t *testing.T) {
 
 			mockLink := mock_netlink.NewMockLink(ctrl)
 			mockAttrs := &netlink.LinkAttrs{Index: 1}
-					routes := []netlink.Route{}
+			routes := []netlink.Route{}
 
 			gomock.InOrder(
 				mockNetLink.EXPECT().LinkByName(interfaceName).Return(mockLink, nil),
@@ -3398,7 +3399,7 @@ func TestProperty_SingleIPv6ResultProcessing_VethConfiguration(t *testing.T) {
 				mockNetLink.EXPECT().RouteAdd(gomock.Any()).Return(nil),
 				mockIPAM.EXPECT().ConfigureIface(interfaceName, gomock.Any()).Return(nil),
 				mockIP.EXPECT().SetHWAddrByIP(interfaceName, nil, ipv6ContainerAddr).Return(nil),
-			mockNetLink.EXPECT().RouteList(mockLink, netlink.FAMILY_ALL).Return(routes, nil),
+				mockNetLink.EXPECT().RouteList(mockLink, netlink.FAMILY_ALL).Return(routes, nil),
 				mockLink.EXPECT().Attrs().Return(mockAttrs),
 				mockNetLink.EXPECT().RouteAdd(gomock.Any()).Return(nil),
 			)
@@ -3776,7 +3777,7 @@ func TestProperty_DualStackResultProcessing_VethConfiguration(t *testing.T) {
 
 			mockLink := mock_netlink.NewMockLink(ctrl)
 			mockAttrs := &netlink.LinkAttrs{Index: 1}
-					routes := []netlink.Route{}
+			routes := []netlink.Route{}
 
 			gomock.InOrder(
 				mockNetLink.EXPECT().LinkByName(interfaceName).Return(mockLink, nil),
@@ -3787,7 +3788,7 @@ func TestProperty_DualStackResultProcessing_VethConfiguration(t *testing.T) {
 				mockIPAM.EXPECT().ConfigureIface(interfaceName, gomock.Any()).Return(nil),
 				// For dual-stack, SetHWAddrByIP uses both IPv4 and IPv6 addresses
 				mockIP.EXPECT().SetHWAddrByIP(interfaceName, ipv4ContainerAddr, ipv6ContainerAddr).Return(nil),
-			mockNetLink.EXPECT().RouteList(mockLink, netlink.FAMILY_ALL).Return(routes, nil),
+				mockNetLink.EXPECT().RouteList(mockLink, netlink.FAMILY_ALL).Return(routes, nil),
 				mockLink.EXPECT().Attrs().Return(mockAttrs),
 				mockNetLink.EXPECT().RouteAdd(gomock.Any()).Return(nil),
 				mockLink.EXPECT().Attrs().Return(mockAttrs),
@@ -3837,7 +3838,7 @@ func TestProperty_DualStackResultProcessing_DefaultRoutesDeletion(t *testing.T) 
 	}
 
 	mockLink := mock_netlink.NewMockLink(ctrl)
-		mockAttrs := &netlink.LinkAttrs{Index: 1}
+	mockAttrs := &netlink.LinkAttrs{Index: 1}
 
 	// Both IPv4 and IPv6 default routes present
 	ipv4DefaultRoute := netlink.Route{
@@ -3883,12 +3884,12 @@ func TestConnectedSubnetRoute_SkipWhenMaskSizeZero(t *testing.T) {
 	// Test that when mask size is 0, no connected subnet route is added
 	maskSize := 0
 	ipMask := net.CIDRMask(22, 32) // IPAM provides /22
-	
+
 	// Logic from configureveth.go lines 138-156
 	shouldAddRoute := maskSize != 0
-	
+
 	assert.False(t, shouldAddRoute, "should not add connected subnet route when mask size is 0")
-	
+
 	// Verify the mask would be used if it were non-zero
 	if maskSize != 0 {
 		ones, _ := ipMask.Size()
@@ -3902,12 +3903,12 @@ func TestConnectedSubnetRoute_AddWhenMaskSizeNonZero(t *testing.T) {
 	// Test that when mask size is non-zero, connected subnet route is added
 	maskSize := 22
 	ipMask := net.CIDRMask(22, 32) // IPAM provides /22
-	
+
 	// Logic from configureveth.go lines 138-156
 	shouldAddRoute := maskSize != 0
-	
+
 	assert.True(t, shouldAddRoute, "should add connected subnet route when mask size is non-zero")
-	
+
 	// Verify the correct mask is used
 	ones, _ := ipMask.Size()
 	assert.Equal(t, 22, ones, "connected subnet route should use /22 mask")
@@ -3917,9 +3918,9 @@ func TestConnectedSubnetRoute_AddWhenMaskSizeNonZero(t *testing.T) {
 // are NOT deleted during cleanup (preserves gateway routes)
 func TestConnectedSubnetRoute_PreserveHostRoutes(t *testing.T) {
 	testCases := []struct {
-		name          string
-		route         netlink.Route
-		shouldDelete  bool
+		name         string
+		route        netlink.Route
+		shouldDelete bool
 	}{
 		{
 			name: "/32 IPv4 route preserved",
@@ -3950,15 +3951,15 @@ func TestConnectedSubnetRoute_PreserveHostRoutes(t *testing.T) {
 			shouldDelete: true,
 		},
 	}
-	
+
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			// Logic from configureveth.go lines 118-133
 			ones, bits := tc.route.Dst.Mask.Size()
 			isHostRoute := (bits == 32 && ones == 32) || (bits == 128 && ones == 128)
 			shouldDelete := !isHostRoute
-			
-			assert.Equal(t, tc.shouldDelete, shouldDelete, 
+
+			assert.Equal(t, tc.shouldDelete, shouldDelete,
 				"route deletion decision should match expected")
 		})
 	}
@@ -3995,5 +3996,98 @@ func TestBlockInstanceMetadata(t *testing.T) {
 		err := engine.BlockInstanceMetadata(testNetNS)
 		assert.Error(t, err)
 		assert.Equal(t, expectedErr, err)
+	})
+}
+
+// TestBlockIMDSContextRun tests the blockIMDSContext.run() function directly
+func TestBlockIMDSContextRun(t *testing.T) {
+	t.Run("succeeds when routes do not exist", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		mockNetLink := mock_netlinkwrapper.NewMockNetLink(ctrl)
+		mockNetNS := mock_ns.NewMockNetNS(ctrl)
+
+		ctx := &blockIMDSContext{
+			netLink: mockNetLink,
+		}
+
+		for _, ep := range InstanceMetadataEndpoints {
+			_, imdsNetwork, err := net.ParseCIDR(ep)
+			assert.NoError(t, err)
+			mockNetLink.EXPECT().RouteAdd(gomock.Any()).Do(func(route *netlink.Route) {
+				assert.Equal(t, imdsNetwork.String(), route.Dst.String())
+				assert.Equal(t, syscall.RTN_BLACKHOLE, route.Type)
+			}).Return(nil)
+		}
+
+		err := ctx.run(mockNetNS)
+		assert.NoError(t, err)
+	})
+
+	t.Run("succeeds when routes already exist (EEXIST)", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		mockNetLink := mock_netlinkwrapper.NewMockNetLink(ctrl)
+		mockNetNS := mock_ns.NewMockNetNS(ctrl)
+
+		ctx := &blockIMDSContext{
+			netLink: mockNetLink,
+		}
+
+		for _, ep := range InstanceMetadataEndpoints {
+			_, imdsNetwork, err := net.ParseCIDR(ep)
+			assert.NoError(t, err)
+			mockNetLink.EXPECT().RouteAdd(gomock.Any()).Do(func(route *netlink.Route) {
+				assert.Equal(t, imdsNetwork.String(), route.Dst.String())
+				assert.Equal(t, syscall.RTN_BLACKHOLE, route.Type)
+			}).Return(os.NewSyscallError("route", syscall.EEXIST))
+		}
+
+		err := ctx.run(mockNetNS)
+		assert.NoError(t, err)
+	})
+
+	t.Run("returns error for non-EEXIST failures", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		mockNetLink := mock_netlinkwrapper.NewMockNetLink(ctrl)
+		mockNetNS := mock_ns.NewMockNetNS(ctrl)
+
+		ctx := &blockIMDSContext{
+			netLink: mockNetLink,
+		}
+
+		// First endpoint fails with a non-EEXIST error
+		mockNetLink.EXPECT().RouteAdd(gomock.Any()).Return(errors.New("network unreachable"))
+
+		err := ctx.run(mockNetNS)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "unable to add route to block instance metadata")
+	})
+
+	t.Run("returns error for first endpoint but not second when first has EEXIST", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		mockNetLink := mock_netlinkwrapper.NewMockNetLink(ctrl)
+		mockNetNS := mock_ns.NewMockNetNS(ctrl)
+
+		ctx := &blockIMDSContext{
+			netLink: mockNetLink,
+		}
+
+		// First endpoint returns EEXIST (should be skipped)
+		// Second endpoint returns a real error
+		gomock.InOrder(
+			mockNetLink.EXPECT().RouteAdd(gomock.Any()).Return(os.NewSyscallError("route", syscall.EEXIST)),
+			mockNetLink.EXPECT().RouteAdd(gomock.Any()).Return(errors.New("permission denied")),
+		)
+
+		err := ctx.run(mockNetNS)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "unable to add route to block instance metadata")
 	})
 }
